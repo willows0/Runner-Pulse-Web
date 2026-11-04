@@ -16,6 +16,6 @@ http.createServer(async(req,res)=>{
 }).listen(port,"0.0.0.0",()=>console.log("Runner Pulse Web on "+port));
 
 const GARMIN_TOKEN_URL =
-  "https://personal.connectapi.garmin.com/personalapitoken-service/personal-api-key/token";
+  "https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token";
 
 const GARMIN_CONFIGURED = Boolean(GARMIN_API_KEY);
