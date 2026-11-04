@@ -10,6 +10,34 @@ const types={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=
 http.createServer(async(req,res)=>{
  const pathname=new URL(req.url,"http://localhost").pathname;
  if(pathname==="/api/status"){res.writeHead(200,{"Content-Type":"application/json","Cache-Control":"no-store"});res.end(JSON.stringify({garminConfigured:Boolean(process.env.GARMIN_API_KEY),garminConnected:false,message:"La connessione Garmin non è ancora attivata: occorre verificare endpoint e autorizzazioni della Personal API."}));return;}
+if (pathname === "/api/garmin/test") {
+  try {
+    const token = await getGarminToken();
+
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    });
+
+    res.end(JSON.stringify({
+      garminConnected: true,
+      message: "Garmin ha accettato la chiave API"
+    }));
+  } catch (error) {
+    console.error("Errore autenticazione Garmin:", error.message);
+
+    res.writeHead(502, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    });
+
+    res.end(JSON.stringify({
+      garminConnected: false,
+      message: "Autenticazione Garmin non riuscita"
+    }));
+  }
+  return;
+}
  const name=files[pathname];if(!name){res.writeHead(404);res.end("Not found");return;}
  try{const data=await readFile(path.join(base,"public",name));res.writeHead(200,{"Content-Type":types[path.extname(name)],"X-Content-Type-Options":"nosniff","Cache-Control":"no-store"});res.end(data);}
  catch{res.writeHead(500);res.end("Server error");}
