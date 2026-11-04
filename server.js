@@ -43,6 +43,34 @@ if (pathname === "/api/garmin/test") {
   }
   return;
 }
+ if (pathname === "/api/garmin/test") {
+  try {
+    const token = await getGarminToken();
+
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    });
+
+    res.end(JSON.stringify({
+      garminConnected: true,
+      message: "Garmin ha accettato la chiave API"
+    }));
+  } catch (error) {
+    console.error("Errore autenticazione Garmin:", error.message);
+
+    res.writeHead(502, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    });
+
+    res.end(JSON.stringify({
+      garminConnected: false,
+      message: "Autenticazione Garmin non riuscita"
+    }));
+  }
+  return;
+}
  const name=files[pathname];if(!name){res.writeHead(404);res.end("Not found");return;}
  try{const data=await readFile(path.join(base,"public",name));res.writeHead(200,{"Content-Type":types[path.extname(name)],"X-Content-Type-Options":"nosniff","Cache-Control":"no-store"});res.end(data);}
  catch{res.writeHead(500);res.end("Server error");}
