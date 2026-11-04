@@ -19,3 +19,21 @@ const GARMIN_TOKEN_URL =
   "https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token";
 
 const GARMIN_CONFIGURED = Boolean(GARMIN_API_KEY);
+async function getGarminToken() {
+  if (!GARMIN_API_KEY) {
+    throw new Error("Chiave Garmin non configurata");
+  }
+
+  const response = await fetch(GARMIN_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `ApiKey ${GARMIN_API_KEY}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Errore Garmin: HTTP ${response.status}`);
+  }
+
+  return await response.json();
+}
