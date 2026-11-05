@@ -17,7 +17,7 @@ initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpuls
 
 const files = {
   '/': 'index.html', '/index.html': 'index.html',
-  '/app.js': 'app.js', '/style.css': 'style.css',
+  '/app.js': 'app.js', '/style.css': 'style.css', '/orange.css': 'orange.css',
   '/login.js': 'login.js', '/login.css': 'login.css',
   '/privacy.html': 'privacy.html'
 };
