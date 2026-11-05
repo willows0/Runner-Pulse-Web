@@ -127,7 +127,21 @@ const GARMIN_TOKEN_URL =
     throw new Error("Chiave Garmin non configurata");
   }
   
-  async function getGarminActivities() {
+  
+
+  const response = await fetch(GARMIN_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `ApiKey ${GARMIN_API_KEY}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Errore Garmin: HTTP ${response.status}`);
+  }
+return await response.text();
+}
+async function getGarminActivities() {
   const token = (await getGarminToken()).trim();
 
   const url = new URL(
@@ -149,17 +163,4 @@ const GARMIN_TOKEN_URL =
   }
 
   return await response.json();
-}
-
-  const response = await fetch(GARMIN_TOKEN_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `ApiKey ${GARMIN_API_KEY}`
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Errore Garmin: HTTP ${response.status}`);
-  }
-return await response.text();
 }
