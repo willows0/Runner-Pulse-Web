@@ -37,6 +37,61 @@ async function authorized(req) {
     return false;
   }
 }
+async function readJsonBody(req, maxBytes = 4096) {
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) { const error = new Error('Richiesta troppo grande'); error.status = 413; throw error; }
+    chunks.push(chunk);
+  }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch { const error = new Error('JSON non valido'); error.status = 400; throw error; }
+}
+
+const GARMIN_TOKEN_URL = 'https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token';
+const GARMIN_BASE = 'https://personal.connectapi.garmin.com';
+async function getGarminToken() {
+  if (!GARMIN_API_KEY) throw new Error('Chiave Garmin non configurata');
+  const response = await fetch(GARMIN_TOKEN_URL, { method: 'POST', headers: { Authorization: `ApiKey ${GARMIN_API_KEY}` }, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error(`Garmin token HTTP ${response.status}`);
+  const token = (await response.text()).trim();
+  if (!token) throw new Error('Garmin token vuoto');
+  return token;
+}
+async function garminJson(endpoint, token) {
+  const response = await fetch(`${GARMIN_BASE}${endpoint}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!response.ok) throw new Error(`Garmin HTTP ${response.status} per ${endpoint.split('?')[0]}`);
+  return response.json();
+}
+async function getGarminActivities() {
+  const token = await getGarminToken();
+  const url = new URL('/activitylist-service/activities/search/activities', GARMIN_BASE);
+  url.searchParams.set('start', '0');
+  url.searchParams.set('limit', '20');
+  const data = await garminJson(url.pathname + url.search, token);
+  if (!Array.isArray(data)) throw new Error('Formato attività Garmin inatteso');
+  return data;
+}
+async function getGarminActivityDetail(activityId) {
+  const token = await getGarminToken();
+  // Endpoint Garmin Connect non ufficiali: possono cambiare o non essere accessibili.
+  const detail = await garminJson(`/activity-service/activity/${activityId}/details`, token);
+  let splits = null;
+  let splitsAvailable = false;
+  try {
+    splits = await garminJson(`/activity-service/activity/${activityId}/splits`, token);
+    splitsAvailable = true;
+  } catch (error) {
+    console.warn('Lap Garmin non disponibili:', error.message);
+  }
+  // I campioni originali (metricDescriptors/activityDetailMetrics) vengono mantenuti
+  // senza creare valori sintetici, per consentire la visualizzazione sul client.
+  return { activityId, detail, splits, splitsAvailable };
+}
 
 http.createServer(async (req, res) => {
   let pathname;
@@ -47,7 +102,7 @@ http.createServer(async (req, res) => {
     json(res, 200, { garminConfigured: Boolean(GARMIN_API_KEY), garminConnected: false, message: 'La connessione Garmin non è ancora verificata. Usa il test autenticato.' });
     return;
   }
-  if (pathname === '/api/garmin/test' || pathname === '/api/garmin/activities') {
+  if (pathname === '/api/garmin/test' || pathname === '/api/garmin/activities' || pathname === '/api/garmin/activity-detail') {
     if (req.method !== 'POST') { json(res, 405, { message: 'Method not allowed' }); return; }
     if (!await authorized(req)) { json(res, 403, { success: false, message: 'Accesso Google non autorizzato.' }); return; }
     if (!GARMIN_API_KEY) { json(res, 503, { success: false, message: 'GARMIN_API_KEY non configurata su Render.' }); return; }
@@ -55,13 +110,21 @@ http.createServer(async (req, res) => {
       if (pathname === '/api/garmin/test') {
         await getGarminToken();
         json(res, 200, { success: true, garminConnected: true, message: 'Il server ha ottenuto una risposta valida dal servizio token Garmin. Il caricamento delle attività va verificato separatamente.' });
-      } else {
+      } else if (pathname === '/api/garmin/activities') {
         const activities = await getGarminActivities();
-        json(res, 200, { success: true, count: Array.isArray(activities) ? activities.length : undefined, activities });
+        json(res, 200, { success: true, count: activities.length, activities });
+      } else {
+        let body;
+        try { body = await readJsonBody(req); }
+        catch (error) { json(res, error.status || 400, { success: false, message: error.message }); return; }
+        const id = String(body?.activityId ?? '');
+        if (!/^\d{1,20}$/.test(id)) { json(res, 400, { success: false, message: 'activityId non valido: è richiesto un identificativo numerico Garmin.' }); return; }
+        const result = await getGarminActivityDetail(id);
+        json(res, 200, { success: true, ...result });
       }
     } catch (error) {
       console.error('Errore Garmin:', error.message);
-      json(res, 502, { success: false, garminConnected: false, message: 'Richiesta Garmin non riuscita. Controlla i log di Render per il codice di errore.' });
+      json(res, 502, { success: false, message: 'Richiesta Garmin non riuscita. Controlla i log di Render per il codice di errore.' });
     }
     return;
   }
@@ -78,24 +141,3 @@ http.createServer(async (req, res) => {
     res.end(error.code === 'ENOENT' ? 'Not found' : 'Server error');
   }
 }).listen(port, '0.0.0.0', () => console.log('Runner Pulse Web on ' + port));
-
-const GARMIN_TOKEN_URL = 'https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token';
-async function getGarminToken() {
-  if (!GARMIN_API_KEY) throw new Error('Chiave Garmin non configurata');
-  const response = await fetch(GARMIN_TOKEN_URL, { method: 'POST', headers: { Authorization: `ApiKey ${GARMIN_API_KEY}` }, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`Garmin token HTTP ${response.status}`);
-  const token = (await response.text()).trim();
-  if (!token) throw new Error('Garmin token vuoto');
-  return token;
-}
-async function getGarminActivities() {
-  const token = await getGarminToken();
-  const url = new URL('https://personal.connectapi.garmin.com/activitylist-service/activities/search/activities');
-  url.searchParams.set('start', '0');
-  url.searchParams.set('limit', '20');
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`Garmin activities HTTP ${response.status}`);
-  const data = await response.json();
-  if (!Array.isArray(data)) throw new Error('Formato attività Garmin inatteso');
-  return data;
-}
