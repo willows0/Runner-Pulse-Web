@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/login.css">
   <link rel="stylesheet" href="/orange.css">
+  <style>
+    #splash[hidden] { display: none !important; }
+  </style>
 </head>
 <body>
   <header>
@@ -61,58 +64,71 @@
     <button data-page="settings"><span>⚙</span>Altro</button>
   </nav>
   <div id="detailOverlay" hidden><div class="detail-panel"><button id="closeDetail" type="button" aria-label="Chiudi dettagli">✕</button><div id="detailContent"></div></div></div>
-  <div id="splash"><div class="splash-content"><h1>RUNNER PULSE</h1><div class="splash-heart" aria-hidden="true">♥</div><p>Il tuo cuore. Il tuo ritmo.</p><button id="enterApp" type="button">Entra in Runner Pulse</button></div></div>
+  <div id="splash"><div class="splash-content"><h1>RUNNER PULSE</h1><div class="splash-heart" aria-hidden="true">♥</div><p>Il tuo cuore. Il tuo ritmo.</p><button id="enterApp" type="button">Vai alla Home</button></div></div>
   <script src="/app.js"></script>
   <script>
-// Runner Pulse: battito udibile su Chrome Android dopo un gesto dell'utente.
-// Non modifica le attività, l'accesso Google o le integrazioni Garmin.
-(() => {
-  const enter = document.getElementById('enterApp');
-  if (!enter) return;
-  let started = false;
-  enter.addEventListener('click', () => {
-    if (started) return;
-    started = true;
+  // Animazione immediata; l'audio automatico è tentato ma può essere bloccato dal browser.
+  (() => {
+    const splash = document.getElementById('splash');
+    const home = document.getElementById('enterApp');
     const AudioContextType = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextType) return;
-    let ctx;
-    try { ctx = new AudioContextType(); } catch { return; }
-    const master = ctx.createGain();
-    master.gain.value = 0.7;
-    master.connect(ctx.destination);
-    function thump(when, pitch, strength) {
-      const oscillator = ctx.createOscillator();
-      const envelope = ctx.createGain();
-      oscillator.type = 'triangle';
-      oscillator.frequency.setValueAtTime(pitch, when);
-      oscillator.frequency.exponentialRampToValueAtTime(Math.max(48, pitch * 0.52), when + 0.13);
-      envelope.gain.setValueAtTime(0.0001, when);
-      envelope.gain.exponentialRampToValueAtTime(strength, when + 0.012);
-      envelope.gain.exponentialRampToValueAtTime(0.0001, when + 0.20);
-      oscillator.connect(envelope);
-      envelope.connect(master);
-      oscillator.start(when);
-      oscillator.stop(when + 0.21);
+    let ctx = null;
+    let interval = null;
+    let closed = false;
+    let playing = false;
+    function thump(at, pitch, strength) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(pitch, at);
+      osc.frequency.exponentialRampToValueAtTime(55, at + 0.15);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(strength, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(at);
+      osc.stop(at + 0.23);
     }
-    function heartbeat() {
-      if (ctx.state !== 'running') return;
-      const now = ctx.currentTime + 0.025;
-      thump(now, 135, 0.65);
-      thump(now + 0.23, 110, 0.45);
+    function beat() {
+      if (closed || !ctx || ctx.state !== 'running') return;
+      const at = ctx.currentTime + 0.025;
+      thump(at, 180, 0.65);
+      thump(at + 0.22, 145, 0.48);
     }
-    // resume() viene chiamato direttamente nel click: necessario su Android.
-    void ctx.resume().then(() => {
-      heartbeat();
-      const timer = window.setInterval(heartbeat, 1050);
-      window.setTimeout(() => {
-        window.clearInterval(timer);
-        void ctx.close().catch(() => {});
-      }, 4800);
-    }).catch(() => { void ctx.close().catch(() => {}); });
-  }, { capture: true });
-})();
-
-</script>
+    async function startSound() {
+      if (closed || !AudioContextType) return;
+      try {
+        if (!ctx) ctx = new AudioContextType();
+        if (ctx.state !== 'running') await ctx.resume();
+        if (closed || ctx.state !== 'running' || playing) return;
+        playing = true;
+        beat();
+        interval = window.setInterval(beat, 1050);
+      } catch (err) {
+        console.info('Audio automatico non consentito dal browser:', err?.message || err);
+      }
+    }
+    function stopSound() {
+      closed = true;
+      if (interval !== null) window.clearInterval(interval);
+      interval = null;
+      if (ctx) { void ctx.close().catch(() => {}); ctx = null; }
+    }
+    // Tenta l'audio all'apertura. Chrome Android può richiedere un gesto dell'utente.
+    void startSound();
+    // Se il browser consente l'audio dopo un tocco sulla schermata, riprova senza pulsanti aggiuntivi.
+    splash.addEventListener('pointerdown', event => {
+      if (!home.contains(event.target)) void startSound();
+    }, { passive: true });
+    home.addEventListener('click', () => {
+      stopSound();
+      splash.hidden = true;
+      splash.style.display = 'none';
+      window.scrollTo(0, 0);
+    });
+    window.addEventListener('pagehide', stopSound, { once: true });
+  })();
+  </script>
   <script type="module" src="/login.js"></script>
 </body>
 </html>
