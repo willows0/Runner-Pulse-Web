@@ -1,11 +1,118 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f36b08"><title>Runner Pulse</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/login.css"><link rel="stylesheet" href="/orange.css"></head><body>
-<div id="splash" class="splash" aria-label="Benvenuto in Runner Pulse"><div class="splash-inner"><div class="splash-title">RUNNER<br>PULSE</div><div class="pulse-heart" aria-hidden="true">♥<span class="ecg-line">⌁</span></div><p>Il tuo ritmo. La tua corsa.</p><button id="enterApp" type="button">Entra in Runner Pulse <span>›</span></button><small>Il battito si attiva toccando Entra</small></div></div>
-<header><div class="brand"><span class="heart">♥</span><div><b>RUNNER PULSE</b><small>Il tuo percorso, il tuo ritmo</small></div></div><span class="pill">WEB</span></header><main>
-<section id="home" class="page active"><h1>La tua corsa, ogni giorno.</h1><p class="muted">Verso la tua prossima mezza maratona.</p><div class="hero"><div class="ecg">♥ <span>⌁⌁</span></div><h2>Mezza maratona</h2><p>Obiettivo · 21,097 km</p><div class="chips"><span>Avanzato</span><span>3 giorni/settimana</span></div></div><h2>Riepilogo allenamenti</h2><div class="stats stats-three"><div><strong id="count">0</strong><small>Sessioni</small></div><div><strong id="distance">0</strong><small>Km registrati</small></div><div><strong id="avgPace">—</strong><small>Passo medio</small></div></div><div class="card"><h3>Garmin Connect</h3><p id="garminStatus" class="muted">Controllo collegamento…</p><p id="garminUpdated" class="note">Le attività importate vengono salvate su questo dispositivo.</p><button id="homeImport" type="button" class="secondary-action">Aggiorna attività Garmin</button></div></section>
-<section id="activities" class="page"><h1>Attività</h1><p class="muted">Le tue corse Garmin e gli allenamenti inseriti manualmente.</p><div class="card import-card"><button id="importGarmin" type="button">↓ Importa attività Garmin</button><p id="importResult" class="note" role="status">Vengono importate solo attività realmente restituite dal server Garmin.</p></div><div id="activityList"></div><details class="card"><summary>Aggiungi allenamento manuale</summary><form id="activityForm"><label>Data<input id="date" type="date" required></label><label>Tipo<select id="kind"><option>Corsa facile</option><option>Ripetute</option><option>Tempo run</option><option>Lungo</option><option>Gara</option></select></label><label>Distanza (km)<input id="km" type="number" min=".1" step=".01" required placeholder="Es. 10.5"></label><label>Durata (minuti)<input id="minutes" type="number" min="1" step=".1" required placeholder="Es. 55"></label><button type="submit">Salva allenamento</button></form></details></section>
-<section id="plan" class="page"><h1>Il tuo programma</h1><p class="muted">Bozza di settimana tipo per un corridore avanzato: da adattare ai tuoi dati reali e al recupero.</p><div class="card workout"><b>Martedì · Qualità</b><p>Riscaldamento, intervalli a ritmo controllato, defaticamento.</p></div><div class="card workout"><b>Giovedì · Ritmo</b><p>Corsa a ritmo facile o medio, secondo il recupero.</p></div><div class="card workout"><b>Domenica · Lungo</b><p>Progressione prudente della distanza in base allo storico reale.</p></div><button id="calendar">Scarica settimana per il calendario (.ics)</button><p class="note">Non è ancora sincronizzato con Google Calendar: il file può essere importato manualmente.</p></section>
-<section id="coach" class="page"><h1>Allenatore</h1><div class="card"><h2>Analisi dei tuoi allenamenti</h2><p id="coachText">Registra un allenamento per vedere il riepilogo.</p></div><div class="card"><h3>Allenatore AI</h3><p class="muted">La chat AI richiede un servizio dedicato e una chiave server privata. Non è ancora attiva in questa versione.</p></div></section>
-<section id="settings" class="page"><h1>Impostazioni</h1><div class="card"><h3>Privacy e dati</h3><p>Gli allenamenti sono salvati sul dispositivo tramite la memoria del browser. Non sono sincronizzati tra dispositivi.</p><button id="export">Esporta allenamenti (JSON)</button></div><div class="card"><h3>Garmin API</h3><p id="garminSettings">Verifica in corso…</p><p class="note">Le chiavi Garmin restano sul server Render. Non incollarle qui o su GitHub.</p></div></section>
-</main><nav aria-label="Navigazione"><button data-page="home" class="selected"><span>⌂</span>Home</button><button data-page="activities"><span>◷</span>Attività</button><button data-page="plan"><span>▦</span>Piano</button><button data-page="coach"><span>♡</span>Coach</button><button data-page="settings"><span>⚙</span>Altro</button></nav>
-<div id="detailOverlay" class="detail-overlay" hidden><div class="detail-shell"><div class="detail-top"><button id="closeDetail" type="button" aria-label="Chiudi dettagli">←</button><strong>Dettaglio allenamento</strong></div><div id="detailContent"></div></div></div>
-<script src="/app.js"></script><script type="module" src="/login.js"></script></body></html>
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f97316">
+  <title>Runner Pulse Web</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/login.css">
+  <link rel="stylesheet" href="/orange.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="heart">♥</span><div><b>RUNNER PULSE</b><small>Il tuo percorso, il tuo ritmo</small></div></div>
+    <span class="pill">WEB</span>
+  </header>
+  <main>
+    <section id="home" class="page active">
+      <h1>La tua corsa, ogni giorno.</h1>
+      <p class="muted">Il tuo spazio per allenarti verso la mezza maratona.</p>
+      <div class="hero"><div class="ecg">♥ <span>⌁⌁</span></div><h2>Mezza maratona</h2><p>Obiettivo · 21,097 km</p><div class="chips"><span>Avanzato</span><span>3 giorni/settimana</span></div></div>
+      <h2>Riepilogo allenamenti</h2>
+      <div class="stats"><div><strong id="count">0</strong><small>Sessioni registrate</small></div><div><strong id="distance">0,0</strong><small>Km registrati</small></div><div><strong id="avgPace">—</strong><small>Passo medio (min/km)</small></div></div>
+      <div class="card"><h3>Garmin Connect</h3><p id="garminStatus" class="muted">Verifica collegamento in corso…</p><p id="garminUpdated" class="note"></p><p class="note">Vengono visualizzati soltanto dati reali importati da Garmin.</p></div>
+    </section>
+    <section id="activities" class="page">
+      <h1>Allenamenti</h1><p class="muted">Registra o importa i tuoi dati reali. Rimangono in questo browser.</p>
+      <div class="card"><h3>Garmin Connect</h3><p class="muted">Importa le attività dal tuo account Garmin.</p><button id="importGarmin" type="button">Importa attività Garmin</button><p id="importResult" class="note" role="status"></p></div>
+      <form id="activityForm" class="card">
+        <label>Data<input id="date" type="date" required></label>
+        <label>Tipo<select id="kind"><option>Corsa facile</option><option>Ripetute</option><option>Tempo run</option><option>Lungo</option><option>Gara</option></select></label>
+        <label>Distanza (km)<input id="km" type="number" min=".1" step=".1" required placeholder="Es. 10.5"></label>
+        <label>Durata (minuti)<input id="minutes" type="number" min="1" step="1" required placeholder="Es. 55"></label>
+        <button type="submit">Salva allenamento</button>
+      </form>
+      <div id="activityList"></div>
+    </section>
+    <section id="plan" class="page">
+      <h1>Il tuo programma</h1><p class="muted">Bozza di settimana tipo per un corridore avanzato: da adattare ai tuoi dati reali e al recupero.</p>
+      <div class="card workout"><b>Martedì · Qualità</b><p>Riscaldamento, intervalli a ritmo controllato, defaticamento.</p></div>
+      <div class="card workout"><b>Giovedì · Ritmo</b><p>Corsa a ritmo facile o medio, secondo il recupero.</p></div>
+      <div class="card workout"><b>Domenica · Lungo</b><p>Progressione prudente della distanza in base allo storico reale.</p></div>
+      <button id="calendar">Scarica settimana per il calendario (.ics)</button>
+      <p class="note">Non è ancora sincronizzato con Google Calendar: il file può essere importato manualmente.</p>
+    </section>
+    <section id="coach" class="page">
+      <h1>Allenatore</h1><div class="card"><h2>Analisi dei tuoi allenamenti</h2><p id="coachText">Registra un allenamento per vedere il riepilogo.</p></div>
+      <div class="card"><h3>Allenatore AI</h3><p class="muted">La chat AI richiede un servizio dedicato e una chiave server privata. Non è ancora attiva in questa versione.</p></div>
+    </section>
+    <section id="settings" class="page">
+      <h1>Impostazioni</h1>
+      <div class="card"><h3>Privacy e dati</h3><p>I tuoi allenamenti sono salvati sul dispositivo in uso, tramite memoria del browser. Non sono sincronizzati tra dispositivi.</p><button id="export">Esporta allenamenti (JSON)</button></div>
+      <div class="card"><h3>Garmin API</h3><p id="garminSettings">Collegamento non ancora configurato.</p><p class="note">Non incollare mai la chiave Garmin in questa pagina o su GitHub.</p></div>
+    </section>
+  </main>
+  <nav aria-label="Navigazione">
+    <button data-page="home" class="selected"><span>⌂</span>Home</button>
+    <button data-page="activities"><span>◷</span>Attività</button>
+    <button data-page="plan"><span>▦</span>Piano</button>
+    <button data-page="coach"><span>♡</span>Coach</button>
+    <button data-page="settings"><span>⚙</span>Altro</button>
+  </nav>
+  <div id="detailOverlay" hidden><div class="detail-panel"><button id="closeDetail" type="button" aria-label="Chiudi dettagli">✕</button><div id="detailContent"></div></div></div>
+  <div id="splash"><div class="splash-content"><h1>RUNNER PULSE</h1><div class="splash-heart" aria-hidden="true">♥</div><p>Il tuo cuore. Il tuo ritmo.</p><button id="enterApp" type="button">Entra in Runner Pulse</button></div></div>
+  <script src="/app.js"></script>
+  <script>
+// Runner Pulse: battito udibile su Chrome Android dopo un gesto dell'utente.
+// Non modifica le attività, l'accesso Google o le integrazioni Garmin.
+(() => {
+  const enter = document.getElementById('enterApp');
+  if (!enter) return;
+  let started = false;
+  enter.addEventListener('click', () => {
+    if (started) return;
+    started = true;
+    const AudioContextType = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextType) return;
+    let ctx;
+    try { ctx = new AudioContextType(); } catch { return; }
+    const master = ctx.createGain();
+    master.gain.value = 0.7;
+    master.connect(ctx.destination);
+    function thump(when, pitch, strength) {
+      const oscillator = ctx.createOscillator();
+      const envelope = ctx.createGain();
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(pitch, when);
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(48, pitch * 0.52), when + 0.13);
+      envelope.gain.setValueAtTime(0.0001, when);
+      envelope.gain.exponentialRampToValueAtTime(strength, when + 0.012);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, when + 0.20);
+      oscillator.connect(envelope);
+      envelope.connect(master);
+      oscillator.start(when);
+      oscillator.stop(when + 0.21);
+    }
+    function heartbeat() {
+      if (ctx.state !== 'running') return;
+      const now = ctx.currentTime + 0.025;
+      thump(now, 135, 0.65);
+      thump(now + 0.23, 110, 0.45);
+    }
+    // resume() viene chiamato direttamente nel click: necessario su Android.
+    void ctx.resume().then(() => {
+      heartbeat();
+      const timer = window.setInterval(heartbeat, 1050);
+      window.setTimeout(() => {
+        window.clearInterval(timer);
+        void ctx.close().catch(() => {});
+      }, 4800);
+    }).catch(() => { void ctx.close().catch(() => {}); });
+  }, { capture: true });
+})();
+
+</script>
+  <script type="module" src="/login.js"></script>
+</body>
+</html>
