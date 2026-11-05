@@ -49,6 +49,7 @@ async function readJsonBody(req, maxBytes = 4096) {
   catch { const error = new Error('JSON non valido'); error.status = 400; throw error; }
 }
 
+// Gli endpoint Garmin Connect qui usati non sono API ufficiali e possono cambiare.
 const GARMIN_TOKEN_URL = 'https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token';
 const GARMIN_BASE = 'https://personal.connectapi.garmin.com';
 async function getGarminToken() {
@@ -76,21 +77,63 @@ async function getGarminActivities() {
   if (!Array.isArray(data)) throw new Error('Formato attività Garmin inatteso');
   return data;
 }
+
+// Riconosce gli intermedi reali in vari contenitori possibili.
+// Non ricava lap dai campioni, non modifica distanze o durate.
+function extractLaps(payload) {
+  if (!payload || typeof payload !== 'object') return [];
+  if (Array.isArray(payload)) return payload;
+  const containers = [payload, payload.activity, payload.activityDetail, payload.activityDetailDTO, payload.splits, payload.laps, payload.data];
+  for (const item of containers) {
+    if (Array.isArray(item)) return item;
+    if (!item || typeof item !== 'object') continue;
+    for (const key of ['lapDTOs', 'laps', 'splits', 'lapList', 'lapData', 'activityLaps']) {
+      if (Array.isArray(item[key])) return item[key];
+    }
+  }
+  return [];
+}
+
 async function getGarminActivityDetail(activityId) {
   const token = await getGarminToken();
-  // Endpoint Garmin Connect non ufficiali: possono cambiare o non essere accessibili.
   const detail = await garminJson(`/activity-service/activity/${activityId}/details`, token);
-  let splits = null;
-  let splitsAvailable = false;
-  try {
-    splits = await garminJson(`/activity-service/activity/${activityId}/splits`, token);
-    splitsAvailable = true;
-  } catch (error) {
-    console.warn('Lap Garmin non disponibili:', error.message);
+  let splits = extractLaps(detail);
+  let splitsSource = splits.length ? 'details' : null;
+  const lapChecks = [];
+
+  // Prova indirizzi alternativi soltanto se il dettaglio non contiene già i Lap.
+  if (!splits.length) {
+    for (const [source, endpoint] of [
+      ['splits', `/activity-service/activity/${activityId}/splits`],
+      ['laps', `/activity-service/activity/${activityId}/laps`]
+    ]) {
+      try {
+        const payload = await garminJson(endpoint, token);
+        const found = extractLaps(payload);
+        lapChecks.push({ source, status: 'ok', count: found.length });
+        if (found.length) {
+          splits = found;
+          splitsSource = source;
+          break;
+        }
+      } catch (error) {
+        // Non inviare al browser token, chiavi o risposte Garmin complete.
+        lapChecks.push({ source, status: 'error', message: error.message });
+        console.warn(`Lap Garmin (${source}) non disponibili:`, error.message);
+      }
+    }
   }
-  // I campioni originali (metricDescriptors/activityDetailMetrics) vengono mantenuti
-  // senza creare valori sintetici, per consentire la visualizzazione sul client.
-  return { activityId, detail, splits, splitsAvailable };
+  return {
+    activityId,
+    detail,
+    splits,
+    splitsAvailable: splits.length > 0,
+    lapDiagnostics: {
+      count: splits.length,
+      source: splitsSource,
+      checks: lapChecks
+    }
+  };
 }
 
 http.createServer(async (req, res) => {
