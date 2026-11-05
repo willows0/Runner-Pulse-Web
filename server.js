@@ -55,7 +55,50 @@ req.headers["x-garmin-test-secret"] !== process.env.GARMIN_TEST_SECRET
 
     
 
+if (pathname === "/api/garmin/activities") {
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Allow": "POST" });
+    res.end("Method not allowed");
+    return;
+  }
 
+  if (
+    !process.env.GARMIN_TEST_SECRET ||
+    req.headers["x-garmin-test-secret"] !== process.env.GARMIN_TEST_SECRET
+  ) {
+    res.writeHead(404);
+    res.end("Not found");
+    return;
+  }
+
+  try {
+    const activities = await getGarminActivities();
+
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    });
+
+    res.end(JSON.stringify({
+      success: true,
+      count: activities.length,
+      activities
+    }));
+  } catch (error) {
+    console.error("Errore attività Garmin:", error.message);
+
+    res.writeHead(502, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    });
+
+    res.end(JSON.stringify({
+      success: false,
+      message: "Impossibile recuperare le attività Garmin"
+    }));
+  }
+  return;
+}
 const name = files[pathname];
 if (!name) {
   res.writeHead(404);
