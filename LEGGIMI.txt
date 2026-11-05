@@ -1,0 +1,16 @@
+RUNNER PULSE - AGGIORNAMENTO ARANCIONE
+
+Sostituisci in GitHub nella cartella public:
+- index.html
+- app.js
+- login.js
+
+Aggiungi in public:
+- orange.css
+
+NON modificare server.js, package.json, style.css, login.css o le chiavi Render.
+
+La schermata iniziale ha un cuore animato e suono sintetico al tocco del pulsante Entra.
+I dettagli delle attività mostrano solo statistiche effettivamente presenti nei dati Garmin ricevuti dal server.
+I dati già presenti in localStorage con la chiave runnerPulseActivitiesV1 vengono mantenuti.
+La Home mostra importazione locale riuscita, senza pretendere una connessione Garmin attiva permanente.
