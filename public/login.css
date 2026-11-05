@@ -1,0 +1,8 @@
+/* Authentication overlay; does not change the existing app stylesheet. */
+#rp-login-gate{position:fixed;inset:0;z-index:9999;background:#f8f6fc;display:grid;place-items:center;padding:22px;font-family:system-ui,-apple-system,Arial,sans-serif;color:#2c2240}
+.rp-authenticated #rp-login-gate{display:none}
+.rp-login-card{width:min(100%,390px);padding:36px 26px;background:white;border:1px solid #ece6f3;border-radius:25px;text-align:center;box-shadow:0 12px 35px #32204418}
+.rp-login-heart{font-size:54px;color:#ff7745;animation:pulse 1.7s infinite}
+.rp-login-card h1{font-size:28px;margin:12px 0}.rp-login-card p{color:#776c85;line-height:1.5}
+#rp-login-button{background:#6c3ca1;color:#fff;border:0;border-radius:13px;padding:15px 20px;font-size:16px;font-weight:700;width:100%;cursor:pointer}
+#rp-login-button:disabled{opacity:.6}#rp-login-error{color:#a12b3d;font-size:13px}
