@@ -12,8 +12,8 @@ http.createServer(async(req,res)=>{
  if(pathname==="/api/status"){res.writeHead(200,{"Content-Type":"application/json","Cache-Control":"no-store"});res.end(JSON.stringify({garminConfigured:Boolean(process.env.GARMIN_API_KEY),garminConnected:false,message:"La connessione Garmin non è ancora attivata: occorre verificare endpoint e autorizzazioni della Personal API."}));return;}
 if (pathname === "/api/garmin/test") {
   if (
-  process.env.RENDER === "true" ||
-  !process.env.GARMIN_TEST_SECRET
+  !process.env.GARMIN_TEST_SECRET ||
+req.headers["x-garmin-test-secret"] !== process.env.GARMIN_TEST_SECRET
 ) {
     res.writeHead(404);
     res.end("Not found");
