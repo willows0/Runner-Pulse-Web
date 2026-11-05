@@ -50,7 +50,7 @@ if (pathname === "/api/garmin/test") {
 
     
 
-const GARMIN_CONFIGURED = Boolean(GARMIN_API_KEY);
+
 const name = files[pathname];
 if (!name) {
   res.writeHead(404);
