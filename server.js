@@ -83,6 +83,29 @@ const GARMIN_TOKEN_URL =
   if (!GARMIN_API_KEY) {
     throw new Error("Chiave Garmin non configurata");
   }
+  async function getGarminActivities() {
+  const token = (await getGarminToken()).trim();
+
+  const url = new URL(
+    "https://personal.connectapi.garmin.com/activitylist-service/activities/search/activities"
+  );
+
+  url.searchParams.set("start", "0");
+  url.searchParams.set("limit", "20");
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Errore attività Garmin: HTTP ${response.status}`);
+  }
+
+  return await response.json();
+}
 
   const response = await fetch(GARMIN_TOKEN_URL, {
     method: "POST",
