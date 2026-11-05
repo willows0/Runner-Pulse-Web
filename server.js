@@ -10,16 +10,13 @@ const port = Number(process.env.PORT || 3000);
 const GARMIN_API_KEY = process.env.GARMIN_API_KEY;
 const ALLOWED_EMAIL = 'utrefiletti@gmail.com';
 const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-service-account.json', 'utf8'));
-if (firebaseServiceAccount.project_id !== 'runnerpulse') {
-  throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
-}
+if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
 initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpulse' });
 
 const files = {
-  '/': 'index.html', '/index.html': 'index.html',
-  '/app.js': 'app.js', '/style.css': 'style.css', '/orange.css': 'orange.css',
-  '/login.js': 'login.js', '/login.css': 'login.css',
-  '/privacy.html': 'privacy.html'
+  '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js',
+  '/style.css': 'style.css', '/orange.css': 'orange.css',
+  '/login.js': 'login.js', '/login.css': 'login.css', '/privacy.html': 'privacy.html'
 };
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 function json(res, status, body) {
@@ -38,8 +35,7 @@ async function authorized(req) {
   }
 }
 async function readJsonBody(req, maxBytes = 4096) {
-  let size = 0;
-  const chunks = [];
+  let size = 0; const chunks = [];
   for await (const chunk of req) {
     size += chunk.length;
     if (size > maxBytes) { const error = new Error('Richiesta troppo grande'); error.status = 413; throw error; }
@@ -49,9 +45,8 @@ async function readJsonBody(req, maxBytes = 4096) {
   catch { const error = new Error('JSON non valido'); error.status = 400; throw error; }
 }
 
-// Gli endpoint Garmin Connect qui usati non sono API ufficiali e possono cambiare.
-const GARMIN_TOKEN_URL = 'https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token';
 const GARMIN_BASE = 'https://personal.connectapi.garmin.com';
+const GARMIN_TOKEN_URL = `${GARMIN_BASE}/personalapitoken-service/personal-api/personal-api-key/token`;
 async function getGarminToken() {
   if (!GARMIN_API_KEY) throw new Error('Chiave Garmin non configurata');
   const response = await fetch(GARMIN_TOKEN_URL, { method: 'POST', headers: { Authorization: `ApiKey ${GARMIN_API_KEY}` }, signal: AbortSignal.timeout(15000) });
@@ -71,69 +66,63 @@ async function garminJson(endpoint, token) {
 async function getGarminActivities() {
   const token = await getGarminToken();
   const url = new URL('/activitylist-service/activities/search/activities', GARMIN_BASE);
-  url.searchParams.set('start', '0');
-  url.searchParams.set('limit', '20');
+  url.searchParams.set('start', '0'); url.searchParams.set('limit', '20');
   const data = await garminJson(url.pathname + url.search, token);
   if (!Array.isArray(data)) throw new Error('Formato attività Garmin inatteso');
   return data;
 }
 
-// Riconosce gli intermedi reali in vari contenitori possibili.
-// Non ricava lap dai campioni, non modifica distanze o durate.
-function extractLaps(payload) {
-  if (!payload || typeof payload !== 'object') return [];
-  if (Array.isArray(payload)) return payload;
-  const containers = [payload, payload.activity, payload.activityDetail, payload.activityDetailDTO, payload.splits, payload.laps, payload.data];
-  for (const item of containers) {
-    if (Array.isArray(item)) return item;
-    if (!item || typeof item !== 'object') continue;
-    for (const key of ['lapDTOs', 'laps', 'splits', 'lapList', 'lapData', 'activityLaps']) {
-      if (Array.isArray(item[key])) return item[key];
-    }
-  }
-  return [];
+// Diagnostica PRIVACY-SAFE: mostra soltanto nomi di campi relativi ai Lap e conteggi.
+// Non registra token, coordinate GPS, campioni, valori personali o risposte complete.
+function lapShape(value) {
+  if (Array.isArray(value)) return { type: 'array', count: value.length };
+  if (value && typeof value === 'object') return { type: 'object', keys: Object.keys(value).filter(k => /lap|split|interval/i.test(k)).slice(0, 30) };
+  return { type: value === null ? 'null' : typeof value };
 }
-
-async function getGarminActivityDetail(activityId) {
-  const token = await getGarminToken();
-  const detail = await garminJson(`/activity-service/activity/${activityId}/details`, token);
-  let splits = extractLaps(detail);
-  let splitsSource = splits.length ? 'details' : null;
-  const lapChecks = [];
-
-  // Prova indirizzi alternativi soltanto se il dettaglio non contiene già i Lap.
-  if (!splits.length) {
-    for (const [source, endpoint] of [
-      ['splits', `/activity-service/activity/${activityId}/splits`],
-      ['laps', `/activity-service/activity/${activityId}/laps`]
-    ]) {
-      try {
-        const payload = await garminJson(endpoint, token);
-        const found = extractLaps(payload);
-        lapChecks.push({ source, status: 'ok', count: found.length });
-        if (found.length) {
-          splits = found;
-          splitsSource = source;
-          break;
-        }
-      } catch (error) {
-        // Non inviare al browser token, chiavi o risposte Garmin complete.
-        lapChecks.push({ source, status: 'error', message: error.message });
-        console.warn(`Lap Garmin (${source}) non disponibili:`, error.message);
+function lapDiagnostics(detail, splits, laps, errors) {
+  const topKeys = detail && typeof detail === 'object' ? Object.keys(detail) : [];
+  const candidates = {};
+  for (const key of topKeys.filter(k => /lap|split|interval/i.test(k)).slice(0, 30)) {
+    candidates[key] = lapShape(detail[key]);
+  }
+  for (const parentKey of ['activity', 'activityDetail', 'summaryDTO', 'activitySummary']) {
+    const parent = detail?.[parentKey];
+    if (parent && typeof parent === 'object' && !Array.isArray(parent)) {
+      for (const key of Object.keys(parent).filter(k => /lap|split|interval/i.test(k)).slice(0, 15)) {
+        candidates[`${parentKey}.${key}`] = lapShape(parent[key]);
       }
     }
   }
   return {
-    activityId,
-    detail,
-    splits,
-    splitsAvailable: splits.length > 0,
-    lapDiagnostics: {
-      count: splits.length,
-      source: splitsSource,
-      checks: lapChecks
-    }
+    detailTopLevelKeys: topKeys.filter(k => !/token|auth|password|email|location|gps|coordinate|position|lat|lon/i.test(k)).slice(0, 40),
+    lapFields: candidates,
+    splits: lapShape(splits),
+    laps: lapShape(laps),
+    endpointErrors: errors
   };
+}
+async function getGarminActivityDetail(activityId) {
+  const token = await getGarminToken();
+  const detail = await garminJson(`/activity-service/activity/${activityId}/details`, token);
+  let splits = null; let laps = null;
+  const errors = {};
+  for (const [name, endpoint] of [
+    ['splits', `/activity-service/activity/${activityId}/splits`],
+    ['laps', `/activity-service/activity/${activityId}/laps`]
+  ]) {
+    try {
+      const result = await garminJson(endpoint, token);
+      if (name === 'splits') splits = result; else laps = result;
+    } catch (error) {
+      // Registra solo il codice HTTP, non l'URL con l'ID dell'attività.
+      errors[name] = /HTTP (\d{3})/.exec(error.message)?.[1] || 'errore di rete';
+    }
+  }
+  const diagnostic = lapDiagnostics(detail, splits, laps, errors);
+  console.info('Runner Pulse — diagnostica Lap Garmin:', JSON.stringify(diagnostic));
+  // Compatibilità con il login.js esistente: la proprietà splits rimane invariata.
+  // Se l'endpoint /laps funziona, restituiamo il suo risultato nello stesso campo.
+  return { activityId, detail, splits: splits ?? laps, splitsAvailable: splits !== null || laps !== null };
 }
 
 http.createServer(async (req, res) => {
