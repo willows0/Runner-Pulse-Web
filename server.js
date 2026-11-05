@@ -94,6 +94,5 @@ const GARMIN_TOKEN_URL =
   if (!response.ok) {
     throw new Error(`Errore Garmin: HTTP ${response.status}`);
   }
-
-  return await response.json();
+return await response.text();
 }
