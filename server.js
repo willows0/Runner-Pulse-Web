@@ -2,6 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { inflateRawSync } from 'node:zlib';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
@@ -13,163 +14,120 @@ const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-
 if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
 initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpulse' });
 
-const files = {
-  '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js',
-  '/style.css': 'style.css', '/orange.css': 'orange.css',
-  '/login.js': 'login.js', '/login.css': 'login.css', '/privacy.html': 'privacy.html'
-};
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
-function json(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-  res.end(JSON.stringify(body));
-}
-async function authorized(req) {
-  const match = /^Bearer (\S+)$/i.exec(req.headers.authorization || '');
-  if (!match) return false;
-  try {
-    const user = await getAuth().verifyIdToken(match[1], true);
-    return user.email_verified === true && user.email?.toLowerCase() === ALLOWED_EMAIL;
-  } catch (error) {
-    console.warn('Firebase token non valido:', error.code || error.message);
-    return false;
-  }
-}
-async function readJsonBody(req, maxBytes = 4096) {
-  let size = 0; const chunks = [];
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > maxBytes) { const error = new Error('Richiesta troppo grande'); error.status = 413; throw error; }
-    chunks.push(chunk);
-  }
-  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-  catch { const error = new Error('JSON non valido'); error.status = 400; throw error; }
-}
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/login.css':'login.css','/privacy.html':'privacy.html'};
+const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
+function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
+async function authorized(req){const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');if(!match)return false;try{const user=await getAuth().verifyIdToken(match[1],true);return user.email_verified===true&&user.email?.toLowerCase()===ALLOWED_EMAIL;}catch(error){console.warn('Firebase token non valido:',error.code||error.message);return false;}}
+async function readJsonBody(req,maxBytes=4096){let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>maxBytes){const error=new Error('Richiesta troppo grande');error.status=413;throw error;}chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{const error=new Error('JSON non valido');error.status=400;throw error;}}
 
-const GARMIN_BASE = 'https://personal.connectapi.garmin.com';
-const GARMIN_TOKEN_URL = `${GARMIN_BASE}/personalapitoken-service/personal-api/personal-api-key/token`;
-async function getGarminToken() {
-  if (!GARMIN_API_KEY) throw new Error('Chiave Garmin non configurata');
-  const response = await fetch(GARMIN_TOKEN_URL, { method: 'POST', headers: { Authorization: `ApiKey ${GARMIN_API_KEY}` }, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`Garmin token HTTP ${response.status}`);
-  const token = (await response.text()).trim();
-  if (!token) throw new Error('Garmin token vuoto');
-  return token;
-}
-async function garminJson(endpoint, token) {
-  const response = await fetch(`${GARMIN_BASE}${endpoint}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    signal: AbortSignal.timeout(20000)
-  });
-  if (!response.ok) throw new Error(`Garmin HTTP ${response.status} per ${endpoint.split('?')[0]}`);
-  return response.json();
-}
-async function getGarminActivities() {
-  const token = await getGarminToken();
-  const url = new URL('/activitylist-service/activities/search/activities', GARMIN_BASE);
-  url.searchParams.set('start', '0'); url.searchParams.set('limit', '20');
-  const data = await garminJson(url.pathname + url.search, token);
-  if (!Array.isArray(data)) throw new Error('Formato attività Garmin inatteso');
-  return data;
-}
+const GARMIN_BASE='https://personal.connectapi.garmin.com';
+const GARMIN_TOKEN_URL=GARMIN_BASE+'/personalapitoken-service/personal-api/personal-api-key/token';
+async function getGarminToken(){if(!GARMIN_API_KEY)throw new Error('Chiave Garmin non configurata');const response=await fetch(GARMIN_TOKEN_URL,{method:'POST',headers:{Authorization:`ApiKey ${GARMIN_API_KEY}`},signal:AbortSignal.timeout(15000)});if(!response.ok)throw new Error(`Garmin token HTTP ${response.status}`);const token=(await response.text()).trim();if(!token)throw new Error('Garmin token vuoto');return token;}
+async function garminJson(endpoint,token){const response=await fetch(GARMIN_BASE+endpoint,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'},signal:AbortSignal.timeout(20000)});if(!response.ok)throw new Error(`Garmin HTTP ${response.status} per ${endpoint.split('?')[0]}`);return response.json();}
+async function getGarminActivities(){const token=await getGarminToken();const url=new URL('/activitylist-service/activities/search/activities',GARMIN_BASE);url.searchParams.set('start','0');url.searchParams.set('limit','20');const data=await garminJson(url.pathname+url.search,token);if(!Array.isArray(data))throw new Error('Formato attività Garmin inatteso');return data;}
 
-// Diagnostica PRIVACY-SAFE: mostra soltanto nomi di campi relativi ai Lap e conteggi.
-// Non registra token, coordinate GPS, campioni, valori personali o risposte complete.
-function lapShape(value) {
-  if (Array.isArray(value)) return { type: 'array', count: value.length };
-  if (value && typeof value === 'object') return { type: 'object', keys: Object.keys(value).filter(k => /lap|split|interval/i.test(k)).slice(0, 30) };
-  return { type: value === null ? 'null' : typeof value };
-}
-function lapDiagnostics(detail, splits, laps, errors) {
-  const topKeys = detail && typeof detail === 'object' ? Object.keys(detail) : [];
-  const candidates = {};
-  for (const key of topKeys.filter(k => /lap|split|interval/i.test(k)).slice(0, 30)) {
-    candidates[key] = lapShape(detail[key]);
-  }
-  for (const parentKey of ['activity', 'activityDetail', 'summaryDTO', 'activitySummary']) {
-    const parent = detail?.[parentKey];
-    if (parent && typeof parent === 'object' && !Array.isArray(parent)) {
-      for (const key of Object.keys(parent).filter(k => /lap|split|interval/i.test(k)).slice(0, 15)) {
-        candidates[`${parentKey}.${key}`] = lapShape(parent[key]);
-      }
+// FIT protocol: a Lap is global message number 19. Only count complete messages;
+// no synthetic laps and no user location, coordinates or raw activity bytes in logs.
+function fitLapCount(bytes){
+  if(bytes.length<14)throw new Error('FIT troppo corto');
+  const headerSize=bytes.readUInt8(0);
+  if(headerSize<12||headerSize>bytes.length-2||bytes.toString('ascii',8,12)!=='.FIT')throw new Error('Intestazione FIT non valida');
+  const dataSize=bytes.readUInt32LE(4),end=headerSize+dataSize;
+  if(end>bytes.length-2)throw new Error('FIT incompleto');
+  const defs=new Map();let offset=headerSize,laps=0;
+  while(offset<end){
+    const record=bytes.readUInt8(offset++);
+    const compressed=Boolean(record&0x80);
+    const local=compressed?(record>>5)&3:record&15;
+    if(!compressed&&(record&0x40)){
+      if(offset+5>end)throw new Error('Definizione FIT incompleta');
+      offset++;const architecture=bytes.readUInt8(offset++);if(architecture!==0&&architecture!==1)throw new Error('Architettura FIT sconosciuta');
+      const global=architecture===0?bytes.readUInt16LE(offset):bytes.readUInt16BE(offset);offset+=2;
+      const fields=bytes.readUInt8(offset++);const fieldBytes=fields*3;
+      if(offset+fieldBytes>end)throw new Error('Campi FIT incompleti');
+      let length=0;for(let i=0;i<fields;i++)length+=bytes.readUInt8(offset+i*3+1);offset+=fieldBytes;
+      if(record&0x20){if(offset>=end)throw new Error('Campi sviluppatore FIT incompleti');const devCount=bytes.readUInt8(offset++);if(offset+devCount*3>end)throw new Error('Campi sviluppatore FIT incompleti');for(let i=0;i<devCount;i++)length+=bytes.readUInt8(offset+i*3+1);offset+=devCount*3;}
+      defs.set(local,{global,length});
+    }else{
+      const def=defs.get(local);if(!def)throw new Error('Messaggio FIT senza definizione');
+      if(offset+def.length>end)throw new Error('Messaggio FIT incompleto');
+      if(def.global===19)laps++;
+      offset+=def.length;
     }
   }
-  return {
-    detailTopLevelKeys: topKeys.filter(k => !/token|auth|password|email|location|gps|coordinate|position|lat|lon/i.test(k)).slice(0, 40),
-    lapFields: candidates,
-    splits: lapShape(splits),
-    laps: lapShape(laps),
-    endpointErrors: errors
-  };
+  return laps;
 }
-async function getGarminActivityDetail(activityId) {
-  const token = await getGarminToken();
-  const detail = await garminJson(`/activity-service/activity/${activityId}/details`, token);
-  let splits = null; let laps = null;
-  const errors = {};
-  for (const [name, endpoint] of [
-    ['splits', `/activity-service/activity/${activityId}/splits`],
-    ['laps', `/activity-service/activity/${activityId}/laps`]
-  ]) {
-    try {
-      const result = await garminJson(endpoint, token);
-      if (name === 'splits') splits = result; else laps = result;
-    } catch (error) {
-      // Registra solo il codice HTTP, non l'URL con l'ID dell'attività.
-      errors[name] = /HTTP (\d{3})/.exec(error.message)?.[1] || 'errore di rete';
-    }
+function fitFromZip(bytes){
+  // Read central directory, not local headers (ZIP entries may use data descriptors).
+  let eocd=-1;for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--){if(bytes.readUInt32LE(i)===0x06054b50){eocd=i;break;}}
+  if(eocd<0)throw new Error('Archivio ZIP non valido');
+  const entries=bytes.readUInt16LE(eocd+10);let p=bytes.readUInt32LE(eocd+16);
+  for(let i=0;i<entries;i++){
+    if(p+46>bytes.length||bytes.readUInt32LE(p)!==0x02014b50)throw new Error('Indice ZIP non valido');
+    const method=bytes.readUInt16LE(p+10),compressed=bytes.readUInt32LE(p+20),uncompressed=bytes.readUInt32LE(p+24);
+    const nameLen=bytes.readUInt16LE(p+28),extraLen=bytes.readUInt16LE(p+30),commentLen=bytes.readUInt16LE(p+32);
+    const name=bytes.toString('utf8',p+46,p+46+nameLen),local=bytes.readUInt32LE(p+42);
+    p+=46+nameLen+extraLen+commentLen;
+    if(!name.toLowerCase().endsWith('.fit'))continue;
+    if(uncompressed>20*1024*1024||compressed>20*1024*1024)throw new Error('FIT supera il limite di 20 MB');
+    if(local+30>bytes.length||bytes.readUInt32LE(local)!==0x04034b50)throw new Error('Voce ZIP non valida');
+    const start=local+30+bytes.readUInt16LE(local+26)+bytes.readUInt16LE(local+28);
+    if(start+compressed>bytes.length)throw new Error('ZIP incompleto');
+    const raw=bytes.subarray(start,start+compressed);
+    const fit=method===0?raw:method===8?inflateRawSync(raw,{maxOutputLength:20*1024*1024}):null;
+    if(!fit)throw new Error('Compressione ZIP non supportata');
+    if(fit.length!==uncompressed)throw new Error('Dimensione FIT non valida');
+    return fit;
   }
-  const diagnostic = lapDiagnostics(detail, splits, laps, errors);
-  console.info('Runner Pulse — diagnostica Lap Garmin:', JSON.stringify(diagnostic));
-  // Compatibilità con il login.js esistente: la proprietà splits rimane invariata.
-  // Se l'endpoint /laps funziona, restituiamo il suo risultato nello stesso campo.
-  return { activityId, detail, splits: splits ?? laps, splitsAvailable: splits !== null || laps !== null };
+  throw new Error('Nessun file FIT nello ZIP');
+}
+async function diagnoseFit(activityId,token){
+  const endpoint=`/download-service/files/activity/${activityId}`;
+  try{
+    const response=await fetch(GARMIN_BASE+endpoint,{headers:{Authorization:`Bearer ${token}`,Accept:'application/zip, application/octet-stream, */*'},signal:AbortSignal.timeout(25000)});
+    if(!response.ok)return {status:'http_error',httpStatus:response.status};
+    const declared=Number(response.headers.get('content-length'));
+    if(declared>20*1024*1024)return {status:'too_large'};
+    const reader=response.body?.getReader();if(!reader)return {status:'empty_body'};
+    const chunks=[];let size=0;
+    try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>20*1024*1024){await reader.cancel();return {status:'too_large'};}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
+    const bytes=Buffer.concat(chunks);
+    let fit,format;
+    if(bytes.length>=12&&bytes.toString('ascii',8,12)==='.FIT'){fit=bytes;format='fit';}
+    else if(bytes.length>=4&&bytes.readUInt32LE(0)===0x04034b50){fit=fitFromZip(bytes);format='zip';}
+    else return {status:'unexpected_format',contentType:(response.headers.get('content-type')||'').split(';')[0]};
+    return {status:'ok',format,lapCount:fitLapCount(fit)};
+  }catch(error){return {status:'parse_or_network_error',reason:error.name==='TimeoutError'?'timeout':String(error.message||error).slice(0,120)};}
+}
+async function getGarminActivityDetail(activityId){
+  const token=await getGarminToken();
+  const detail=await garminJson(`/activity-service/activity/${activityId}/details`,token);
+  let splits=null,splitsAvailable=false;
+  for(const kind of ['splits','laps']){
+    try{splits=await garminJson(`/activity-service/activity/${activityId}/${kind}`,token);splitsAvailable=true;break;}
+    catch(error){console.warn(`Lap Garmin (${kind}) non disponibili:`,error.message);}
+  }
+  const fitDiagnostic=await diagnoseFit(activityId,token);
+  console.log('Runner Pulse — diagnostica FIT Garmin:',JSON.stringify(fitDiagnostic));
+  return {activityId,detail,splits,splitsAvailable,fitDiagnostic};
 }
 
-http.createServer(async (req, res) => {
-  let pathname;
-  try { pathname = new URL(req.url, 'http://localhost').pathname; }
-  catch { json(res, 400, { message: 'URL non valido' }); return; }
-  if (pathname === '/api/status') {
-    if (req.method !== 'GET') { json(res, 405, { message: 'Method not allowed' }); return; }
-    json(res, 200, { garminConfigured: Boolean(GARMIN_API_KEY), garminConnected: false, message: 'La connessione Garmin non è ancora verificata. Usa il test autenticato.' });
+http.createServer(async(req,res)=>{
+  let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+  if(pathname==='/api/status'){if(req.method!=='GET'){json(res,405,{message:'Method not allowed'});return;}json(res,200,{garminConfigured:Boolean(GARMIN_API_KEY),garminConnected:false,message:'La connessione Garmin non è ancora verificata. Usa il test autenticato.'});return;}
+  if(['/api/garmin/test','/api/garmin/activities','/api/garmin/activity-detail'].includes(pathname)){
+    if(req.method!=='POST'){json(res,405,{message:'Method not allowed'});return;}
+    if(!await authorized(req)){json(res,403,{success:false,message:'Accesso Google non autorizzato.'});return;}
+    if(!GARMIN_API_KEY){json(res,503,{success:false,message:'GARMIN_API_KEY non configurata su Render.'});return;}
+    try{
+      if(pathname==='/api/garmin/test'){await getGarminToken();json(res,200,{success:true,garminConnected:true,message:'Il server ha ottenuto una risposta valida dal servizio token Garmin. Il caricamento delle attività va verificato separatamente.'});}
+      else if(pathname==='/api/garmin/activities'){const activities=await getGarminActivities();json(res,200,{success:true,count:activities.length,activities});}
+      else{let body;try{body=await readJsonBody(req);}catch(error){json(res,error.status||400,{success:false,message:error.message});return;}const id=String(body?.activityId??'');if(!/^\d{1,20}$/.test(id)){json(res,400,{success:false,message:'activityId non valido: è richiesto un identificativo numerico Garmin.'});return;}const result=await getGarminActivityDetail(id);json(res,200,{success:true,...result});}
+    }catch(error){console.error('Errore Garmin:',error.message);json(res,502,{success:false,message:'Richiesta Garmin non riuscita. Controlla i log di Render per il codice di errore.'});}
     return;
   }
-  if (pathname === '/api/garmin/test' || pathname === '/api/garmin/activities' || pathname === '/api/garmin/activity-detail') {
-    if (req.method !== 'POST') { json(res, 405, { message: 'Method not allowed' }); return; }
-    if (!await authorized(req)) { json(res, 403, { success: false, message: 'Accesso Google non autorizzato.' }); return; }
-    if (!GARMIN_API_KEY) { json(res, 503, { success: false, message: 'GARMIN_API_KEY non configurata su Render.' }); return; }
-    try {
-      if (pathname === '/api/garmin/test') {
-        await getGarminToken();
-        json(res, 200, { success: true, garminConnected: true, message: 'Il server ha ottenuto una risposta valida dal servizio token Garmin. Il caricamento delle attività va verificato separatamente.' });
-      } else if (pathname === '/api/garmin/activities') {
-        const activities = await getGarminActivities();
-        json(res, 200, { success: true, count: activities.length, activities });
-      } else {
-        let body;
-        try { body = await readJsonBody(req); }
-        catch (error) { json(res, error.status || 400, { success: false, message: error.message }); return; }
-        const id = String(body?.activityId ?? '');
-        if (!/^\d{1,20}$/.test(id)) { json(res, 400, { success: false, message: 'activityId non valido: è richiesto un identificativo numerico Garmin.' }); return; }
-        const result = await getGarminActivityDetail(id);
-        json(res, 200, { success: true, ...result });
-      }
-    } catch (error) {
-      console.error('Errore Garmin:', error.message);
-      json(res, 502, { success: false, message: 'Richiesta Garmin non riuscita. Controlla i log di Render per il codice di errore.' });
-    }
-    return;
-  }
-  if (req.method !== 'GET' && req.method !== 'HEAD') { json(res, 405, { message: 'Method not allowed' }); return; }
-  const name = files[pathname];
-  if (!name) { res.writeHead(404); res.end('Not found'); return; }
-  try {
-    const data = await readFile(path.join(base, 'public', name));
-    res.writeHead(200, { 'Content-Type': types[path.extname(name)], 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
-    res.end(req.method === 'HEAD' ? undefined : data);
-  } catch (error) {
-    console.error('Errore file statico:', pathname, error.code);
-    res.writeHead(error.code === 'ENOENT' ? 404 : 500);
-    res.end(error.code === 'ENOENT' ? 'Not found' : 'Server error');
-  }
-}).listen(port, '0.0.0.0', () => console.log('Runner Pulse Web on ' + port));
+  if(req.method!=='GET'&&req.method!=='HEAD'){json(res,405,{message:'Method not allowed'});return;}
+  const name=files[pathname];if(!name){res.writeHead(404);res.end('Not found');return;}
+  try{const data=await readFile(path.join(base,'public',name));res.writeHead(200,{'Content-Type':types[path.extname(name)],'X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});res.end(req.method==='HEAD'?undefined:data);}
+  catch(error){console.error('Errore file statico:',pathname,error.code);res.writeHead(error.code==='ENOENT'?404:500);res.end(error.code==='ENOENT'?'Not found':'Server error');}
+}).listen(port,'0.0.0.0',()=>console.log('Runner Pulse Web on '+port));
