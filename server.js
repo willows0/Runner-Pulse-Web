@@ -126,6 +126,7 @@ const GARMIN_TOKEN_URL =
   if (!GARMIN_API_KEY) {
     throw new Error("Chiave Garmin non configurata");
   }
+  }
   async function getGarminActivities() {
   const token = (await getGarminToken()).trim();
 
