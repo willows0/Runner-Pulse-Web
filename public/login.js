@@ -241,58 +241,15 @@ async function loadDetailForActivity(activity) {
     const title = document.createElement('h3'); title.textContent = 'Grafici Garmin'; panel.append(title);
     const rows = extractMetrics(data.detail);
     const heart = findSeries(rows, ['heartrate', 'heartratebpm', 'directheartrate', 'hr']);
-    const speed = findSeries(rows, ['directspeed', 'speed', 'enhancedspeed', 'velocity']);
-    const altitude = findSeries(rows, ['directcorrectedelevation', 'directelevation', 'directuncorrectedelevation', 'elevation', 'altitude', 'enhancedaltitude']);
-    const cadence = findSeries(rows, ['directruncadence', 'runcadence', 'runningcadence', 'directdoublecadence', 'directcadence', 'cadence']);
+    const speed = findSeries(rows, ['speed', 'enhancedspeed', 'velocity', 'directspeed']);
+    const altitude = findSeries(rows, ['elevation', 'altitude', 'enhancedaltitude', 'directelevation']);
+    const cadence = findSeries(rows, ['runcadence', 'cadence', 'runningcadence', 'directcadence']);
     drawSeries(panel, '❤️ Frequenza cardiaca', heart, v => v, ' bpm');
     // Garmin activity detail normalmente esprime speed in m/s; non stimiamo dati mancanti.
     drawSeries(panel, '📈 Passo', speed, v => v > 0 ? 1000 / v / 60 : NaN, ' min/km');
     drawSeries(panel, '🏔️ Altitudine', altitude, v => v, ' m');
     drawSeries(panel, '👟 Cadenza', cadence, v => v, ' spm');
     renderSplits(panel, data.splits);
-    // Diagnostica locale: mostra soltanto nomi di metriche e numero di campioni,
-    // mai token, coordinate GPS, identificativi dell'attività o valori grezzi.
-    const diagnostic = document.createElement('div');
-    diagnostic.className = 'rp-chart';
-    const diagnosticButton = document.createElement('button');
-    diagnosticButton.type = 'button';
-    diagnosticButton.textContent = '🔎 Controlla metriche Garmin';
-    diagnosticButton.style.cssText = 'width:100%;padding:13px;border:0;border-radius:12px;background:#ed6b12;color:white;font-weight:700;cursor:pointer';
-    const diagnosticOutput = document.createElement('pre');
-    diagnosticOutput.hidden = true;
-    diagnosticOutput.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.5;background:#fff7f0;padding:12px;border-radius:10px';
-    const copyButton = document.createElement('button');
-    copyButton.type = 'button';
-    copyButton.textContent = 'Copia risultato diagnostica';
-    copyButton.hidden = true;
-    copyButton.style.cssText = 'margin-top:10px;padding:10px;border:1px solid #ed6b12;border-radius:10px;background:white;color:#b94d05;font-weight:700';
-    const root = data.detail?.activityDetail || data.detail?.detail || data.detail;
-    const descriptors = root?.metricDescriptors || root?.activityDetailMetrics?.metricDescriptors || [];
-    const forbidden = /lat|lon|gps|coord|position|location|token|email|userid|activityid|deviceid/i;
-    const names = [...new Set([
-      ...(Array.isArray(descriptors) ? descriptors.map(descriptorName) : []),
-      ...rows.flatMap(row => Object.keys(row).filter(k => k !== 'index'))
-    ])].filter(name => name && !forbidden.test(name)).sort();
-    const diagnosticText = [
-      'Runner Pulse — diagnostica metriche Garmin',
-      `Campioni totali: ${rows.length}`,
-      `Descrittori ricevuti: ${Array.isArray(descriptors) ? descriptors.length : 0}`,
-      `Lap ricevuti: ${Array.isArray(data.splits) ? data.splits.length : Array.isArray(data.splits?.lapDTOs) ? data.splits.lapDTOs.length : Array.isArray(data.splits?.splits) ? data.splits.splits.length : 0}`,
-      'Metriche (nome: campioni numerici):',
-      ...names.map(name => `${name}: ${rows.reduce((count, row) => count + (Number.isFinite(row[name]) ? 1 : 0), 0)}`)
-    ].join('\n');
-    diagnosticButton.addEventListener('click', () => {
-      diagnosticOutput.hidden = !diagnosticOutput.hidden;
-      copyButton.hidden = diagnosticOutput.hidden;
-      diagnosticOutput.textContent = diagnosticText;
-      diagnosticButton.textContent = diagnosticOutput.hidden ? '🔎 Controlla metriche Garmin' : 'Nascondi diagnostica';
-    });
-    copyButton.addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(diagnosticText); copyButton.textContent = 'Copiato!'; }
-      catch { copyButton.textContent = 'Seleziona e copia il testo qui sopra'; }
-    });
-    diagnostic.append(diagnosticButton, diagnosticOutput, copyButton);
-    panel.append(diagnostic);
     const note = document.createElement('p'); note.className = 'rp-hint';
     note.textContent = `Campioni ricevuti: ${rows.length}. Sono visualizzati solo dati realmente restituiti dal servizio Garmin. Se una metrica manca, potrebbe avere un nome o formato diverso nella risposta.`;
     panel.append(note);
