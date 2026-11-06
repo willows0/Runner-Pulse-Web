@@ -5,6 +5,7 @@ import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 import { handleCoachAI } from './coach-api.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
@@ -15,7 +16,7 @@ const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-
 if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
 initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpulse' });
 
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/login.css':'login.css','/privacy.html':'privacy.html'};
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/coach-memory.js':'coach-memory.js','/login.css':'login.css','/privacy.html':'privacy.html'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 async function authorized(req){const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');if(!match)return false;try{const user=await getAuth().verifyIdToken(match[1],true);return user.email_verified===true&&user.email?.toLowerCase()===ALLOWED_EMAIL;}catch(error){console.warn('Firebase token non valido:',error.code||error.message);return false;}}
@@ -139,8 +140,68 @@ async function getGarminActivityDetail(activityId){
   return {activityId,detail,splits,splitsAvailable,fitDiagnostic:fitStatus};
 }
 
+// Sync a blocchi, riprendibile tra accessi. Le richieste sono autenticate.
+const syncLocks = new Set();
+async function syncRequest(req,res,pathname){
+  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  if(!await authorized(req))return json(res,403,{success:false,message:'Accesso non autorizzato'});
+  const uid=(await getAuth().verifyIdToken(/^Bearer (\S+)$/i.exec(req.headers.authorization)[1],true)).uid;
+  if(!GARMIN_API_KEY)return json(res,503,{success:false,message:'Chiave Garmin non configurata'});
+  const db=getFirestore(), root=db.collection('runnerPulseGarmin').doc(uid), activities=root.collection('activities');
+  if(pathname==='/api/garmin/sync-status'){
+    const snap=await root.get(), state=snap.exists?snap.data():{};
+    return json(res,200,{success:true,state:{phase:state.phase||'new',discovered:state.discovered||0,processed:state.processed||0,failed:state.failed||0,updatedAt:state.updatedAt||null}});
+  }
+  if(syncLocks.has(uid))return json(res,409,{success:false,message:'Sincronizzazione già in corso. Riprova tra poco.'});
+  syncLocks.add(uid);
+  try{
+    const snap=await root.get();let state=snap.exists?snap.data():{};
+    const now=Date.now();
+    // Un nuovo accesso riparte dalla pagina più recente, senza cancellare lo storico salvato.
+    if(state.phase==='done'||state.phase==='new'||!state.phase){state={phase:'discover',cursor:0,discovered:0,processed:0,failed:0,startedAt:now};}
+    if(state.phase==='discover'){
+      const token=await getGarminToken();
+      const url=new URL('/activitylist-service/activities/search/activities',GARMIN_BASE);
+      url.searchParams.set('start',String(state.cursor||0));url.searchParams.set('limit','20');
+      const list=await garminJson(url.pathname+url.search,token);
+      if(!Array.isArray(list))throw new Error('Elenco Garmin non valido');
+      const batch=db.batch();let valid=0;
+      for(const a of list){const id=String(a?.activityId??a?.id??'');if(!/^\d{1,20}$/.test(id))continue;
+        // Conservarne la scheda riepilogativa originale, senza inventare metriche.
+        const ref=activities.doc(id);batch.set(ref,{summary:a,garminId:id,seenAt:now},{merge:true});valid++;
+      }
+      if(valid)await batch.commit();
+      state.cursor=(state.cursor||0)+list.length;state.discovered=(state.discovered||0)+valid;
+      if(list.length<20){state.phase='details';state.detailCursor='';}
+      state.updatedAt=now;await root.set(state);
+      return json(res,200,{success:true,state:{phase:state.phase,discovered:state.discovered,processed:state.processed,failed:state.failed},activities:list});
+    }
+    if(state.phase==='details'){
+      const q=activities.orderBy('__name__').limit(1);
+      const query=state.detailCursor?q.startAfter(activities.doc(state.detailCursor)):q;
+      const page=await query.get();
+      if(page.empty){state.phase=state.failed?'partial':'done';state.updatedAt=now;await root.set(state);return json(res,200,{success:true,state});}
+      const doc=page.docs[0],id=doc.id;
+      try{
+        // Recupera i dettagli reali. FIT/Lap rimangono disponibili dall'endpoint originale.
+        const token=await getGarminToken();
+        const detail=await garminJson(`/activity-service/activity/${id}/details`,token);
+        const serialized=JSON.stringify(detail);
+        if(Buffer.byteLength(serialized)>850000)throw new Error('Dettaglio troppo grande per un documento Firestore');
+        await doc.ref.set({detail,detailSyncedAt:now,detailError:null},{merge:true});
+      }catch(e){state.failed=(state.failed||0)+1;console.warn('Dettaglio Garmin non sincronizzato:',id,e.message);await doc.ref.set({detailError:String(e.message).slice(0,100)},{merge:true});}
+      state.detailCursor=id;state.processed=(state.processed||0)+1;state.updatedAt=now;await root.set(state);
+      return json(res,200,{success:true,state:{phase:state.phase,discovered:state.discovered,processed:state.processed,failed:state.failed}});
+    }
+    if(state.phase==='partial')return json(res,200,{success:true,state});
+    throw new Error('Stato sincronizzazione non valido');
+  }catch(e){console.error('Sync Garmin:',e.message);return json(res,502,{success:false,message:'Sincronizzazione Garmin interrotta: '+e.message});}
+  finally{syncLocks.delete(uid);}
+}
+
 http.createServer(async(req,res)=>{
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+  if(['/api/garmin/sync-status','/api/garmin/sync-step'].includes(pathname)){await syncRequest(req,res,pathname);return;}
   if(pathname==='/api/coach/chat'){await handleCoachAI(req,res,authorized);return;}
   if(pathname==='/api/status'){if(req.method!=='GET'){json(res,405,{message:'Method not allowed'});return;}json(res,200,{garminConfigured:Boolean(GARMIN_API_KEY),garminConnected:false,message:'La connessione Garmin non è ancora verificata. Usa il test autenticato.'});return;}
   if(['/api/garmin/test','/api/garmin/activities','/api/garmin/activity-detail'].includes(pathname)){
