@@ -11,7 +11,6 @@ const firebaseConfig = {
   appId: '1:602428716854:web:1bd814e1ce8534fce6e597'
 };
 const OWNER_EMAIL = 'utrefiletti@gmail.com';
-const FAMILY_EMAILS = new Set([OWNER_EMAIL, 'ericozzo.uno@gmail.com']);
 const isOwner = () => auth.currentUser?.email?.toLowerCase() === OWNER_EMAIL;
 const auth = getAuth(initializeApp(firebaseConfig));
 const provider = new GoogleAuthProvider();
@@ -19,7 +18,7 @@ provider.setCustomParameters({ prompt: 'select_account' });
 const googleVerifiedUser = u => Boolean(u && (u.emailVerified || u.providerData?.some(p => p.providerId === 'google.com' && p.email?.toLowerCase() === u.email?.toLowerCase())));
 const allowedUser = () => {
   const u = auth.currentUser;
-  return u && FAMILY_EMAILS.has(u.email?.toLowerCase()) && googleVerifiedUser(u);
+  return u && googleVerifiedUser(u);
 };
 async function authorizedPost(endpoint, body) {
   if (!allowedUser()) throw new Error('Accedi con il tuo account Google autorizzato.');
@@ -54,7 +53,7 @@ loginButton.addEventListener('click', async () => {
 });
 getRedirectResult(auth).catch(showError);
 onAuthStateChanged(auth, async user => {
-  const allowed = Boolean(user && FAMILY_EMAILS.has(user.email?.toLowerCase()) && googleVerifiedUser(user));
+  const allowed = Boolean(user && googleVerifiedUser(user));
   document.body.classList.toggle('rp-authenticated', allowed);
   if(allowed){
     document.getElementById('importGarmin')?.toggleAttribute('disabled',!isOwner());
@@ -64,7 +63,7 @@ onAuthStateChanged(auth, async user => {
     if(isOwner())void startAutoSync();else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
   }else{window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
   if (user && !allowed) {
-    showError(FAMILY_EMAILS.has(user.email?.toLowerCase()) ? 'Google non ha confermato la verifica di questo indirizzo. Riprova con Accedi con Google.' : 'Questo account Google non è autorizzato a utilizzare Runner Pulse.');
+    showError('Accedi con un account Google verificato per utilizzare Runner Pulse.');
     await signOut(auth);
   }
 });
