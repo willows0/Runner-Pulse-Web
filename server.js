@@ -160,7 +160,10 @@ async function syncRequest(req,res,pathname){
     const snap=await root.get();let state=snap.exists?snap.data():{};
     const now=Date.now();
     // Un nuovo accesso riparte dalla pagina più recente, senza cancellare lo storico salvato.
-    if(state.phase==='done'||state.phase==='new'||!state.phase){state={phase:'discover',cursor:0,discovered:0,processed:0,failed:0,startedAt:now};}
+    // Riavvio esplicito dall'orologio: non elimina le attività già archiviate.
+    // Riparte anche dallo stato partial, che altrimenti rimarrebbe bloccato.
+    const restart=Boolean((await readJsonBody(req)).restart);
+    if(restart||state.phase==='done'||state.phase==='new'||!state.phase){state={phase:'discover',cursor:0,discovered:0,processed:0,failed:0,startedAt:now};}
     if(state.phase==='discover'){
       const token=await getGarminToken();
       const url=new URL('/activitylist-service/activities/search/activities',GARMIN_BASE);
