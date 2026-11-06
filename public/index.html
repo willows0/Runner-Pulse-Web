@@ -15,13 +15,39 @@
   </style>
 </head>
 <body>
-  <header><div class="brand"><span class="heart">♥</span><div><b>RUNNER PULSE</b><small>Il tuo percorso, il tuo ritmo</small></div></div><button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Stato sincronizzazione Garmin" title="Stato sincronizzazione Garmin"><svg viewBox="0 0 48 48" aria-hidden="true"><circle class="rp-sync-track" cx="24" cy="24" r="19"/><circle id="rp-sync-ring" class="rp-sync-ring" cx="24" cy="24" r="19"/><path class="rp-clock-hands" d="M24 12v12l8 5"/></svg></button></header>
+  <header class="rp-premium-header">
+    <div class="brand rp-premium-brand" aria-label="Runner Pulse">
+      <svg class="rp-runner-logo" viewBox="0 0 88 100" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="rpRunnerOrange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff9b36"/><stop offset=".55" stop-color="#ff6819"/><stop offset="1" stop-color="#f24b0a"/></linearGradient></defs>
+        <g fill="url(#rpRunnerOrange)" stroke="url(#rpRunnerOrange)" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="58" cy="13" r="10" stroke="none"/>
+          <path d="M46 26Q52 22 61 27L65 38L53 54L38 49L40 36Z" stroke="none"/>
+          <path d="M46 29L31 33L17 47" fill="none" stroke-width="9"/>
+          <path d="M59 31L72 40L82 31" fill="none" stroke-width="8"/>
+          <path d="M43 49L30 67L11 84" fill="none" stroke-width="12"/>
+          <path d="M48 51L58 67L75 78" fill="none" stroke-width="12"/>
+          <path d="M11 84L4 94M75 78L84 87" fill="none" stroke-width="8"/>
+        </g>
+      </svg>
+      <div class="rp-brand-title"><b>Runner<br>Pulse</b><svg viewBox="0 0 108 34" aria-hidden="true"><path d="M2 19h19l9-13 9 24 9-17h16c9-17 22-9 20 2-2 10-20 17-20 17S48 25 48 15" fill="none" stroke="#ff6819" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    </div>
+    <button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Stato sincronizzazione Garmin" title="Stato sincronizzazione Garmin">
+      <svg class="rp-watch" viewBox="0 0 58 82" aria-hidden="true"><defs><linearGradient id="watchframe" x1="0" x2="1"><stop stop-color="#242b31"/><stop offset=".5" stop-color="#53595e"/><stop offset="1" stop-color="#11151b"/></linearGradient></defs><path d="M17 2h24l4 16H13zM13 64h32l-4 16H17z" fill="#171b20"/><rect x="4" y="15" width="50" height="52" rx="13" fill="url(#watchframe)"/><rect x="9" y="20" width="40" height="42" rx="9" fill="#10151a"/><rect x="54" y="33" width="3" height="13" rx="1.5" fill="#252b30"/><circle cx="33" cy="29" r="4" fill="#ff6b16"/><path d="m28 36-8 8-10 3m19-11 10 6 7-2m-18-4-3 12-9 10m9-10 12 6 7 7" stroke="#ff6b16" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg class="rp-ring-svg" viewBox="0 0 48 48" aria-hidden="true"><circle class="rp-sync-track" cx="24" cy="24" r="19"/><circle id="rp-sync-ring" class="rp-sync-ring" cx="24" cy="24" r="19"/></svg>
+    </button>
+  </header>
   <main>
     <section id="home" class="page active">
-      <h1>La tua corsa, ogni giorno.</h1><p class="muted">Il tuo spazio per allenarti verso la mezza maratona.</p>
+      <div class="rp-welcome">
+        <h1>Benvenuto in Runner Pulse</h1>
+        <p>Le tue attività, i progressi e l’allenatore sempre con te.</p>
+        <div class="stats rp-welcome-stats">
+          <div><span class="rp-stat-icon" aria-hidden="true">🏃</span><div><strong id="count">0</strong><small>Allenamenti</small></div></div>
+          <div><span class="rp-stat-icon" aria-hidden="true">📍</span><div><strong><span id="distance">0</span><em> km</em></strong><small>Distanza totale</small></div></div>
+          <div><span class="rp-stat-icon" aria-hidden="true">◷</span><div><strong id="avgPace">—</strong><small>Passo medio</small></div></div>
+        </div>
+      </div>
       <div class="hero"><div class="ecg">♥ <span>⌁⌁</span></div><h2>Mezza maratona</h2><p>Obiettivo · 21,097 km</p><div class="chips"><span>Avanzato</span><span>3 giorni/settimana</span></div></div>
-      <h2>Riepilogo allenamenti</h2>
-      <div class="stats"><div><strong id="count">0</strong><small>Sessioni registrate</small></div><div><strong id="distance">0,0</strong><small>Km registrati</small></div><div><strong id="avgPace">—</strong><small>Passo medio (min/km)</small></div></div>
       <div class="card"><h3>Garmin Connect</h3><p id="rp-sync-text" role="status" class="muted">Sincronizzazione in attesa dell’accesso Google.</p><p id="garminStatus" class="muted">Verifica collegamento in corso…</p><p id="garminUpdated" class="note"></p><p class="note">Vengono visualizzati soltanto dati reali importati da Garmin.</p></div>
     </section>
     <section id="activities" class="page">
