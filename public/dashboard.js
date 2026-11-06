@@ -3,7 +3,7 @@
   const byId = id => document.getElementById(id);
   const update = () => {
     let entries = [];
-    try { entries = JSON.parse(localStorage.getItem('runnerPulseActivitiesV1') || '[]'); } catch {}
+    try { entries = JSON.parse(localStorage.getItem(window.runnerPulseStorageKey || '__runnerpulse_no_user__') || '[]'); } catch {}
     // Le statistiche settimanali sono calcolate soltanto da attività con data e distanza valide.
     if (!Array.isArray(entries)) return;
     const today = new Date(); today.setHours(23,59,59,999);
@@ -18,6 +18,7 @@
   };
   document.addEventListener('DOMContentLoaded', () => {
     update(); window.addEventListener('runnerpulse:garmin-data',()=>setTimeout(update,100));
+    window.addEventListener('runnerpulse:auth-user',()=>setTimeout(update,0));
     const ask = byId('rp-request-plan');
     if (ask) ask.addEventListener('click',()=>{
       const tab = document.querySelector('nav button[data-page="coach"]');

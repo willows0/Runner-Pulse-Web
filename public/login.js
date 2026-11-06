@@ -82,28 +82,35 @@ function syncUI(state,message){
   const fraction=complete?1:phase==='details'&&total?Math.min(.99,done/total):0;
   syncRing.style.strokeDashoffset=String(119.38*(1-fraction));
   syncClock.classList.toggle('rp-sync-complete',complete);
+  syncClock.classList.toggle('rp-sync-running',syncActive);
   syncClock.classList.toggle('rp-sync-error',phase==='partial'||Boolean(message));
   const label=message|| (complete?`Sincronizzato: ${total} attività Garmin.`:phase==='partial'?`Importazione parziale: ${failed} dettagli non disponibili.`:phase==='discover'?`Ricerca dello storico Garmin: ${total} attività trovate…`:phase==='details'?`Sincronizzazione ${done} di ${total} attività (${Math.floor(done/total*100)||0}%).`:'In attesa della sincronizzazione.');
   syncText.textContent=label;syncClock.title=label;syncClock.setAttribute('aria-label',label);
 }
 function stopAutoSync(){syncCancel=true;syncActive=false;syncUI(null,'Accedi con Google per sincronizzare Garmin.');}
-async function startAutoSync(){
+async function startAutoSync(force=false){
   if(syncActive||!allowedUser()||!isOwner())return;
   syncActive=true;syncCancel=false;
   try{
+    syncUI(null,'Verifica sincronizzazione Garmin in corso…');
     let state=(await authorizedPost('/api/garmin/sync-status',{})).state;
-    syncUI(state);
+    if(force) syncUI(state,'Riavvio sincronizzazione Garmin…');
+    else syncUI(state);
     for(let steps=0;steps<100000&&!syncCancel&&allowedUser();steps++){
-      const data=await authorizedPost('/api/garmin/sync-step',{});
+      const data=await authorizedPost('/api/garmin/sync-step',steps===0&&force?{restart:true}:{});
       state=data.state;syncUI(state);
       if(Array.isArray(data.activities)&&data.activities.length){window.dispatchEvent(new CustomEvent('runnerpulse:garmin-data',{detail:{activities:data.activities}}));}
       if(state.phase==='done'||state.phase==='partial')break;
       await new Promise(resolve=>setTimeout(resolve,250));
     }
   }catch(e){if(!syncCancel)syncUI(null,'Sincronizzazione interrotta: '+(e.message||String(e)));}
-  finally{syncActive=false;}
+  finally{syncActive=false;syncClock?.classList.remove('rp-sync-running');}
 }
-syncClock?.addEventListener('click',()=>{if(syncText)syncText.scrollIntoView({behavior:'smooth',block:'center'});});
+syncClock?.addEventListener('click',()=>{
+  if(!allowedUser()||!isOwner()){syncUI(null,'Garmin disponibile soltanto per il proprietario.');return;}
+  if(syncActive){syncText.textContent='Sincronizzazione Garmin già in corso…';return;}
+  void startAutoSync(true);
+});
 
 const settings = document.getElementById('settings');
 if (settings) {
