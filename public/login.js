@@ -272,3 +272,24 @@ document.getElementById('activityList')?.addEventListener('click', event => {
   } catch (e) { console.warn('Impossibile leggere attività salvate:', e); }
 });
 document.getElementById('closeDetail')?.addEventListener('click', () => { detailRequest++; });
+
+// Chat Allenatore AI: accesso Google esistente, dati reali solo su invio esplicito.
+(function setupCoachAI(){
+  const coach=document.getElementById('coach'); if(!coach)return;
+  const old=[...coach.querySelectorAll('.card')].find(c=>c.querySelector('h3')?.textContent?.trim()==='Allenatore AI');
+  const card=old||document.createElement('div');card.className='card rp-ai-card';
+  card.innerHTML=`<h3>🧡 Allenatore AI</h3><p class="muted">Chiedimi consigli sulla mezza maratona. Puoi scegliere se condividere i tuoi allenamenti salvati in questo browser.</p><div id="rp-ai-history" role="log" aria-live="polite" style="display:grid;gap:10px;margin:14px 0;max-height:380px;overflow-y:auto"></div><form id="rp-ai-form"><label for="rp-ai-question">La tua domanda</label><textarea id="rp-ai-question" rows="3" maxlength="1500" required placeholder="Come posso organizzare i miei tre allenamenti settimanali?" style="width:100%;box-sizing:border-box;border:1px solid #e5d3c7;border-radius:12px;padding:12px;font:inherit"></textarea><label style="display:flex;align-items:flex-start;gap:9px;margin:12px 0"><input id="rp-ai-share" type="checkbox" checked style="width:auto;margin-top:4px"><span>Invia anche gli ultimi 30 allenamenti salvati per personalizzare la risposta.</span></label><button id="rp-ai-send" type="submit">Chiedi all'allenatore</button><p id="rp-ai-status" role="status" class="note"></p></form><p class="note">L'AI può sbagliare: adatta sempre gli allenamenti alle tue condizioni. Le domande vengono inviate al servizio OpenAI.</p>`;
+  if(!old)coach.append(card);
+  const form=card.querySelector('#rp-ai-form'),question=card.querySelector('#rp-ai-question'),history=card.querySelector('#rp-ai-history'),status=card.querySelector('#rp-ai-status'),button=card.querySelector('#rp-ai-send');
+  function bubble(who,content){const div=document.createElement('div');div.style.cssText=`padding:12px;border-radius:13px;white-space:pre-wrap;overflow-wrap:anywhere;background:${who==='Tu'?'#fff1e5':'#f7f7f7'}`;const b=document.createElement('strong');b.textContent=who;const p=document.createElement('p');p.textContent=content;p.style.margin='6px 0 0';div.append(b,p);history.append(div);history.scrollTop=history.scrollHeight;}
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();const message=question.value.trim();if(!message)return;
+    if(!allowedUser()){status.textContent='Accedi con il tuo account Google autorizzato.';return;}
+    let activities=[];
+    if(card.querySelector('#rp-ai-share').checked){try{const stored=JSON.parse(localStorage.getItem('runnerPulseActivitiesV1')||'[]');if(Array.isArray(stored))activities=stored.slice(0,30).map(a=>({date:a.date,kind:a.kind,km:a.km,minutes:a.minutes,avgHR:a.avgHR,maxHR:a.maxHR,elevation:a.elevation,avgSpeed:a.avgSpeed}));}catch{}}
+    bubble('Tu',message);question.value='';button.disabled=true;status.textContent='L’allenatore sta preparando la risposta…';
+    try{const data=await authorizedPost('/api/coach/chat',{message,activities});bubble('Allenatore AI',data.answer);status.textContent=activities.length?`Risposta basata su ${data.activitiesUsed} allenamenti condivisi.`:'Risposta senza dati degli allenamenti.';}
+    catch(error){status.textContent=error.message||String(error);question.value=message;}
+    finally{button.disabled=false;}
+  });
+})();
