@@ -49,3 +49,12 @@ details form{padding-top:14px}
 #splash #enterApp{display:block;width:100%;max-width:320px;margin:0 auto;background:#fff!important;color:#df5000!important;padding:18px 20px;border:0;border-radius:18px!important;font-size:18px;font-weight:800;box-shadow:0 8px 25px #a8430066}
 @keyframes rp-heartbeat{0%,100%{transform:scale(1)}15%{transform:scale(1.12)}30%{transform:scale(1)}42%{transform:scale(1.08)}58%{transform:scale(1)}}
 @media(prefers-reduced-motion:reduce){#splash .splash-heart{animation:none}}
+
+/* Orologio di sincronizzazione nella homepage */
+.rp-sync-clock{margin-left:auto;flex:0 0 52px;width:52px;height:52px;padding:3px;border:0;background:transparent;cursor:pointer;color:#784b30}
+.rp-sync-clock svg{width:100%;height:100%;display:block}
+.rp-sync-track,.rp-sync-ring{fill:none;stroke-width:4;transform:rotate(-90deg);transform-origin:24px 24px}
+.rp-sync-track{stroke:#e9dfd6}.rp-sync-ring{stroke:#16a34a;stroke-linecap:round;stroke-dasharray:119.38;stroke-dashoffset:119.38;transition:stroke-dashoffset .35s}
+.rp-clock-hands{fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.rp-sync-clock.rp-sync-complete .rp-sync-ring{stroke-dashoffset:0}
+.rp-sync-clock.rp-sync-error .rp-sync-ring{stroke:#d97706}

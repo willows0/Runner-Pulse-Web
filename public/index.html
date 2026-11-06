@@ -15,14 +15,14 @@
   </style>
 </head>
 <body>
-  <header><div class="brand"><span class="heart">♥</span><div><b>RUNNER PULSE</b><small>Il tuo percorso, il tuo ritmo</small></div></div><span class="pill">WEB</span></header>
+  <header><div class="brand"><span class="heart">♥</span><div><b>RUNNER PULSE</b><small>Il tuo percorso, il tuo ritmo</small></div></div><button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Stato sincronizzazione Garmin" title="Stato sincronizzazione Garmin"><svg viewBox="0 0 48 48" aria-hidden="true"><circle class="rp-sync-track" cx="24" cy="24" r="19"/><circle id="rp-sync-ring" class="rp-sync-ring" cx="24" cy="24" r="19"/><path class="rp-clock-hands" d="M24 12v12l8 5"/></svg></button></header>
   <main>
     <section id="home" class="page active">
       <h1>La tua corsa, ogni giorno.</h1><p class="muted">Il tuo spazio per allenarti verso la mezza maratona.</p>
       <div class="hero"><div class="ecg">♥ <span>⌁⌁</span></div><h2>Mezza maratona</h2><p>Obiettivo · 21,097 km</p><div class="chips"><span>Avanzato</span><span>3 giorni/settimana</span></div></div>
       <h2>Riepilogo allenamenti</h2>
       <div class="stats"><div><strong id="count">0</strong><small>Sessioni registrate</small></div><div><strong id="distance">0,0</strong><small>Km registrati</small></div><div><strong id="avgPace">—</strong><small>Passo medio (min/km)</small></div></div>
-      <div class="card"><h3>Garmin Connect</h3><p id="garminStatus" class="muted">Verifica collegamento in corso…</p><p id="garminUpdated" class="note"></p><p class="note">Vengono visualizzati soltanto dati reali importati da Garmin.</p></div>
+      <div class="card"><h3>Garmin Connect</h3><p id="rp-sync-text" role="status" class="muted">Sincronizzazione in attesa dell’accesso Google.</p><p id="garminStatus" class="muted">Verifica collegamento in corso…</p><p id="garminUpdated" class="note"></p><p class="note">Vengono visualizzati soltanto dati reali importati da Garmin.</p></div>
     </section>
     <section id="activities" class="page">
       <h1>Allenamenti</h1><p class="muted">Registra o importa i tuoi dati reali. Rimangono in questo browser.</p>

@@ -52,11 +52,49 @@ getRedirectResult(auth).catch(showError);
 onAuthStateChanged(auth, async user => {
   const allowed = Boolean(user && user.email?.toLowerCase() === ALLOWED_EMAIL && user.emailVerified);
   document.body.classList.toggle('rp-authenticated', allowed);
+  if(allowed)void startAutoSync();else stopAutoSync();
   if (user && !allowed) {
     showError('Questo account Google non è autorizzato a utilizzare Runner Pulse.');
     await signOut(auth);
   }
 });
+
+
+// Importazione automatica a blocchi: il progresso percentuale è mostrato solo
+// quando Garmin ha terminato la scoperta delle attività (totale noto).
+let syncActive=false,syncCancel=false;
+const syncClock=document.getElementById('rp-sync-clock');
+const syncRing=document.getElementById('rp-sync-ring');
+const syncText=document.getElementById('rp-sync-text');
+function syncUI(state,message){
+  if(!syncClock||!syncRing||!syncText)return;
+  const phase=state?.phase||'new',total=Number(state?.discovered)||0,done=Number(state?.processed)||0,failed=Number(state?.failed)||0;
+  const complete=phase==='done'&&failed===0;
+  const fraction=complete?1:phase==='details'&&total?Math.min(.99,done/total):0;
+  syncRing.style.strokeDashoffset=String(119.38*(1-fraction));
+  syncClock.classList.toggle('rp-sync-complete',complete);
+  syncClock.classList.toggle('rp-sync-error',phase==='partial'||Boolean(message));
+  const label=message|| (complete?`Sincronizzato: ${total} attività Garmin.`:phase==='partial'?`Importazione parziale: ${failed} dettagli non disponibili.`:phase==='discover'?`Ricerca dello storico Garmin: ${total} attività trovate…`:phase==='details'?`Sincronizzazione ${done} di ${total} attività (${Math.floor(done/total*100)||0}%).`:'In attesa della sincronizzazione.');
+  syncText.textContent=label;syncClock.title=label;syncClock.setAttribute('aria-label',label);
+}
+function stopAutoSync(){syncCancel=true;syncActive=false;syncUI(null,'Accedi con Google per sincronizzare Garmin.');}
+async function startAutoSync(){
+  if(syncActive||!allowedUser())return;
+  syncActive=true;syncCancel=false;
+  try{
+    let state=(await authorizedPost('/api/garmin/sync-status',{})).state;
+    syncUI(state);
+    for(let steps=0;steps<100000&&!syncCancel&&allowedUser();steps++){
+      const data=await authorizedPost('/api/garmin/sync-step',{});
+      state=data.state;syncUI(state);
+      if(Array.isArray(data.activities)&&data.activities.length){window.dispatchEvent(new CustomEvent('runnerpulse:garmin-data',{detail:{activities:data.activities}}));}
+      if(state.phase==='done'||state.phase==='partial')break;
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }
+  }catch(e){if(!syncCancel)syncUI(null,'Sincronizzazione interrotta: '+(e.message||String(e)));}
+  finally{syncActive=false;}
+}
+syncClock?.addEventListener('click',()=>{if(syncText)syncText.scrollIntoView({behavior:'smooth',block:'center'});});
 
 const settings = document.getElementById('settings');
 if (settings) {
