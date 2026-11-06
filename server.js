@@ -28,30 +28,59 @@ async function getGarminActivities(){const token=await getGarminToken();const ur
 
 // FIT protocol: a Lap is global message number 19. Only count complete messages;
 // no synthetic laps and no user location, coordinates or raw activity bytes in logs.
-function fitLapCount(bytes){
+function fitLaps(bytes){
   if(bytes.length<14)throw new Error('FIT troppo corto');
   const headerSize=bytes.readUInt8(0);
-  if(headerSize<12||headerSize>bytes.length-2||bytes.toString('ascii',8,12)!=='.FIT')throw new Error('Intestazione FIT non valida');
-  const dataSize=bytes.readUInt32LE(4),end=headerSize+dataSize;
+  if(headerSize<12||headerSize>bytes.length-2||bytes.toString('ascii',8,12)!==='.FIT')throw new Error('Intestazione FIT non valida');
+  const end=headerSize+bytes.readUInt32LE(4);
   if(end>bytes.length-2)throw new Error('FIT incompleto');
-  const defs=new Map();let offset=headerSize,laps=0;
+  const defs=new Map(),laps=[];let offset=headerSize;
+  function fieldNumber(data,baseType,little){
+    const t=baseType&31,n=data.length;
+    if(!n)return null;
+    let v=null;
+    if((t===0||t===2||t===10||t===13)&&n===1)v=data.readUInt8(0);
+    else if(t===1&&n===1)v=data.readInt8(0);
+    else if((t===3||t===4||t===11)&&n===2)v=little?data.readUInt16LE(0):data.readUInt16BE(0);
+    else if(t===3&&n===2)v=little?data.readInt16LE(0):data.readInt16BE(0);
+    else if((t===5||t===6||t===12)&&n===4)v=little?data.readUInt32LE(0):data.readUInt32BE(0);
+    else if(t===5&&n===4)v=little?data.readInt32LE(0):data.readInt32BE(0);
+    else if(t===8&&n===4)v=little?data.readFloatLE(0):data.readFloatBE(0);
+    else if(t===9&&n===8)v=little?data.readDoubleLE(0):data.readDoubleBE(0);
+    if(v===null||!Number.isFinite(v))return null;
+    const invalid={0:255,1:127,2:255,3:32767,4:65535,5:2147483647,6:4294967295,10:0,11:0,12:0,13:255};
+    return v===invalid[t]?null:v;
+  }
   while(offset<end){
-    const record=bytes.readUInt8(offset++);
-    const compressed=Boolean(record&0x80);
+    const record=bytes.readUInt8(offset++),compressed=Boolean(record&0x80);
     const local=compressed?(record>>5)&3:record&15;
     if(!compressed&&(record&0x40)){
       if(offset+5>end)throw new Error('Definizione FIT incompleta');
-      offset++;const architecture=bytes.readUInt8(offset++);if(architecture!==0&&architecture!==1)throw new Error('Architettura FIT sconosciuta');
-      const global=architecture===0?bytes.readUInt16LE(offset):bytes.readUInt16BE(offset);offset+=2;
-      const fields=bytes.readUInt8(offset++);const fieldBytes=fields*3;
-      if(offset+fieldBytes>end)throw new Error('Campi FIT incompleti');
-      let length=0;for(let i=0;i<fields;i++)length+=bytes.readUInt8(offset+i*3+1);offset+=fieldBytes;
-      if(record&0x20){if(offset>=end)throw new Error('Campi sviluppatore FIT incompleti');const devCount=bytes.readUInt8(offset++);if(offset+devCount*3>end)throw new Error('Campi sviluppatore FIT incompleti');for(let i=0;i<devCount;i++)length+=bytes.readUInt8(offset+i*3+1);offset+=devCount*3;}
-      defs.set(local,{global,length});
+      offset++;const architecture=bytes.readUInt8(offset++);
+      if(architecture!==0&&architecture!==1)throw new Error('Architettura FIT sconosciuta');
+      const little=architecture===0;
+      const global=little?bytes.readUInt16LE(offset):bytes.readUInt16BE(offset);offset+=2;
+      const count=bytes.readUInt8(offset++),fields=[];
+      if(offset+count*3>end)throw new Error('Campi FIT incompleti');
+      for(let i=0;i<count;i++){fields.push({id:bytes[offset],size:bytes[offset+1],type:bytes[offset+2]});offset+=3;}
+      if(record&0x20){if(offset>=end)throw new Error('Campi sviluppatore FIT incompleti');const n=bytes.readUInt8(offset++);if(offset+n*3>end)throw new Error('Campi sviluppatore FIT incompleti');for(let i=0;i<n;i++){fields.push({id:-1,size:bytes[offset+1],type:13});offset+=3;}}
+      defs.set(local,{global,little,fields,length:fields.reduce((n,f)=>n+f.size,0)});
     }else{
       const def=defs.get(local);if(!def)throw new Error('Messaggio FIT senza definizione');
       if(offset+def.length>end)throw new Error('Messaggio FIT incompleto');
-      if(def.global===19)laps++;
+      if(def.global===19){
+        const values=new Map();let p=offset;
+        for(const f of def.fields){if(f.id>=0&&[7,8,9,13].includes(f.id))values.set(f.id,fieldNumber(bytes.subarray(p,p+f.size),f.type,def.little));p+=f.size;}
+        // FIT profile: lap 7 total_elapsed_time /1000 s, 8 total_timer_time /1000 s,
+        // 9 total_distance /100 m, 13 avg_speed /1000 m/s.
+        const distance=values.get(9),timer=values.get(8),elapsed=values.get(7),avgSpeed=values.get(13);
+        laps.push({
+          distance:distance===null||distance===undefined?null:distance/100,
+          duration:timer!==null&&timer!==undefined?timer/1000:elapsed!==null&&elapsed!==undefined?elapsed/1000:null,
+          elapsedDuration:elapsed===null||elapsed===undefined?null:elapsed/1000,
+          averageSpeed:avgSpeed===null||avgSpeed===undefined?null:avgSpeed/1000
+        });
+      }
       offset+=def.length;
     }
   }
@@ -96,7 +125,7 @@ async function diagnoseFit(activityId,token){
     if(bytes.length>=12&&bytes.toString('ascii',8,12)==='.FIT'){fit=bytes;format='fit';}
     else if(bytes.length>=4&&bytes.readUInt32LE(0)===0x04034b50){fit=fitFromZip(bytes);format='zip';}
     else return {status:'unexpected_format',contentType:(response.headers.get('content-type')||'').split(';')[0]};
-    return {status:'ok',format,lapCount:fitLapCount(fit)};
+    const laps=fitLaps(fit);return {status:'ok',format,lapCount:laps.length,laps};
   }catch(error){return {status:'parse_or_network_error',reason:error.name==='TimeoutError'?'timeout':String(error.message||error).slice(0,120)};}
 }
 async function getGarminActivityDetail(activityId){
@@ -108,8 +137,10 @@ async function getGarminActivityDetail(activityId){
     catch(error){console.warn(`Lap Garmin (${kind}) non disponibili:`,error.message);}
   }
   const fitDiagnostic=await diagnoseFit(activityId,token);
-  console.log('Runner Pulse — diagnostica FIT Garmin:',JSON.stringify(fitDiagnostic));
-  return {activityId,detail,splits,splitsAvailable,fitDiagnostic};
+  console.log('Runner Pulse — diagnostica FIT Garmin:',JSON.stringify({status:fitDiagnostic.status,format:fitDiagnostic.format,lapCount:fitDiagnostic.lapCount,httpStatus:fitDiagnostic.httpStatus,reason:fitDiagnostic.reason}));
+  if(fitDiagnostic.status==='ok'&&fitDiagnostic.laps?.length){splits={laps:fitDiagnostic.laps};splitsAvailable=true;}
+  const {laps:ignored,...fitStatus}=fitDiagnostic;
+  return {activityId,detail,splits,splitsAvailable,fitDiagnostic:fitStatus};
 }
 
 http.createServer(async(req,res)=>{
