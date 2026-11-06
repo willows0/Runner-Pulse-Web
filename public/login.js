@@ -10,16 +10,19 @@ const firebaseConfig = {
   messagingSenderId: '602428716854',
   appId: '1:602428716854:web:1bd814e1ce8534fce6e597'
 };
-const ALLOWED_EMAIL = 'utrefiletti@gmail.com';
+const OWNER_EMAIL = 'utrefiletti@gmail.com';
+const FAMILY_EMAILS = new Set([OWNER_EMAIL, 'ericozzo.uno@gmail.com']);
+const isOwner = () => auth.currentUser?.email?.toLowerCase() === OWNER_EMAIL;
 const auth = getAuth(initializeApp(firebaseConfig));
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 const allowedUser = () => {
   const u = auth.currentUser;
-  return u && u.email?.toLowerCase() === ALLOWED_EMAIL && u.emailVerified;
+  return u && FAMILY_EMAILS.has(u.email?.toLowerCase()) && u.emailVerified;
 };
 async function authorizedPost(endpoint, body) {
   if (!allowedUser()) throw new Error('Accedi con il tuo account Google autorizzato.');
+  if(endpoint.startsWith('/api/garmin/')&&!isOwner())throw new Error('Garmin non disponibile per questo account.');
   const token = await auth.currentUser.getIdToken();
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -50,9 +53,15 @@ loginButton.addEventListener('click', async () => {
 });
 getRedirectResult(auth).catch(showError);
 onAuthStateChanged(auth, async user => {
-  const allowed = Boolean(user && user.email?.toLowerCase() === ALLOWED_EMAIL && user.emailVerified);
+  const allowed = Boolean(user && FAMILY_EMAILS.has(user.email?.toLowerCase()) && user.emailVerified);
   document.body.classList.toggle('rp-authenticated', allowed);
-  if(allowed)void startAutoSync();else stopAutoSync();
+  if(allowed){
+    document.getElementById('importGarmin')?.toggleAttribute('disabled',!isOwner());
+    document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
+    document.getElementById('rp-garmin-test')?.toggleAttribute('disabled',!isOwner());
+    window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:{uid:user.uid,owner:isOwner()}}));
+    if(isOwner())void startAutoSync();else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
+  }else{window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
   if (user && !allowed) {
     showError('Questo account Google non è autorizzato a utilizzare Runner Pulse.');
     await signOut(auth);
@@ -79,7 +88,7 @@ function syncUI(state,message){
 }
 function stopAutoSync(){syncCancel=true;syncActive=false;syncUI(null,'Accedi con Google per sincronizzare Garmin.');}
 async function startAutoSync(){
-  if(syncActive||!allowedUser())return;
+  if(syncActive||!allowedUser()||!isOwner())return;
   syncActive=true;syncCancel=false;
   try{
     let state=(await authorizedPost('/api/garmin/sync-status',{})).state;
@@ -117,6 +126,7 @@ const homeBtn = document.getElementById('homeImport');
 const importResult = document.getElementById('importResult');
 async function importGarmin() {
   if (!importBtn || !importResult) return;
+  if(!isOwner()){importResult.textContent='Garmin non collegato a questo profilo.';return;}
   importBtn.disabled = true;
   if (homeBtn) homeBtn.disabled = true;
   importResult.textContent = 'Importazione Garmin in corso…';
@@ -305,7 +315,7 @@ document.getElementById('activityList')?.addEventListener('click', event => {
   const index = buttons.indexOf(target);
   if (index < 0) return;
   try {
-    const activities = JSON.parse(localStorage.getItem('runnerPulseActivitiesV1') || '[]');
+    const activities = JSON.parse(localStorage.getItem(window.runnerPulseStorageKey || 'runnerPulseActivitiesV1') || '[]');
     if (Array.isArray(activities)) void loadDetailForActivity(activities[index]);
   } catch (e) { console.warn('Impossibile leggere attività salvate:', e); }
 });
@@ -324,7 +334,7 @@ document.getElementById('closeDetail')?.addEventListener('click', () => { detail
     e.preventDefault();const message=question.value.trim();if(!message)return;
     if(!allowedUser()){status.textContent='Accedi con il tuo account Google autorizzato.';return;}
     let activities=[];
-    if(card.querySelector('#rp-ai-share').checked){try{const stored=JSON.parse(localStorage.getItem('runnerPulseActivitiesV1')||'[]');if(Array.isArray(stored))activities=stored.slice(0,30).map(a=>({date:a.date,kind:a.kind,km:a.km,minutes:a.minutes,avgHR:a.avgHR,maxHR:a.maxHR,elevation:a.elevation,avgSpeed:a.avgSpeed}));}catch{}}
+    if(card.querySelector('#rp-ai-share').checked){try{const stored=JSON.parse(localStorage.getItem(window.runnerPulseStorageKey || 'runnerPulseActivitiesV1')||'[]');if(Array.isArray(stored))activities=stored.slice(0,30).map(a=>({date:a.date,kind:a.kind,km:a.km,minutes:a.minutes,avgHR:a.avgHR,maxHR:a.maxHR,elevation:a.elevation,avgSpeed:a.avgSpeed}));}catch{}}
     bubble('Tu',message);question.value='';button.disabled=true;status.textContent='L’allenatore sta preparando la risposta…';
     try{const data=await authorizedPost('/api/coach/chat',{message,activities});bubble('Allenatore AI',data.answer);status.textContent=activities.length?`Risposta basata su ${data.activitiesUsed} allenamenti condivisi.`:'Risposta senza dati degli allenamenti.';}
     catch(error){status.textContent=error.message||String(error);question.value=message;}
