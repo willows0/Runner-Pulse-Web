@@ -243,7 +243,7 @@ async function loadDetailForActivity(activity) {
     const heart = findSeries(rows, ['heartrate', 'heartratebpm', 'directheartrate', 'hr']);
     const speed = findSeries(rows, ['speed', 'enhancedspeed', 'velocity', 'directspeed']);
     const altitude = findSeries(rows, ['elevation', 'altitude', 'enhancedaltitude', 'directelevation']);
-    const cadence = findSeries(rows, ['runcadence', 'cadence', 'runningcadence', 'directcadence']);
+    const cadence = findSeries(rows, ['directruncadence', 'runcadence', 'cadence', 'runningcadence', 'directcadence']);
     drawSeries(panel, '❤️ Frequenza cardiaca', heart, v => v, ' bpm');
     // Garmin activity detail normalmente esprime speed in m/s; non stimiamo dati mancanti.
     drawSeries(panel, '📈 Passo', speed, v => v > 0 ? 1000 / v / 60 : NaN, ' min/km');
