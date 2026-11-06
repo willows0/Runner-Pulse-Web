@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
-// Runner Pulse: autenticazione Google e grafici Garmin basati solo su dati ricevuti.
+// Runner Pulse: autenticazione Google e grafici basati solo su dati ricevuti.
 const firebaseConfig = {
   apiKey: 'AIzaSyBVTj9i4545kOmvx3H78_YliE54nPSFyLg',
   authDomain: 'runnerpulse.firebaseapp.com',
@@ -170,7 +170,7 @@ function drawSeries(parent, title, values, convert = v => v, unit = '') {
   }
   const converted = values.map(v => Number.isFinite(v) ? convert(v) : null);
   const points = converted.map((v, i) => Number.isFinite(v) ? { i, v } : null).filter(Boolean);
-  if (points.length < 2) { card.append('Campioni validi insufficienti.'); parent.append(card); return; }
+  if (points.length < 2) { card.append('Dati validi insufficienti.'); parent.append(card); return; }
   const svg = svgEl('svg', { viewBox: '0 0 340 180', role: 'img', 'aria-label': title });
   const min = Math.min(...points.map(p => p.v));
   const max = Math.max(...points.map(p => p.v));
@@ -196,7 +196,7 @@ function drawSeries(parent, title, values, convert = v => v, unit = '') {
   });
   flush(); card.append(svg);
   const p = document.createElement('p'); p.className = 'rp-hint';
-  p.textContent = `Min ${min.toFixed(1)}${unit} · Max ${max.toFixed(1)}${unit} · ${points.length} campioni`;
+  p.textContent = `Min ${min.toFixed(1)}${unit} · Max ${max.toFixed(1)}${unit}`;
   card.append(p); parent.append(card);
 }
 function renderSplits(container, splits) {
@@ -232,13 +232,13 @@ async function loadDetailForActivity(activity) {
   if (activity?.source !== 'garmin' || !/^\d{1,20}$/.test(String(activity.garminId || ''))) return;
   const request = ++detailRequest;
   const panel = document.createElement('div'); panel.className = 'rp-detail-charts';
-  panel.innerHTML = '<h3>Grafici Garmin</h3><p class="rp-hint" role="status">Caricamento dei dati dettagliati…</p>';
+  panel.innerHTML = '<h3>Grafici</h3><p class="rp-hint" role="status">Caricamento dei dati dettagliati…</p>';
   content.append(panel);
   try {
     const data = await authorizedPost('/api/garmin/activity-detail', { activityId: activity.garminId });
     if (request !== detailRequest || document.getElementById('detailOverlay')?.hidden) return;
     panel.replaceChildren();
-    const title = document.createElement('h3'); title.textContent = 'Grafici Garmin'; panel.append(title);
+    const title = document.createElement('h3'); title.textContent = 'Grafici'; panel.append(title);
     const rows = extractMetrics(data.detail);
     const heart = findSeries(rows, ['heartrate', 'heartratebpm', 'directheartrate', 'hr']);
     const speed = findSeries(rows, ['speed', 'enhancedspeed', 'velocity', 'directspeed']);
@@ -250,13 +250,10 @@ async function loadDetailForActivity(activity) {
     drawSeries(panel, '🏔️ Altitudine', altitude, v => v, ' m');
     drawSeries(panel, '👟 Cadenza', cadence, v => v, ' spm');
     renderSplits(panel, data.splits);
-    const note = document.createElement('p'); note.className = 'rp-hint';
-    note.textContent = `Campioni ricevuti: ${rows.length}. Sono visualizzati solo dati realmente restituiti dal servizio Garmin. Se una metrica manca, potrebbe avere un nome o formato diverso nella risposta.`;
-    panel.append(note);
   } catch (err) {
     if (request !== detailRequest) return;
     panel.replaceChildren();
-    const h = document.createElement('h3'); h.textContent = 'Grafici Garmin';
+    const h = document.createElement('h3'); h.textContent = 'Grafici';
     const p = document.createElement('p'); p.className = 'rp-hint';
     p.textContent = 'Dati dettagliati non disponibili: ' + (err.message || String(err));
     panel.append(h, p);
