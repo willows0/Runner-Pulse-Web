@@ -209,3 +209,23 @@ header.rp-premium-header.rp-global-banner{
 .rp-global-banner .rp-coach-brand{font-size:clamp(23px,5.5vw,30px);font-weight:900;font-style:italic;letter-spacing:-.7px;text-align:center;color:#fff!important;line-height:1.2}
 .rp-global-banner .rp-coach-brand em,.rp-global-banner .rp-coach-brand-run{color:#ff850b!important}
 #coach .rp-coach-top{display:none!important}
+
+/* Runner Pulse — Home sportiva uniforme, novembre 2026 */
+#home .rp-performance-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#home .rp-performance-card,#home .rp-performance-primary,#home .rp-distance-banner,#home .rp-vo2-panel{background:linear-gradient(135deg,#10213b,#203b5b)!important;border:1px solid #344d69!important;border-radius:24px!important;color:#fff!important;box-shadow:0 12px 26px #10213b1c!important}
+#home .rp-performance-primary{grid-column:span 2;min-height:125px}
+#home .rp-performance-card{min-height:120px}
+#home .rp-performance-card>span,#home .rp-performance-card small,#home .rp-distance-banner>div>span,#home .rp-distance-banner p{color:#b8cde1!important}
+#home .rp-performance-card strong,#home .rp-distance-banner strong,#home .rp-distance-banner strong small{color:#fff!important}
+#home .rp-distance-banner{margin-top:12px;padding:18px 21px}
+#home .rp-distance-art{color:#ff861d!important}
+#home .rp-vo2-panel{margin-top:14px}
+#home .rp-vo2-panel .rp-overline{color:#ff983d!important}
+#home .rp-elite-watch .rp-watch-percent{color:#ff963e;font-size:18px;line-height:1;font-weight:900;letter-spacing:.3px}
+#home .rp-elite-watch .rp-watch-sync-status{color:#d0deed;font-size:9px;line-height:1.25;text-align:center;max-width:122px;overflow-wrap:anywhere}
+#home .rp-elite-watch .rp-watch-hint{color:#ffb47a;font-size:9px;text-align:center}
+#home .rp-elite-watch{gap:5px}
+#home .rp-watch-actions{padding:2px 2px 18px}
+#home .rp-watch-actions .rp-refresh-button{background:#f8750a;color:#fff;margin:6px 0 8px}
+#home .rp-watch-result{color:#718092;font-size:12px;text-align:center;margin:0 0 8px}
+@media(min-width:700px){#home .rp-performance-grid{grid-template-columns:repeat(3,minmax(0,1fr))}#home .rp-performance-primary{grid-column:span 1}}

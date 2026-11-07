@@ -62,7 +62,7 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('rp-garmin-test')?.toggleAttribute('disabled',!isOwner());
     window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:{uid:user.uid,owner:isOwner()}}));
-    if(isOwner()){void loadGarminArchive();void startAutoSync();void refreshGarminHealth();}else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
+    if(isOwner()){void loadGarminArchive();void startAutoSync();}else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
   }else{healthRequest++;resetHealth();window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
   if (user && !allowed) {
     showError('Accedi con un account Google verificato per utilizzare Runner Pulse.');
@@ -210,6 +210,7 @@ let syncActive=false,syncCancel=false;
 const syncClock=document.getElementById('rp-sync-clock');
 const syncRing=document.getElementById('rp-sync-ring');
 const syncText=document.getElementById('rp-sync-text');
+const syncPercent=document.getElementById('rp-sync-percent');
 function syncUI(state,message){
   if(!syncClock||!syncRing||!syncText)return;
   const phase=state?.phase||'new',total=Number(state?.discovered)||0,done=Number(state?.processed)||0,failed=Number(state?.failed)||0;
@@ -220,7 +221,9 @@ function syncUI(state,message){
   syncClock.classList.toggle('rp-sync-running',syncActive);
   syncClock.classList.toggle('rp-sync-error',phase==='partial'||Boolean(message));
   const label=message|| (complete?`Sincronizzato: ${total} attività Garmin.`:phase==='partial'?`Importazione parziale: ${failed} dettagli non disponibili.`:phase==='discover'?`Ricerca dello storico Garmin: ${total} attività trovate…`:phase==='details'?`Sincronizzazione ${done} di ${total} attività (${Math.floor(done/total*100)||0}%).`:'In attesa della sincronizzazione.');
-  syncText.textContent=label;syncClock.title=label;syncClock.setAttribute('aria-label',label);
+  syncText.textContent=label;
+  if(syncPercent)syncPercent.textContent=complete?'100%':phase==='details'&&total?`${Math.min(99,Math.floor(done/total*100))}%`:phase==='partial'&&total?`${Math.min(100,Math.floor(done/total*100))}%`:'—';
+  syncClock.title=label;syncClock.setAttribute('aria-label',label);
 }
 function stopAutoSync(){syncCancel=true;syncActive=false;syncUI(null,'Accedi con Google per sincronizzare Garmin.');}
 async function startAutoSync(force=false){
