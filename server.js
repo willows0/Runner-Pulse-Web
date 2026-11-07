@@ -64,6 +64,16 @@ async function getGarminDailySummaries(startDate,endDate){
     for(const name of sections)output[name]=inspectSection(item&&typeof item==='object'?item[name]:undefined);
     return output;
   })};
+  // Nomi dei campi soltanto, per identificare lo schema effettivo senza dati sanitari.
+  const firstSummary=summaries?.find(x=>x&&typeof x==='object');
+  if(firstSummary){
+    const fieldNames={};
+    for(const section of ['heartRate','calories','intensityMinutes','stress','bodyBattery','movement','steps','sleep']){
+      const item=firstSummary[section];
+      fieldNames[section]=item&&typeof item==='object'&&!Array.isArray(item)?Object.keys(item).slice(0,35):[];
+    }
+    console.info('Runner Pulse Garmin salute — nomi campi:',JSON.stringify(fieldNames));
+  }
   console.info('Runner Pulse Garmin salute — diagnostica presenza valori:',JSON.stringify(valueDiagnostic));
   console.info('Runner Pulse Garmin salute — diagnostica struttura:',JSON.stringify(diagnostic));
   if(!summaries)throw new Error('Formato riepiloghi giornalieri Garmin inatteso (vedi diagnostica struttura nei log Render)');
