@@ -60,7 +60,7 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('rp-garmin-test')?.toggleAttribute('disabled',!isOwner());
     window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:{uid:user.uid,owner:isOwner()}}));
-    if(isOwner())void startAutoSync();else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
+    if(isOwner()){void loadGarminArchive();void startAutoSync();}else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
   }else{window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
   if (user && !allowed) {
     showError('Accedi con un account Google verificato per utilizzare Runner Pulse.');
@@ -69,6 +69,28 @@ onAuthStateChanged(auth, async user => {
 });
 
 
+// Importa automaticamente nel browser le attività già conservate su Firebase.
+// La pagina Attività e la Home ricevono gli stessi eventi, senza richiedere
+// all'utente di premere il pulsante di importazione.
+let archiveLoading=false;
+async function loadGarminArchive(){
+  if(archiveLoading||!allowedUser()||!isOwner())return;
+  archiveLoading=true;
+  const expectedUid=auth.currentUser.uid;
+  try{
+    let after=null;
+    for(let page=0;page<100;page++){
+      const result=await authorizedPost('/api/garmin/archive',after?{after}:{});
+      if(!allowedUser()||!isOwner()||auth.currentUser.uid!==expectedUid)break;
+      if(result.activities?.length){
+        window.dispatchEvent(new CustomEvent('runnerpulse:garmin-data',{detail:{activities:result.activities,fromArchive:true}}));
+      }
+      if(!result.next)break;
+      after=result.next;
+    }
+  }catch(error){console.warn('Archivio Garmin non disponibile:',error.message);}
+  finally{archiveLoading=false;}
+}
 // Importazione automatica a blocchi: il progresso percentuale è mostrato solo
 // quando Garmin ha terminato la scoperta delle attività (totale noto).
 let syncActive=false,syncCancel=false;
@@ -100,7 +122,7 @@ async function startAutoSync(force=false){
       const data=await authorizedPost('/api/garmin/sync-step',steps===0&&force?{restart:true}:{});
       state=data.state;syncUI(state);
       if(Array.isArray(data.activities)&&data.activities.length){window.dispatchEvent(new CustomEvent('runnerpulse:garmin-data',{detail:{activities:data.activities}}));}
-      if(state.phase==='done'||state.phase==='partial')break;
+      if(state.phase==='done'||state.phase==='partial'){await loadGarminArchive();break;}
       await new Promise(resolve=>setTimeout(resolve,250));
     }
   }catch(e){if(!syncCancel)syncUI(null,'Sincronizzazione interrotta: '+(e.message||String(e)));}
