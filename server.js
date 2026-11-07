@@ -36,8 +36,15 @@ async function getGarminDailySummaries(startDate,endDate){
   const token=await getGarminToken();
   const params=new URLSearchParams({startDate,endDate});
   const result=await garminJson('/usersummary-service/v2/dailysummaries?'+params,token);
-  if(!result||typeof result!=='object'||!Array.isArray(result.data))throw new Error('Formato riepiloghi giornalieri Garmin inatteso');
-  return result.data;
+  // Diagnostica senza valori sanitari, token, ID o date nei log.
+  const responseType=Array.isArray(result)?'array':result===null?'null':typeof result;
+  const topLevelKeys=result&&typeof result==='object'&&!Array.isArray(result)?Object.keys(result).slice(0,30):[];
+  const summaries=Array.isArray(result?.data)?result.data:null;
+  const first=summaries?.find(item=>item&&typeof item==='object'&&!Array.isArray(item));
+  const diagnostic={responseType,topLevelKeys,summaryCount:summaries?.length??null,firstSummaryKeys:first?Object.keys(first).slice(0,80):[]};
+  console.info('Runner Pulse Garmin salute — diagnostica struttura:',JSON.stringify(diagnostic));
+  if(!summaries)throw new Error('Formato riepiloghi giornalieri Garmin inatteso (vedi diagnostica struttura nei log Render)');
+  return {summaries,diagnostic};
 }
 
 // FIT global message 19 = Lap. No synthetic laps or sensitive logging.
@@ -227,8 +234,8 @@ http.createServer(async(req,res)=>{
       const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v+'T12:00:00Z'))&&new Date(v+'T12:00:00Z').toISOString().slice(0,10)===v;
       const {startDate,endDate}=body||{};
       if(!validDate(startDate)||!validDate(endDate)||startDate>endDate||(Date.parse(endDate)-Date.parse(startDate))>7*86400000)return json(res,400,{success:false,message:'Intervallo date non valido (massimo 7 giorni)'});
-      const data=await getGarminDailySummaries(startDate,endDate);
-      return json(res,200,{success:true,data});
+      const {summaries,diagnostic}=await getGarminDailySummaries(startDate,endDate);
+      return json(res,200,{success:true,data:summaries,diagnostic});
     }catch(error){console.warn('Riepiloghi Garmin:',error.message);return json(res,502,{success:false,message:'Riepiloghi Garmin non disponibili: '+error.message});}
   }
   if(pathname==='/api/garmin/archive'){

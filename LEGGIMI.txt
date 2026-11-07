@@ -1,16 +1,6 @@
-RUNNER PULSE - AGGIORNAMENTO ARANCIONE
+Runner Pulse - diagnostica Garmin salute
 
-Sostituisci in GitHub nella cartella public:
-- index.html
-- app.js
-- login.js
-
-Aggiungi in public:
-- orange.css
-
-NON modificare server.js, package.json, style.css, login.css o le chiavi Render.
-
-La schermata iniziale ha un cuore animato e suono sintetico al tocco del pulsante Entra.
-I dettagli delle attività mostrano solo statistiche effettivamente presenti nei dati Garmin ricevuti dal server.
-I dati già presenti in localStorage con la chiave runnerPulseActivitiesV1 vengono mantenuti.
-La Home mostra importazione locale riuscita, senza pretendere una connessione Garmin attiva permanente.
+Sostituisci soltanto server.js nella cartella principale del repository GitHub.
+La rotta /api/garmin/health-daily conserva success:true e data come prima; aggiunge diagnostic con soli nomi dei campi, tipi e conteggio.
+Controlla i log di Render cercando: Runner Pulse Garmin salute — diagnostica struttura
+Non condividere token, chiavi API o dati sanitari.
