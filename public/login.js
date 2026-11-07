@@ -73,59 +73,71 @@ onAuthStateChanged(auth, async user => {
 
 // Salute Garmin: nessun dato di esempio, nessuna cache condivisa tra account.
 let healthRequest=0;
-// Garmin restituisce sezioni annidate: estrarre solo campi con significato noto.
-// Non interpretare mai un oggetto o un array come valore numerico.
+// Garmin Personal API: interpretazione prudente dei campi realmente restituiti.
+// I valori sono cercati per nome, anche dentro oggetti annidati; mai per posizione.
 const healthFields={
-  'rp-heart-value':[
-    ['heartRate','restingHeartRate'],['heartRate','restingHeartRateInBeatsPerMinute'],
-    ['restingHeartRate'],['restingHeartRateInBeatsPerMinute']
-  ],
-  'rp-intensity-value':[
-    ['intensityMinutes','totalIntensityMinutes'],['intensityMinutes','intensityMinutes'],
-    ['totalIntensityMinutes'],['intensityMinutes']
-  ],
-  'rp-steps-value':[
-    ['movement','totalSteps'],['movement','steps'],['totalSteps'],['steps']
-  ],
-  'rp-calories-value':[
-    ['calories','totalKilocalories'],['calories','totalCalories'],
-    ['totalKilocalories'],['totalCalories']
-  ],
-  'rp-stress-value':[
-    ['stress','averageStressLevel'],['stress','avgStressLevel'],
-    ['averageStressLevel'],['avgStressLevel']
-  ],
-  'rp-vo2-value':[
-    ['vo2Max','vo2MaxValue'],['vo2Max','value'],['vo2MaxValue'],['vo2Max']
-  ]
+  'rp-heart-value':[['heartRate','restingHeartRate'],['heartRate','restingHeartRateInBeatsPerMinute'],['restingHeartRate'],['restingHeartRateInBeatsPerMinute']],
+  'rp-intensity-value':[['intensityMinutes','totalIntensityMinutes'],['intensityMinutes','intensityMinutes'],['totalIntensityMinutes']],
+  'rp-steps-value':[['movement','totalSteps'],['movement','steps'],['totalSteps'],['steps']],
+  'rp-calories-value':[['calories','totalKilocalories'],['calories','totalCalories'],['totalKilocalories'],['totalCalories']],
+  'rp-stress-value':[['stress','averageStressLevel'],['stress','avgStressLevel'],['averageStressLevel'],['avgStressLevel']],
+  'rp-vo2-value':[['vo2Max','vo2MaxValue'],['vo2Max','value'],['vo2MaxValue']]
 };
 function numericGarminValue(value){
   if(typeof value==='number'&&Number.isFinite(value)&&value>=0)return value;
   if(typeof value==='string'&&value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=0)return Number(value);
   return null;
 }
+function normalizedGarminKey(key){return String(key).replace(/[^a-z0-9]/gi,'').toLowerCase();}
 function garminPath(obj,path){
   let current=obj;
-  for(const key of path){if(!current||typeof current!=='object'||Array.isArray(current))return null;current=current[key];}
+  for(const key of path){
+    if(!current||typeof current!=='object'||Array.isArray(current))return null;
+    const actual=Object.keys(current).find(k=>normalizedGarminKey(k)===normalizedGarminKey(key));
+    if(actual===undefined)return null;
+    current=current[actual];
+  }
   return numericGarminValue(current);
 }
-function healthMetric(summary,paths){
-  for(const path of paths){const value=garminPath(summary,path);if(value!==null)return value;}
+// Limita la ricerca ai campi semanticamente equivalenti, senza scegliere
+// numeri arbitrari (es. obiettivi, timestamp, massimi al posto delle medie).
+function namedGarminValue(obj,aliases,depth=0){
+  if(!obj||typeof obj!=='object'||depth>4)return null;
+  const entries=Object.entries(obj);
+  for(const alias of aliases){
+    const entry=entries.find(([key])=>normalizedGarminKey(key)===normalizedGarminKey(alias));
+    if(entry){const value=numericGarminValue(entry[1]);if(value!==null)return value;}
+  }
+  for(const [key,value] of entries){
+    if(['samples','history','events','timestamps'].includes(normalizedGarminKey(key)))continue;
+    if(value&&typeof value==='object'&&!Array.isArray(value)){
+      const found=namedGarminValue(value,aliases,depth+1);
+      if(found!==null)return found;
+    }
+  }
   return null;
+}
+const metricAliases={
+  'rp-heart-value':['restingHeartRate','restingHeartRateInBeatsPerMinute','restingHr','restingHeartRateBpm'],
+  'rp-steps-value':['totalSteps','stepCount','steps'],
+  'rp-calories-value':['totalKilocalories','totalCalories','totalKcal','caloriesBurned'],
+  'rp-stress-value':['averageStressLevel','avgStressLevel','averageStress','avgStress'],
+  'rp-vo2-value':['vo2MaxValue','vo2MaxRunning','runningVo2Max']
+};
+function healthMetric(summary,paths,id){
+  for(const path of paths){const value=garminPath(summary,path);if(value!==null)return value;}
+  return id&&metricAliases[id]?namedGarminValue(summary,metricAliases[id]):null;
 }
 function intensityMetric(summary){
   const direct=healthMetric(summary,healthFields['rp-intensity-value']);
   if(direct!==null)return direct;
-  for(const base of [['intensityMinutes'],[]]){
-    const moderate=garminPath(summary,[...base,'moderateIntensityMinutes']);
-    const vigorous=garminPath(summary,[...base,'vigorousIntensityMinutes']);
-    if(moderate!==null||vigorous!==null)return (moderate??0)+(vigorous??0);
-  }
+  const moderate=namedGarminValue(summary,['moderateIntensityMinutes']);
+  const vigorous=namedGarminValue(summary,['vigorousIntensityMinutes']);
+  if(moderate!==null||vigorous!==null)return (moderate??0)+(vigorous??0);
   return null;
 }
 function sleepMetric(summary){
-  // sleepingSeconds e' documentato da Garmin; non stimare il sonno dal tempo a letto.
-  return healthMetric(summary,[['sleep','sleepingSeconds'],['sleepingSeconds']]);
+  return namedGarminValue(summary,['sleepingSeconds','totalSleepSeconds']);
 }
 function resetHealth(){
   for(const id of [...Object.keys(healthFields),'rp-sleep-value']){
@@ -148,7 +160,7 @@ async function refreshGarminHealth(){
     // Preferire il giorno più recente che contiene la metrica, senza combinarne le date.
     let count=0;
     for(const [id,keys] of Object.entries(healthFields)){
-      const found=summaries.map(s=>id==='rp-intensity-value'?intensityMetric(s):healthMetric(s,keys)).find(v=>v!==null);
+      const found=summaries.map(s=>id==='rp-intensity-value'?intensityMetric(s):healthMetric(s,keys,id)).find(v=>v!==null);
       if(found!==undefined){const el=document.getElementById(id);if(el){el.textContent=found.toLocaleString('it-IT',{maximumFractionDigits:1});count++;}}
     }
     const sleepSeconds=summaries.map(s=>sleepMetric(s)).find(v=>v!==null);
