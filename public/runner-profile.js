@@ -1,0 +1,8 @@
+import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+const form=document.getElementById('rp-profile-form');
+const status=document.getElementById('rp-profile-status');
+const auth=getAuth();let sequence=0;
+async function request(action,profile){const user=auth.currentUser;if(!user)throw new Error('Accedi con Google.');const token=await user.getIdToken();const response=await fetch('/api/coach/chat',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({action,...(profile?{profile}:{})})});const data=await response.json();if(!response.ok||!data.success)throw new Error(data.message||'Errore nel salvataggio.');return data;}
+function fill(data={}){for(const input of form.querySelectorAll('[name]'))input.value=data[input.name]??'';}
+onAuthStateChanged(auth,async user=>{const n=++sequence;fill();if(!user){status.textContent='Accedi con Google per caricare il profilo.';return;}status.textContent='Caricamento profilo…';try{const data=await request('profile-get');if(n===sequence){fill(data.profile);status.textContent='';}}catch(error){if(n===sequence)status.textContent=error.message;}});
+form.addEventListener('submit',async event=>{event.preventDefault();const user=auth.currentUser;if(!user){status.textContent='Accedi con Google.';return;}const profile={};for(const input of form.querySelectorAll('[name]'))profile[input.name]=input.value.trim();const button=form.querySelector('[type=submit]');button.disabled=true;status.textContent='Salvataggio…';try{await request('profile-save',profile);status.textContent='Profilo salvato! Il Coach lo userà automaticamente.';}catch(error){status.textContent=error.message;}finally{button.disabled=false;}});
