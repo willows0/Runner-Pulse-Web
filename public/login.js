@@ -73,20 +73,59 @@ onAuthStateChanged(auth, async user => {
 
 // Salute Garmin: nessun dato di esempio, nessuna cache condivisa tra account.
 let healthRequest=0;
+// Garmin restituisce sezioni annidate: estrarre solo campi con significato noto.
+// Non interpretare mai un oggetto o un array come valore numerico.
 const healthFields={
-  'rp-heart-value':['restingHeartRate','restingHeartRateInBeatsPerMinute'],
-  'rp-intensity-value':['intensityMinutes','totalIntensityMinutes'],
-  'rp-steps-value':['totalSteps','steps'],
-  'rp-calories-value':['totalKilocalories','totalCalories'],
-  'rp-stress-value':['averageStressLevel','avgStressLevel'],
-  'rp-vo2-value':['vo2Max','vo2MaxValue']
+  'rp-heart-value':[
+    ['heartRate','restingHeartRate'],['heartRate','restingHeartRateInBeatsPerMinute'],
+    ['restingHeartRate'],['restingHeartRateInBeatsPerMinute']
+  ],
+  'rp-intensity-value':[
+    ['intensityMinutes','totalIntensityMinutes'],['intensityMinutes','intensityMinutes'],
+    ['totalIntensityMinutes'],['intensityMinutes']
+  ],
+  'rp-steps-value':[
+    ['movement','totalSteps'],['movement','steps'],['totalSteps'],['steps']
+  ],
+  'rp-calories-value':[
+    ['calories','totalKilocalories'],['calories','totalCalories'],
+    ['totalKilocalories'],['totalCalories']
+  ],
+  'rp-stress-value':[
+    ['stress','averageStressLevel'],['stress','avgStressLevel'],
+    ['averageStressLevel'],['avgStressLevel']
+  ],
+  'rp-vo2-value':[
+    ['vo2Max','vo2MaxValue'],['vo2Max','value'],['vo2MaxValue'],['vo2Max']
+  ]
 };
-function healthMetric(summary,keys){
-  for(const k of keys){
-    const value=summary?.[k];
-    if(value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0)return Number(value);
+function numericGarminValue(value){
+  if(typeof value==='number'&&Number.isFinite(value)&&value>=0)return value;
+  if(typeof value==='string'&&value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=0)return Number(value);
+  return null;
+}
+function garminPath(obj,path){
+  let current=obj;
+  for(const key of path){if(!current||typeof current!=='object'||Array.isArray(current))return null;current=current[key];}
+  return numericGarminValue(current);
+}
+function healthMetric(summary,paths){
+  for(const path of paths){const value=garminPath(summary,path);if(value!==null)return value;}
+  return null;
+}
+function intensityMetric(summary){
+  const direct=healthMetric(summary,healthFields['rp-intensity-value']);
+  if(direct!==null)return direct;
+  for(const base of [['intensityMinutes'],[]]){
+    const moderate=garminPath(summary,[...base,'moderateIntensityMinutes']);
+    const vigorous=garminPath(summary,[...base,'vigorousIntensityMinutes']);
+    if(moderate!==null||vigorous!==null)return (moderate??0)+(vigorous??0);
   }
   return null;
+}
+function sleepMetric(summary){
+  // sleepingSeconds e' documentato da Garmin; non stimare il sonno dal tempo a letto.
+  return healthMetric(summary,[['sleep','sleepingSeconds'],['sleepingSeconds']]);
 }
 function resetHealth(){
   for(const id of [...Object.keys(healthFields),'rp-sleep-value']){
@@ -109,10 +148,11 @@ async function refreshGarminHealth(){
     // Preferire il giorno più recente che contiene la metrica, senza combinarne le date.
     let count=0;
     for(const [id,keys] of Object.entries(healthFields)){
-      const found=summaries.map(s=>healthMetric(s,keys)).find(v=>v!==null);
+      const found=summaries.map(s=>id==='rp-intensity-value'?intensityMetric(s):healthMetric(s,keys)).find(v=>v!==null);
       if(found!==undefined){const el=document.getElementById(id);if(el){el.textContent=found.toLocaleString('it-IT',{maximumFractionDigits:1});count++;}}
     }
-    // Il sonno richiede l'endpoint sleep dedicato: non inferirlo da altri campi.
+    const sleepSeconds=summaries.map(s=>sleepMetric(s)).find(v=>v!==null);
+    if(sleepSeconds!==undefined){const el=document.getElementById('rp-sleep-value');if(el){el.textContent=(sleepSeconds/3600).toLocaleString('it-IT',{maximumFractionDigits:1})+' h';count++;}}
     if(note)note.textContent=count?`Dati reali Garmin disponibili: ${count} metriche. Le altre richiedono dati o endpoint dedicati.`:'Garmin ha risposto, ma non sono presenti metriche riconosciute nel riepilogo.';
   }catch(error){if(request===healthRequest&&note)note.textContent='Dati salute Garmin non disponibili: '+(error.message||String(error));}
 }
