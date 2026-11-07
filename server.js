@@ -42,6 +42,29 @@ async function getGarminDailySummaries(startDate,endDate){
   const summaries=Array.isArray(result?.data)?result.data:null;
   const first=summaries?.find(item=>item&&typeof item==='object'&&!Array.isArray(item));
   const diagnostic={responseType,topLevelKeys,summaryCount:summaries?.length??null,firstSummaryKeys:first?Object.keys(first).slice(0,80):[]};
+  // Registra esclusivamente presenza e tipologia dei valori: mai misure, date o identificativi.
+  const sections=['heartRate','calories','intensityMinutes','stress','bodyBattery','sleep','steps','hydration','respiration','pulseOx'];
+  function inspectSection(value){
+    if(value===null||value===undefined)return {present:false,kind:'missing',numericFields:0};
+    if(typeof value==='number')return {present:true,kind:'number',numericFields:Number.isFinite(value)?1:0};
+    if(typeof value!=='object')return {present:true,kind:typeof value,numericFields:0};
+    const seen=new WeakSet();let numericFields=0;
+    function visit(item,depth){
+      if(depth>3||numericFields>100)return;
+      if(typeof item==='number'&&Number.isFinite(item)){numericFields++;return;}
+      if(!item||typeof item!=='object'||seen.has(item))return;
+      seen.add(item);
+      for(const child of Object.values(item).slice(0,100))visit(child,depth+1);
+    }
+    visit(value,0);
+    return {present:true,kind:Array.isArray(value)?'array':'object',numericFields};
+  }
+  const valueDiagnostic={summaryCount:summaries?.length??null,bySummary:(summaries||[]).slice(0,7).map(item=>{
+    const output={};
+    for(const name of sections)output[name]=inspectSection(item&&typeof item==='object'?item[name]:undefined);
+    return output;
+  })};
+  console.info('Runner Pulse Garmin salute — diagnostica presenza valori:',JSON.stringify(valueDiagnostic));
   console.info('Runner Pulse Garmin salute — diagnostica struttura:',JSON.stringify(diagnostic));
   if(!summaries)throw new Error('Formato riepiloghi giornalieri Garmin inatteso (vedi diagnostica struttura nei log Render)');
   return {summaries,diagnostic};
