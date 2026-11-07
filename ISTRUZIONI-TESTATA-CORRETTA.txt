@@ -1,0 +1,7 @@
+Runner Pulse - correzione intestazione
+
+Sostituire nella cartella public di GitHub: index.html e orange.css.
+La testata blu notte e arancione e presente nel documento HTML come unica intestazione globale.
+La regola CSS prioritaria e inclusa direttamente in index.html e il CSS ha un nuovo identificativo di versione per evitare cache precedenti.
+Se appare ancora il vecchio logo, aprire il sito in una scheda in incognito o cancellare la cache del sito e controllare che Render abbia terminato il deploy.
+Non sono stati modificati login.js, server.js, Garmin, Coach o altri script.

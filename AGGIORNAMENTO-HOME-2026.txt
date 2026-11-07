@@ -1,0 +1,7 @@
+RUNNER PULSE - HOME SPORTIVA
+
+Carica nella cartella public di GitHub: index.html, orange.css, dashboard.js, login.js.
+Non modificare server.js.
+La percentuale e il pulsante di controllo sono sotto l’orologio Garmin.
+VO2: indice prestazionale VDOT indicativo da corse recenti, NON VO2 max fisiologico.
+I dati vengono ricalcolati dopo importazioni Garmin e variazioni delle attivita.

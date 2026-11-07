@@ -1,0 +1,8 @@
+RUNNER PULSE — INTESTAZIONE UNICA
+
+Sostituisci SOLO questi file nella cartella public del repository GitHub:
+- public/index.html
+- public/orange.css
+
+La testata bianca con omino e cuore è sostituita dalla banda blu notte/arancione con Runner Pulse in tutte le pagine. La banda duplicata dentro Coach è stata rimossa.
+La grafica della chat e tutte le funzioni rimangono invariate. Il pulsante Garmin rimane nella sezione Home.

@@ -254,8 +254,57 @@ async function syncRequest(req,res,pathname){
   finally{syncLocks.delete(uid);}
 }
 
+
+// Verifica riservata al proprietario: cerca SOLO campi VO2 espliciti nei dati
+// Garmin gia' archiviati; testa l'accessibilita' di un FIT senza attribuirgli
+// valori non decodificati. Non espone documenti o dati grezzi.
+function findExplicitGarminVo2(obj){
+  const seen=new WeakSet();
+  function visit(x,depth){
+    if(!x||typeof x!=='object'||depth>7||seen.has(x))return null;
+    seen.add(x);
+    for(const [key,value] of Object.entries(x)){
+      if(/^(vo2max|vo2maxvalue|runningvo2max|vo2maxrunning|vo2maxrunningvalue)$/i.test(key.replace(/[_\s-]/g,''))){
+        const n=typeof value==='number'?value:typeof value==='string'&&value.trim()?Number(value):NaN;
+        if(Number.isFinite(n)&&n>=20&&n<=90)return n;
+      }
+    }
+    for(const value of Object.values(x))if(value&&typeof value==='object'){
+      const found=visit(value,depth+1);if(found!==null)return found;
+    }
+    return null;
+  }
+  return visit(obj,0);
+}
+async function garminVo2Check(req,res){
+  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Solo proprietario'});
+  try{
+    const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+    const user=await getAuth().verifyIdToken(match[1],true);
+    const col=getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('activities');
+    const docs=await col.limit(250).get();
+    let checked=0,found=null,fitId=null;
+    for(const doc of docs.docs){
+      const data=doc.data();checked++;
+      const value=findExplicitGarminVo2(data.summary)||findExplicitGarminVo2(data.detail);
+      if(value!==null){found={value,source:'Garmin: dati attività archiviati'};break;}
+      if(!fitId&&/^\d{1,20}$/.test(doc.id))fitId=doc.id;
+    }
+    let fitStatus='not_checked';
+    if(found===null&&fitId&&GARMIN_API_KEY){
+      const token=await getGarminToken();
+      const diagnostic=await diagnoseFit(fitId,token);
+      fitStatus=diagnostic.status;
+    }
+    return json(res,200,{success:true,found,checked,fitStatus,
+      message:found?'Valore Garmin esplicito trovato nei dati archiviati.':'Nessun VO₂ max esplicito trovato nei dati archiviati. La verifica FIT riguarda soltanto l’accessibilità del file: non ne decodifica ancora il VO₂ max.'});
+  }catch(error){console.warn('Verifica VO2 Garmin:',error.message);return json(res,502,{success:false,message:'Verifica Garmin non riuscita: '+error.message});}
+}
+
 http.createServer(async(req,res)=>{
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+  if(pathname==='/api/garmin/vo2-check'){await garminVo2Check(req,res);return;}
   // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
   // Accesso limitato al proprietario e paginazione per evitare risposte troppo grandi.
   if(pathname==='/api/garmin/health-daily'){
