@@ -236,3 +236,15 @@ header.rp-premium-header.rp-global-banner{
 .rp-vo2-settings input{width:100%;box-sizing:border-box;border:1px solid #718098;background:#fff;color:#152b46;border-radius:12px;padding:12px;font-size:16px}
 .rp-vo2-settings button{grid-column:1/-1;background:#ff7900;color:#fff;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700}
 .rp-vo2-settings small{grid-column:1/-1;color:#cad6e5;line-height:1.5}
+
+/* Runner Pulse – pagina Attività: card blu notte coerenti con la Home. */
+#activities{--rp-activity-navy:#142840;--rp-activity-navy2:#203c5c}
+#activities>.card,#activities>#activityForm,#activities #activityList>.card{background:linear-gradient(135deg,var(--rp-activity-navy),var(--rp-activity-navy2))!important;border:1px solid #38516c!important;color:#fff!important;border-radius:24px!important;box-shadow:0 10px 25px #10213b18!important;padding:20px!important}
+#activities>.card h3,#activities>.card h2,#activities #activityList>.card b,#activities #activityList>.card .activity-open b{color:#fff!important}
+#activities>.card .muted,#activities>.card .note,#activities #activityList>.card small,#activities #activityList>.card .activity-open small{color:#c0d0e0!important}
+#activities #activityForm label{color:#e4edf8!important;font-weight:650}
+#activities #activityForm input,#activities #activityForm select{background:#fff!important;color:#162940!important;border:1px solid #aebdd0!important;border-radius:12px!important}
+#activities #activityList>.card{margin:12px 0!important}
+#activities #activityList>.card .activity-open{background:transparent!important;color:#fff!important;box-shadow:none!important}
+#activities #activityList>.card .delete{background:#f36b08!important;color:#fff!important}
+#activities #activityList>.card .activity-open:focus-visible{outline:2px solid #ff8a2a;outline-offset:3px}
