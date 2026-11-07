@@ -271,6 +271,41 @@ http.createServer(async(req,res)=>{
       return json(res,200,{success:true,data:summaries,diagnostic});
     }catch(error){console.warn('Riepiloghi Garmin:',error.message);return json(res,502,{success:false,message:'Riepiloghi Garmin non disponibili: '+error.message});}
   }
+  // Controllo incrementale esplicito: importa soltanto nuove attività.
+  // Non cancella lo storico e non riscarica i dettagli delle attività esistenti.
+  if(pathname==='/api/garmin/check-new'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Garmin riservato al proprietario'});
+    if(!GARMIN_API_KEY)return json(res,503,{success:false,message:'Chiave Garmin non configurata'});
+    try{
+      const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+      const user=await getAuth().verifyIdToken(match[1],true);
+      const collection=getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('activities');
+      const token=await getGarminToken();
+      let added=0,checked=0,more=true;
+      // Massimo 5 pagine per richiesta: il pulsante verifica le 100 attività più recenti.
+      for(let start=0;start<100&&more;start+=20){
+        const params=new URLSearchParams({start:String(start),limit:'20'});
+        const list=await garminJson('/activitylist-service/activities/search/activities?'+params,token);
+        if(!Array.isArray(list))throw new Error('Formato elenco Garmin inatteso');
+        more=list.length===20;
+        const entries=list.map(a=>({a,id:String(a?.activityId??a?.id??'')})).filter(x=>/^\d{1,20}$/.test(x.id));
+        if(entries.length){
+          const refs=entries.map(x=>collection.doc(x.id));
+          const snapshots=await getFirestore().getAll(...refs);
+          const batch=getFirestore().batch();let batchCount=0;
+          for(let i=0;i<entries.length;i++){
+            if(!snapshots[i].exists){batch.set(refs[i],{summary:entries[i].a,garminId:entries[i].id,seenAt:Date.now()});added++;batchCount++;}
+          }
+          if(batchCount)await batch.commit();
+          checked+=entries.length;
+          // Se l'intera pagina è già presente, le pagine successive sono presumibilmente storiche.
+          if(batchCount===0)break;
+        }
+      }
+      return json(res,200,{success:true,added,checked});
+    }catch(error){console.warn('Controllo incrementale Garmin:',error.message);return json(res,502,{success:false,message:'Controllo nuove attività non riuscito: '+error.message});}
+  }
   if(pathname==='/api/garmin/archive'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
     if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Garmin disponibile soltanto per il proprietario.'});
