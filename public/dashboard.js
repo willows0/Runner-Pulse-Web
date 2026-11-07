@@ -2,23 +2,49 @@
 (() => {
   const byId = id => document.getElementById(id);
   const update = () => {
+    const storageKey = window.runnerPulseStorageKey;
+    const runsEl = byId('rp-week-runs');
+    const kmEl = byId('rp-week-km');
+    const paceEl = byId('avgPace');
+    // Non mostrare dati di un altro profilo quando l'utente è disconnesso.
+    if (!storageKey) {
+      if (runsEl) runsEl.textContent = '—';
+      if (kmEl) kmEl.textContent = '—';
+      if (paceEl) paceEl.textContent = '—';
+      return;
+    }
     let entries = [];
-    try { entries = JSON.parse(localStorage.getItem(window.runnerPulseStorageKey || '__runnerpulse_no_user__') || '[]'); } catch {}
-    // Le statistiche settimanali sono calcolate soltanto da attività con data e distanza valide.
-    if (!Array.isArray(entries)) return;
-    const today = new Date(); today.setHours(23,59,59,999);
-    const start = new Date(today); start.setDate(start.getDate()-6); start.setHours(0,0,0,0);
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      if (Array.isArray(stored)) entries = stored;
+    } catch { /* Nessun dato valido disponibile. */ }
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const start = new Date(today);
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
     const recent = entries.filter(e => {
-      const d = new Date(String(e.date||'')+'T12:00:00');
-      return !isNaN(d) && d>=start && d<=today && Number(e.km)>0;
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(e.date || '').slice(0, 10));
+      if (!match) return false;
+      const d = new Date(Number(match[1]), Number(match[2])-1, Number(match[3]), 12);
+      if (d.getFullYear() !== Number(match[1]) || d.getMonth() !== Number(match[2])-1 || d.getDate() !== Number(match[3])) return false;
+      return d >= start && d <= today && Number.isFinite(Number(e.km)) && Number(e.km) > 0;
     });
-    const km = recent.reduce((n,e)=>n+Number(e.km),0);
-    if(byId('rp-week-runs')) byId('rp-week-runs').textContent = String(recent.length);
-    if(byId('rp-week-km')) byId('rp-week-km').textContent = km.toLocaleString('it-IT',{maximumFractionDigits:2})+' km';
+    const km = recent.reduce((n, e) => n + Number(e.km), 0);
+    const minutes = recent.reduce((n, e) => n + (Number(e.minutes) > 0 ? Number(e.minutes) : 0), 0);
+    if (runsEl) runsEl.textContent = String(recent.length);
+    if (kmEl) kmEl.textContent = km.toLocaleString('it-IT', { maximumFractionDigits: 2 }) + ' km';
+    if (paceEl) {
+      if (km > 0 && minutes > 0) {
+        const seconds = Math.round(minutes / km * 60);
+        paceEl.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      } else paceEl.textContent = '—';
+    }
   };
   document.addEventListener('DOMContentLoaded', () => {
     update(); window.addEventListener('runnerpulse:garmin-data',()=>setTimeout(update,100));
     window.addEventListener('runnerpulse:auth-user',()=>setTimeout(update,0));
+    window.addEventListener('runnerpulse:activities-changed',update);
     const ask = byId('rp-request-plan');
     if (ask) ask.addEventListener('click',()=>{
       const tab = document.querySelector('nav button[data-page="coach"]');
