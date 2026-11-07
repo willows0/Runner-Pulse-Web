@@ -76,11 +76,11 @@ let healthRequest=0;
 // Garmin Personal API: interpretazione prudente dei campi realmente restituiti.
 // I valori sono cercati per nome, anche dentro oggetti annidati; mai per posizione.
 const healthFields={
-  'rp-heart-value':[['heartRate','restingHeartRate'],['heartRate','restingHeartRateInBeatsPerMinute'],['restingHeartRate'],['restingHeartRateInBeatsPerMinute']],
+  'rp-heart-value':[['heartRate','restingValue'],['heartRate','restingHeartRate'],['heartRate','restingHeartRateInBeatsPerMinute'],['restingHeartRate'],['restingHeartRateInBeatsPerMinute']],
   'rp-intensity-value':[['intensityMinutes','totalIntensityMinutes'],['intensityMinutes','intensityMinutes'],['totalIntensityMinutes']],
   'rp-steps-value':[['movement','totalSteps'],['movement','steps'],['totalSteps'],['steps']],
-  'rp-calories-value':[['calories','totalKilocalories'],['calories','totalCalories'],['totalKilocalories'],['totalCalories']],
-  'rp-stress-value':[['stress','averageStressLevel'],['stress','avgStressLevel'],['averageStressLevel'],['avgStressLevel']],
+  'rp-calories-value':[['calories','burnedTotal'],['calories','totalKilocalories'],['calories','totalCalories'],['totalKilocalories'],['totalCalories']],
+  'rp-stress-value':[['stress','avgLevel'],['stress','averageStressLevel'],['stress','avgStressLevel'],['averageStressLevel'],['avgStressLevel']],
   'rp-vo2-value':[['vo2Max','vo2MaxValue'],['vo2Max','value'],['vo2MaxValue']]
 };
 function numericGarminValue(value){
@@ -118,10 +118,10 @@ function namedGarminValue(obj,aliases,depth=0){
   return null;
 }
 const metricAliases={
-  'rp-heart-value':['restingHeartRate','restingHeartRateInBeatsPerMinute','restingHr','restingHeartRateBpm'],
+  'rp-heart-value':['restingValue','restingHeartRate','restingHeartRateInBeatsPerMinute','restingHr','restingHeartRateBpm'],
   'rp-steps-value':['totalSteps','stepCount','steps'],
-  'rp-calories-value':['totalKilocalories','totalCalories','totalKcal','caloriesBurned'],
-  'rp-stress-value':['averageStressLevel','avgStressLevel','averageStress','avgStress'],
+  'rp-calories-value':['burnedTotal','totalKilocalories','totalCalories','totalKcal','caloriesBurned'],
+  'rp-stress-value':['avgLevel','averageStressLevel','avgStressLevel','averageStress','avgStress'],
   'rp-vo2-value':['vo2MaxValue','vo2MaxRunning','runningVo2Max']
 };
 function healthMetric(summary,paths,id){
@@ -129,11 +129,18 @@ function healthMetric(summary,paths,id){
   return id&&metricAliases[id]?namedGarminValue(summary,metricAliases[id]):null;
 }
 function intensityMetric(summary){
+  // Garmin v2 uses moderate and vigorous; vigorous counts twice for intensity minutes.
+  const section=summary?.intensityMinutes;
+  if(section&&typeof section==='object'){
+    const moderate=garminPath(section,['moderate']);
+    const vigorous=garminPath(section,['vigorous']);
+    if(moderate!==null||vigorous!==null)return (moderate??0)+2*(vigorous??0);
+  }
   const direct=healthMetric(summary,healthFields['rp-intensity-value']);
   if(direct!==null)return direct;
   const moderate=namedGarminValue(summary,['moderateIntensityMinutes']);
   const vigorous=namedGarminValue(summary,['vigorousIntensityMinutes']);
-  if(moderate!==null||vigorous!==null)return (moderate??0)+(vigorous??0);
+  if(moderate!==null||vigorous!==null)return (moderate??0)+2*(vigorous??0);
   return null;
 }
 function sleepMetric(summary){
@@ -147,14 +154,20 @@ function resetHealth(){
 }
 async function refreshGarminHealth(){
   const request=++healthRequest;
-  resetHealth();
   if(!allowedUser()||!isOwner())return;
   const note=document.getElementById('rp-health-sync-status');
   if(note)note.textContent='Aggiornamento dati salute Garmin…';
   const localDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const now=new Date(),yesterday=new Date(now);yesterday.setDate(now.getDate()-1);
   try{
-    const result=await authorizedPost('/api/garmin/health-daily',{startDate:localDate(yesterday),endDate:localDate(now)});
+    let result;
+    try{
+      result=await authorizedPost('/api/garmin/health-daily',{startDate:localDate(yesterday),endDate:localDate(now)});
+    }catch(firstError){
+      if(!/timeout|aborted|timed out/i.test(String(firstError?.message||firstError)))throw firstError;
+      if(request!==healthRequest||!allowedUser()||!isOwner())return;
+      result=await authorizedPost('/api/garmin/health-daily',{startDate:localDate(yesterday),endDate:localDate(now)});
+    }
     if(request!==healthRequest||!allowedUser()||!isOwner())return;
     const summaries=result.data.filter(x=>x&&typeof x==='object').sort((a,b)=>String(b.calendarDate||'').localeCompare(String(a.calendarDate||'')));
     // Preferire il giorno più recente che contiene la metrica, senza combinarne le date.
