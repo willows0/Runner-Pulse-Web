@@ -279,3 +279,15 @@ header.rp-premium-header.rp-global-banner{
 #detailOverlay .detail-card th,#detailOverlay .detail-card td{color:#fff!important;border-bottom:1px solid #49617a;padding:9px 6px}
 #detailOverlay .detail-card th{color:#ffb276!important}
 #detailOverlay .detail-card a{color:#ffb276!important}
+
+/* Coach: apre sempre sugli ultimi messaggi, senza scorrere l'intera pagina. */
+#coach .rp-coach-chat{height:min(58dvh,560px)!important;min-height:260px!important;max-height:560px!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;scrollbar-color:#526b87 #142840;scrollbar-width:thin;scroll-behavior:auto}
+#coach .rp-coach-chat .rp-chat-row{flex-shrink:0}
+/* Grafici progressi e dettagli: palette Home blu notte/arancio. */
+#activities #rp-analytics .rp-chart-card,#activities #rp-coach-advice,#detailOverlay .rp-detail-charts,#detailOverlay .rp-detail-charts .rp-chart{background:linear-gradient(135deg,#142840,#203c5c)!important;color:#f7fbff!important;border:1px solid #38516c!important;border-radius:20px!important;box-shadow:0 8px 22px #10213b1a!important}
+#activities #rp-analytics .rp-chart-card h3,#detailOverlay .rp-detail-charts h3,#detailOverlay .rp-detail-charts h4{color:#ffad65!important}
+#activities #rp-analytics .rp-chart-card p,#activities #rp-chart-value,#detailOverlay .rp-detail-charts .rp-hint{color:#d0deed!important}
+#activities #rp-analytics .rp-chart-controls button{background:#203c5c!important;color:#fff!important;border:1px solid #526981!important}
+#activities #rp-analytics .rp-chart-controls button[aria-pressed=true]{background:#f36b08!important;color:#fff!important;border-color:#f36b08!important}
+#detailOverlay .rp-detail-charts th,#detailOverlay .rp-detail-charts td{color:#f7fbff!important;border-bottom:1px solid #48617b!important}
+#detailOverlay .rp-detail-charts th{color:#ffad65!important}

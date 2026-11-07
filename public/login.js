@@ -312,14 +312,14 @@ homeBtn?.addEventListener('click', () => {
 // Grafici: sfondo bianco, accenti arancioni. Nessuna modifica ai dati salvati.
 const chartCss = document.createElement('style');
 chartCss.textContent = `
-.rp-detail-charts{background:#fff;color:#30251e;margin:18px 0;padding:16px;border-radius:18px;border:1px solid #f8ddc9}
-.rp-detail-charts h3{color:#ce5200;margin:4px 0 12px}
-.rp-detail-charts .rp-chart{background:#fff;margin:16px 0;padding:12px;border:1px solid #f3e1d4;border-radius:14px}
-.rp-detail-charts .rp-chart h4{color:#bf4c00;margin:0 0 12px}
+.rp-detail-charts{background:#142840;color:#fff;margin:18px 0;padding:16px;border-radius:18px;border:1px solid #f8ddc9}
+.rp-detail-charts h3{color:#ffad65;margin:4px 0 12px}
+.rp-detail-charts .rp-chart{background:#203c5c;color:#fff;margin:16px 0;padding:12px;border:1px solid #48617b;border-radius:14px}
+.rp-detail-charts .rp-chart h4{color:#ffad65;margin:0 0 12px}
 .rp-detail-charts svg{display:block;width:100%;height:auto}
 .rp-detail-charts table{width:100%;border-collapse:collapse;font-size:12px}
-.rp-detail-charts th,.rp-detail-charts td{padding:7px 4px;border-bottom:1px solid #f3e1d4;text-align:left}
-.rp-detail-charts .rp-hint{font-size:13px;color:#796b60;line-height:1.45}
+.rp-detail-charts th,.rp-detail-charts td{padding:7px 4px;border-bottom:1px solid #48617b;text-align:left}
+.rp-detail-charts .rp-hint{font-size:13px;color:#d0deed;line-height:1.45}
 .rp-detail-charts .rp-chart-scroll{overflow-x:auto}
 `;
 document.head.append(chartCss);
