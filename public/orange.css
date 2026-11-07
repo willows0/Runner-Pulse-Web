@@ -169,3 +169,43 @@ body{background:#fffaf6!important;color:#142237}
 #coach .rp-coach-composer{position:sticky;bottom:72px;z-index:20;padding:8px 7px 5px;background:#fff;box-shadow:0 -5px 25px #13213a12;border:1px solid #ece5e0;border-radius:28px;margin:10px 4px 0}#coach .rp-coach-form{display:flex;align-items:center;gap:5px}#coach .rp-coach-form textarea{flex:1;min-width:0;resize:none;border:0;outline:0;background:transparent;font:inherit;font-size:15px;padding:11px 8px;max-height:100px}#coach .rp-coach-round{width:39px;height:39px;min-width:39px;border-radius:50%;border:1px solid #dedee3;background:#fff;color:#172239;display:grid;place-items:center;font-size:22px;padding:0}#coach .rp-coach-send{background:#ff7900;color:white;border:0;font-size:22px}#coach .rp-coach-send:disabled{opacity:.5}#coach .rp-coach-mic{font-size:25px}#coach .rp-coach-plus{font-size:28px;font-weight:300}#coach .rp-coach-status{font-size:12px;color:#656d79;margin:0 10px}#coach .rp-coach-status:empty{display:none}#coach .rp-coach-suggestions{padding:8px;display:flex;flex-wrap:wrap;gap:7px}#coach .rp-coach-suggestions[hidden]{display:none}#coach .rp-coach-suggestions button{background:#fff3e9;color:#c55300;border:1px solid #ffd2ac;border-radius:20px;padding:8px 10px;font-size:12px}#coach .rp-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 body:has(#coach.active) nav button[data-page="coach"].selected{background:#ff7900;color:white;border-radius:18px;padding:6px 11px}body:has(#coach.active) main{padding-top:0}body:has(#coach.active){background:#fffaf5}
 @media(min-width:700px){#coach.rp-coach-page{max-width:650px;margin:auto}#coach .rp-coach-composer{bottom:85px}}
+
+/* Correzione Home: nessuna scheda Benessere, solo performance, VDOT e Garmin. */
+#home .rp-vo2-panel{margin:22px 0;padding:20px 22px;border-radius:24px;background:linear-gradient(130deg,#10213b,#203b5b);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 12px 26px #10213b1c}
+#home .rp-vo2-panel h2{color:white!important;font-size:22px;margin:5px 0 9px}
+#home .rp-vo2-panel p{color:#cad6e5;font-size:12px;line-height:1.45;margin:0}
+#home .rp-vo2-panel strong{color:#ff831e;font-size:clamp(36px,9vw,57px);font-weight:850;flex-shrink:0}
+/* Coach: chat mobile sobria e leggibile, mascotte senza ritaglio. */
+#coach.rp-coach-page{background:#fafbff;min-height:calc(100dvh - 150px);padding-bottom:100px;border-radius:0}
+#coach .rp-coach-top{border-radius:0 0 18px 18px;border-bottom:3px solid #ff7900;padding:12px 16px 15px}
+#coach .rp-coach-intro{min-height:112px;padding:12px 12px 6px;gap:12px}
+#coach .rp-coach-mascot{width:115px;height:115px;max-width:34%;object-fit:contain;mix-blend-mode:normal;border-radius:0}
+#coach .rp-coach-tag{font-size:13px;padding:7px 11px}
+#coach .rp-coach-intro h1{font-size:23px!important;margin:7px 0}
+#coach .rp-coach-chat{gap:12px;padding:12px 8px 20px}
+#coach .rp-chat-bubble{max-width:87%;font-size:15px;padding:13px 15px;border-radius:19px}
+#coach .rp-chat-user .rp-chat-bubble{background:#ede8ff}
+#coach .rp-chat-avatar{width:34px;height:34px;object-fit:contain}
+#coach .rp-coach-composer{bottom:72px;border-radius:25px;margin:8px 2px 0}
+#coach .rp-coach-form textarea{margin:0;min-height:42px;line-height:1.4}
+
+/* Intestazione unica su tutte le pagine, come la banda Coach approvata. */
+header.rp-premium-header.rp-global-banner{
+  box-sizing:border-box!important;
+  width:100%!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:19px 16px 23px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  background:linear-gradient(120deg,#0d1b32,#182b4a)!important;
+  color:#fff!important;
+  border:0!important;
+  border-bottom:6px solid #ff7900!important;
+  border-radius:0 0 45% 9%!important;
+  box-shadow:none!important;
+}
+.rp-global-banner .rp-coach-brand{font-size:clamp(23px,5.5vw,30px);font-weight:900;font-style:italic;letter-spacing:-.7px;text-align:center;color:#fff!important;line-height:1.2}
+.rp-global-banner .rp-coach-brand em,.rp-global-banner .rp-coach-brand-run{color:#ff850b!important}
+#coach .rp-coach-top{display:none!important}
