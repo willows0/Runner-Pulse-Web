@@ -1,0 +1,10 @@
+Runner Pulse – Profilo personale persistente
+
+Sostituisci su GitHub:
+- coach-api.js (cartella principale)
+- public/index.html
+- public/orange.css
+- public/runner-profile.js (nuovo file)
+
+Il profilo viene salvato in Firestore runnerPulseProfiles/{uid}; non viene eliminato quando azzeri la chat Coach. Richiede le stesse credenziali Firebase Admin già usate dal Coach.
+Nessun allenamento Garmin viene modificato.
