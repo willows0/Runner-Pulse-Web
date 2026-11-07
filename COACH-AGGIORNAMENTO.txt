@@ -1,0 +1,7 @@
+Runner Pulse - Coach chat premium
+
+Aggiornati: public/index.html, public/orange.css, public/login.js, public/coach-memory.js, public/app.js, public/coach-robot.png, server.js.
+Caricare questi file nelle rispettive cartelle su GitHub.
+La chat usa il servizio AI e la cronologia Firestore esistenti; nessun messaggio di esempio viene inserito.
+I grafici sono spostati in Attivita. Il microfono usa il riconoscimento vocale del browser quando disponibile.
+La sincronizzazione Garmin non e stata modificata.
