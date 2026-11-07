@@ -1,0 +1,7 @@
+Runner Pulse - Stima sperimentale VO2 max dalle ultime 30 corse Garmin.
+Carica su GitHub nella cartella public i file index.html, dashboard.js, login.js, orange.css.
+Non modificare server.js, Garmin, Firebase o altre pagine.
+Inserisci la FC massima e la FC a riposo REALI nella scheda VO2 e premi Calcola dalle corse.
+Almeno 3 corse con FC media, durata e distanza. La stima non equivale al VO2 max Garmin.
+I valori FC sono salvati soltanto nel browser, separati per account.
+Il calcolo si aggiorna automaticamente all'importazione di nuove corse.

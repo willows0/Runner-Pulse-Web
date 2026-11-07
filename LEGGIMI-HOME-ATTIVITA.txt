@@ -1,0 +1,13 @@
+RUNNER PULSE — HOME E ATTIVITÀ (07/11/2026)
+
+MODIFICHE
+- Home: rimosse completamente le schede "La tua strada finora" e "VO2 max stimato", inclusi i campi FC e il pulsante di calcolo.
+- Home: conservati orologio Garmin, percentuale di sincronizzazione, statistiche degli ultimi 7 giorni e pulsante per nuove attività.
+- Attività: schede Garmin, modulo allenamenti ed elenco attività con sfondo blu notte sfumato, testi leggibili e dettagli arancioni.
+- Tutte le funzionalità e il backend rimangono invariati.
+
+CARICAMENTO SU GITHUB
+Carica soltanto i file public/index.html e public/orange.css nella cartella public del repository, sostituendo i precedenti.
+Non caricare i file nella radice al posto della cartella public. Non modificare server.js né le variabili di Render.
+
+NOTA: la logica del VO2 rimane nel codice JS ma senza interfaccia Home, per evitare modifiche collaterali. Nessun valore viene inventato.
