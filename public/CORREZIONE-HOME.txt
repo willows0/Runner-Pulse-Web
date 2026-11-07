@@ -1,0 +1,19 @@
+RUNNER PULSE — CORREZIONE HOME
+
+Corretto il riepilogo Corse e Distanza degli ultimi 7 giorni:
+- la dashboard legge la chiave locale specifica dell'utente Firebase autenticato;
+- si aggiorna dopo importazioni Garmin, modifiche manuali e cambi account;
+- non usa lo storico legacy condiviso, per proteggere la separazione degli account;
+- non inventa attività: mostra 0 e 0 km se non ci sono allenamenti validi negli ultimi 7 giorni.
+
+IMPORTANTE: questo aggiornamento NON aggiunge battito a riposo, passi, sonno,
+stress o Body Battery. Il server attuale importa le attività Garmin, ma non
+ha un'integrazione autorizzata per i dati giornalieri Garmin Health.
+Per questi valori serve un'integrazione ufficiale autorizzata o una fonte
+consentita; una pagina web non può leggere direttamente Health Connect.
+
+La dicitura 'Importazione parziale: 3 dettagli non disponibili' riguarda i
+dettagli delle attività Garmin e non dimostra l'assenza dei dati giornalieri.
+
+PUBBLICAZIONE: caricare i file nella radice del repository GitHub mantenendo
+la cartella public/, poi attendere Render Live e ricaricare la pagina.
