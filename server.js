@@ -30,6 +30,16 @@ async function getGarminToken(){if(!GARMIN_API_KEY)throw new Error('Chiave Garmi
 async function garminJson(endpoint,token){const response=await fetch(GARMIN_BASE+endpoint,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'},signal:AbortSignal.timeout(20000)});if(!response.ok)throw new Error(`Garmin HTTP ${response.status} per ${endpoint.split('?')[0]}`);return response.json();}
 async function getGarminActivities(){const token=await getGarminToken();const url=new URL('/activitylist-service/activities/search/activities',GARMIN_BASE);url.searchParams.set('start','0');url.searchParams.set('limit','20');const data=await garminJson(url.pathname+url.search,token);if(!Array.isArray(data))throw new Error('Formato attività Garmin inatteso');return data;}
 
+// Garmin Connect Personal API: riepiloghi salute, solo per il proprietario.
+// I parametri sono quelli documentati nello Swagger Personal API.
+async function getGarminDailySummaries(startDate,endDate){
+  const token=await getGarminToken();
+  const params=new URLSearchParams({startDate,endDate});
+  const result=await garminJson('/usersummary-service/v2/dailySummaries?'+params,token);
+  if(!result||typeof result!=='object'||!Array.isArray(result.data))throw new Error('Formato riepiloghi giornalieri Garmin inatteso');
+  return result.data;
+}
+
 // FIT global message 19 = Lap. No synthetic laps or sensitive logging.
 function fitLaps(bytes){
   if(bytes.length<14)throw new Error('FIT troppo corto');
@@ -208,6 +218,19 @@ http.createServer(async(req,res)=>{
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
   // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
   // Accesso limitato al proprietario e paginazione per evitare risposte troppo grandi.
+  if(pathname==='/api/garmin/health-daily'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Dati Garmin riservati al proprietario'});
+    if(!GARMIN_API_KEY)return json(res,503,{success:false,message:'Chiave Garmin non configurata'});
+    try{
+      const body=await readJsonBody(req);
+      const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v+'T12:00:00Z'))&&new Date(v+'T12:00:00Z').toISOString().slice(0,10)===v;
+      const {startDate,endDate}=body||{};
+      if(!validDate(startDate)||!validDate(endDate)||startDate>endDate||(Date.parse(endDate)-Date.parse(startDate))>7*86400000)return json(res,400,{success:false,message:'Intervallo date non valido (massimo 7 giorni)'});
+      const data=await getGarminDailySummaries(startDate,endDate);
+      return json(res,200,{success:true,data});
+    }catch(error){console.warn('Riepiloghi Garmin:',error.message);return json(res,502,{success:false,message:'Riepiloghi Garmin non disponibili: '+error.message});}
+  }
   if(pathname==='/api/garmin/archive'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
     if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Garmin disponibile soltanto per il proprietario.'});

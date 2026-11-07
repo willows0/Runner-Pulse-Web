@@ -1,0 +1,10 @@
+RUNNER PULSE — AGGIORNAMENTO SALUTE GARMIN
+
+1. Carica il contenuto di questa cartella nel repository GitHub, sostituendo i file omonimi.
+2. Attendi che Render termini il deploy. Non modificare GARMIN_API_KEY.
+3. Accedi con il profilo proprietario e apri Home.
+4. La Home richiede i riepiloghi Garmin di oggi e ieri direttamente al server.
+
+NOTA: Garmin Personal API non è stata interrogata durante la preparazione di questo ZIP: i campi reali possono differire da quelli previsti. In tal caso le metriche rimangono — e compare un messaggio diagnostico, senza dati inventati. Sonno, VO2max e altre metriche potrebbero richiedere endpoint dedicati. La sincronizzazione delle attività già archiviate rimane disponibile; toccando l'orologio puoi forzare un aggiornamento completo.
+
+PRIVACY: la richiesta salute è protetta dal token Firebase e dall'account proprietario; nessuna chiave Garmin è inclusa nel pacchetto.
