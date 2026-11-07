@@ -29,6 +29,8 @@ async function authorizedPost(endpoint, body) {
     headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
+  const contentType=response.headers.get('content-type')||'';
+  if(!contentType.includes('application/json'))throw new Error(`Il server ha restituito una risposta non JSON (HTTP ${response.status}). Verifica che Render abbia pubblicato tutti i file.`);
   const data = await response.json();
   if (!response.ok || !data.success) throw new Error(data.message || `Errore HTTP ${response.status}`);
   return data;
@@ -60,14 +62,60 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('rp-garmin-test')?.toggleAttribute('disabled',!isOwner());
     window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:{uid:user.uid,owner:isOwner()}}));
-    if(isOwner()){void loadGarminArchive();void startAutoSync();}else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
-  }else{window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
+    if(isOwner()){void loadGarminArchive();void startAutoSync();void refreshGarminHealth();}else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
+  }else{healthRequest++;resetHealth();window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
   if (user && !allowed) {
     showError('Accedi con un account Google verificato per utilizzare Runner Pulse.');
     await signOut(auth);
   }
 });
 
+
+// Salute Garmin: nessun dato di esempio, nessuna cache condivisa tra account.
+let healthRequest=0;
+const healthFields={
+  'rp-heart-value':['restingHeartRate','restingHeartRateInBeatsPerMinute'],
+  'rp-intensity-value':['intensityMinutes','totalIntensityMinutes'],
+  'rp-steps-value':['totalSteps','steps'],
+  'rp-calories-value':['totalKilocalories','totalCalories'],
+  'rp-stress-value':['averageStressLevel','avgStressLevel'],
+  'rp-vo2-value':['vo2Max','vo2MaxValue']
+};
+function healthMetric(summary,keys){
+  for(const k of keys){
+    const value=summary?.[k];
+    if(value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0)return Number(value);
+  }
+  return null;
+}
+function resetHealth(){
+  for(const id of [...Object.keys(healthFields),'rp-sleep-value']){
+    const el=document.getElementById(id);if(el)el.textContent='—';
+  }
+  const note=document.getElementById('rp-health-sync-status');if(note)note.textContent='Dati salute non disponibili.';
+}
+async function refreshGarminHealth(){
+  const request=++healthRequest;
+  resetHealth();
+  if(!allowedUser()||!isOwner())return;
+  const note=document.getElementById('rp-health-sync-status');
+  if(note)note.textContent='Aggiornamento dati salute Garmin…';
+  const localDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const now=new Date(),yesterday=new Date(now);yesterday.setDate(now.getDate()-1);
+  try{
+    const result=await authorizedPost('/api/garmin/health-daily',{startDate:localDate(yesterday),endDate:localDate(now)});
+    if(request!==healthRequest||!allowedUser()||!isOwner())return;
+    const summaries=result.data.filter(x=>x&&typeof x==='object').sort((a,b)=>String(b.calendarDate||'').localeCompare(String(a.calendarDate||'')));
+    // Preferire il giorno più recente che contiene la metrica, senza combinarne le date.
+    let count=0;
+    for(const [id,keys] of Object.entries(healthFields)){
+      const found=summaries.map(s=>healthMetric(s,keys)).find(v=>v!==null);
+      if(found!==undefined){const el=document.getElementById(id);if(el){el.textContent=found.toLocaleString('it-IT',{maximumFractionDigits:1});count++;}}
+    }
+    // Il sonno richiede l'endpoint sleep dedicato: non inferirlo da altri campi.
+    if(note)note.textContent=count?`Dati reali Garmin disponibili: ${count} metriche. Le altre richiedono dati o endpoint dedicati.`:'Garmin ha risposto, ma non sono presenti metriche riconosciute nel riepilogo.';
+  }catch(error){if(request===healthRequest&&note)note.textContent='Dati salute Garmin non disponibili: '+(error.message||String(error));}
+}
 
 // Importa automaticamente nel browser le attività già conservate su Firebase.
 // La pagina Attività e la Home ricevono gli stessi eventi, senza richiedere
@@ -118,6 +166,10 @@ async function startAutoSync(force=false){
     let state=(await authorizedPost('/api/garmin/sync-status',{})).state;
     if(force) syncUI(state,'Riavvio sincronizzazione Garmin…');
     else syncUI(state);
+    // Non riscaricare 189 dettagli a ogni login: lo storico è già su Firestore.
+    if(!force&&(state.phase==='done'||state.phase==='partial')){
+      syncUI(state);await loadGarminArchive();return;
+    }
     for(let steps=0;steps<100000&&!syncCancel&&allowedUser();steps++){
       const data=await authorizedPost('/api/garmin/sync-step',steps===0&&force?{restart:true}:{});
       state=data.state;syncUI(state);
@@ -345,7 +397,7 @@ document.getElementById('activityList')?.addEventListener('click', event => {
   if (index < 0) return;
   try {
     const activities = JSON.parse(localStorage.getItem(window.runnerPulseStorageKey || 'runnerPulseActivitiesV1') || '[]');
-    if (Array.isArray(activities)) void loadDetailForActivity(activities[index]);
+    if (Array.isArray(activities)) {const sorted=activities.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.startTime||b.startTimeLocal||b.id||'').localeCompare(String(a.startTime||a.startTimeLocal||a.id||'')));void loadDetailForActivity(sorted[index]);}
   } catch (e) { console.warn('Impossibile leggere attività salvate:', e); }
 });
 document.getElementById('closeDetail')?.addEventListener('click', () => { detailRequest++; });
