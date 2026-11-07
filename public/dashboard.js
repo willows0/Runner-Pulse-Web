@@ -18,10 +18,7 @@
       const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
       if (Array.isArray(stored)) entries = stored;
     } catch { /* Nessun dato valido disponibile. */ }
-    // Il VDOT da corse facili NON e' il VO₂ max Garmin.
-    const vo2El=byId('rp-vo2-value'),vo2Note=byId('rp-vo2-note');
-    if(vo2El&&!vo2El.dataset.garminVerified)vo2El.textContent='—';
-    if(vo2Note&&!vo2El?.dataset.garminVerified)vo2Note.textContent='Verifica il valore originale Garmin. Nessuna stima da allenamenti facili.';
+    updateVo2(entries);
     const today = new Date();
     today.setHours(23, 59, 59, 999);
     const start = new Date(today);
@@ -44,7 +41,50 @@
       } else paceEl.textContent = '—';
     }
   };
+  // Stima sperimentale da costo energetico della corsa in piano (ACSM)
+  // e frazione di riserva cardiaca. Non e' una misura clinica del VO2 max.
+  const finite = x => x !== null && x !== undefined && x !== '' && Number.isFinite(Number(x)) ? Number(x) : null;
+  const median = values => { const a=[...values].sort((x,y)=>x-y);return a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2; };
+  function updateVo2(entries){
+    const value=byId('rp-vo2-value'), note=byId('rp-vo2-note');
+    if(!value||!note)return;
+    const key=window.runnerPulseStorageKey;
+    if(!key){value.textContent='—';note.textContent='Accedi per analizzare le corse Garmin.';return;}
+    const max=finite(byId('rp-vo2-hrmax')?.value),rest=finite(byId('rp-vo2-hrrest')?.value);
+    if(!(max>=120&&max<=230&&rest>=30&&rest<=100&&max-rest>=50)){
+      value.textContent='—';note.textContent='Inserisci FC massima e FC a riposo attendibili per calcolare una stima.';return;
+    }
+    const sorted=entries.filter(e=>e.source==='garmin'&&/run|corsa|running|trail/i.test(String(e.kind||'')))
+      .filter(e=>/^\d{4}-\d{2}-\d{2}$/.test(String(e.date||'')))
+      .sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,30);
+    const estimates=[];
+    for(const e of sorted){
+      const km=finite(e.km),min=finite(e.minutes),hr=finite(e.avgHR);
+      if(!(km>=2&&km<=45&&min>0&&hr>rest+20&&hr<max-5))continue;
+      const speed=km*1000/min; // metri al minuto
+      if(speed<100||speed>300)continue; // corsa, non camminata o velocita anomala
+      const fraction=(hr-rest)/(max-rest);
+      if(fraction<.55||fraction>.92)continue;
+      const oxygen=3.5+0.2*speed; // ml/kg/min, piano; non corregge pendenza/vento
+      const vo2=(oxygen-3.5)/fraction+3.5;
+      if(vo2>=20&&vo2<=85)estimates.push(vo2);
+    }
+    if(estimates.length<3){value.textContent='—';note.textContent=`${estimates.length} corse utilizzabili su ${sorted.length} esaminate. Ne servono almeno 3 con FC media, durata e distanza attendibili.`;return;}
+    const estimate=median(estimates);
+    value.textContent=estimate.toLocaleString('it-IT',{maximumFractionDigits:1,minimumFractionDigits:1});
+    note.textContent=`Stima sperimentale da ${estimates.length} delle ultime ${sorted.length} corse Garmin. Mediana velocità/riserva cardiaca · ml/kg/min. Può differire da Garmin, specie su salite o corse facili.`;
+  }
   document.addEventListener('DOMContentLoaded', () => {
+    const uid=()=>window.runnerPulseStorageKey||'';
+    const hrMax=byId('rp-vo2-hrmax'),hrRest=byId('rp-vo2-hrrest');
+    function restore(){for(const [el,kind] of [[hrMax,'max'],[hrRest,'rest']]){if(el)el.value=uid()?localStorage.getItem(uid()+':vo2hr:'+kind)||'':'';}}
+    restore();
+    window.addEventListener('runnerpulse:auth-user',restore);
+    byId('rp-vo2-calc')?.addEventListener('click',()=>{
+      if(!uid())return;
+      for(const [el,kind] of [[hrMax,'max'],[hrRest,'rest']])if(el)localStorage.setItem(uid()+':vo2hr:'+kind,el.value);
+      update();
+    });
     update(); window.addEventListener('runnerpulse:garmin-data',()=>setTimeout(update,100));
     window.addEventListener('runnerpulse:auth-user',()=>setTimeout(update,0));
     window.addEventListener('runnerpulse:activities-changed',update);

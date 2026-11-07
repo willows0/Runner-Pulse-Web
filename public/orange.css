@@ -229,3 +229,10 @@ header.rp-premium-header.rp-global-banner{
 #home .rp-watch-actions .rp-refresh-button{background:#f8750a;color:#fff;margin:6px 0 8px}
 #home .rp-watch-result{color:#718092;font-size:12px;text-align:center;margin:0 0 8px}
 @media(min-width:700px){#home .rp-performance-grid{grid-template-columns:repeat(3,minmax(0,1fr))}#home .rp-performance-primary{grid-column:span 1}}
+
+/* Stima VO2 da corsa: controlli nella scheda premium */
+.rp-vo2-settings{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px;color:#fff;margin-top:10px}
+.rp-vo2-settings label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#e2e9f5}
+.rp-vo2-settings input{width:100%;box-sizing:border-box;border:1px solid #718098;background:#fff;color:#152b46;border-radius:12px;padding:12px;font-size:16px}
+.rp-vo2-settings button{grid-column:1/-1;background:#ff7900;color:#fff;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700}
+.rp-vo2-settings small{grid-column:1/-1;color:#cad6e5;line-height:1.5}

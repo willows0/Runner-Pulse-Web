@@ -489,16 +489,4 @@ document.getElementById('closeDetail')?.addEventListener('click', () => { detail
 
 // La chat Coach è gestita da coach-memory.js, con cronologia Firebase.
 
-// Verifica esplicita: nessun numero inventato, accesso Garmin solo proprietario.
-document.getElementById('rp-vo2-check')?.addEventListener('click',async()=>{
-  const btn=document.getElementById('rp-vo2-check');
-  const note=document.getElementById('rp-vo2-note');
-  const value=document.getElementById('rp-vo2-value');
-  btn.disabled=true;btn.textContent='Verifica in corso…';
-  try{
-    const result=await authorizedPost('/api/garmin/vo2-check',{});
-    if(result.found){value.textContent=String(result.found.value);value.dataset.garminVerified='true';note.textContent=result.found.source;}
-    else{value.textContent='—';delete value.dataset.garminVerified;note.textContent=result.message+' FIT: '+result.fitStatus+'.';}
-  }catch(error){note.textContent=error.message;}
-  finally{btn.disabled=false;btn.textContent='Verifica VO₂ max Garmin';}
-});
+// Il VO2 max stimato e' gestito da dashboard.js sui dati Garmin archiviati.
