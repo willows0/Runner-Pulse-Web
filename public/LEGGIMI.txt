@@ -1,6 +1,0 @@
-Runner Pulse - lettura dati salute Garmin.
-Sostituire nel repository: server.js e public/login.js.
-Il server.js incluso mantiene la diagnostica attualmente pubblicata.
-I dati sono letti da campi noti anche annidati; i campi assenti restano non disponibili.
-La somma dei minuti moderati e vigorosi e' mostrata senza pesatura; non rappresenta necessariamente il totale Garmin ponderato.
-Nessuna modifica a Firestore, login, sincronizzazione attivita' o chiavi.

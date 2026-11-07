@@ -1,4 +1,0 @@
-Correzione sincronizzazione automatica Home e Attività.
-Il server espone un archivio Garmin autenticato e limitato al proprietario.
-Il browser recupera automaticamente le attività salvate su Firebase, anche dopo la fine della sincronizzazione.
-Nessuna modifica alla chiave Garmin, alla sincronizzazione a blocchi o ai dati salute.
