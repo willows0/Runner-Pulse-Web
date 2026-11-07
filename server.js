@@ -206,6 +206,26 @@ async function syncRequest(req,res,pathname){
 
 http.createServer(async(req,res)=>{
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+  // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
+  // Accesso limitato al proprietario e paginazione per evitare risposte troppo grandi.
+  if(pathname==='/api/garmin/archive'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Garmin disponibile soltanto per il proprietario.'});
+    try{
+      const body=await readJsonBody(req);
+      const after=body?.after==null?'':String(body.after);
+      if(after&&!/^\d{1,20}$/.test(after))return json(res,400,{success:false,message:'Cursore non valido'});
+      const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+      const user=await getAuth().verifyIdToken(match[1],true);
+      const collection=getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('activities');
+      let query=collection.orderBy('__name__').limit(100);
+      if(after)query=query.startAfter(collection.doc(after));
+      const snapshot=await query.get();
+      const activities=snapshot.docs.map(doc=>doc.data()?.summary).filter(a=>a&&typeof a==='object');
+      const next=snapshot.size===100?snapshot.docs[snapshot.docs.length-1].id:null;
+      return json(res,200,{success:true,activities,next});
+    }catch(error){console.error('Archivio Garmin:',error.message);return json(res,502,{success:false,message:'Impossibile leggere lo storico Garmin'});}
+  }
   if(['/api/garmin/sync-status','/api/garmin/sync-step'].includes(pathname)){await syncRequest(req,res,pathname);return;}
   if(pathname==='/api/coach/chat'){await handleCoachAI(req,res,authorized);return;}
   if(pathname==='/api/status'){if(req.method!=='GET'){json(res,405,{message:'Method not allowed'});return;}json(res,200,{garminConfigured:Boolean(GARMIN_API_KEY),garminConnected:false,message:'La connessione Garmin non è ancora verificata. Usa il test autenticato.'});return;}
