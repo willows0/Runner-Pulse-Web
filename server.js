@@ -35,7 +35,7 @@ async function getGarminActivities(){const token=await getGarminToken();const ur
 async function getGarminDailySummaries(startDate,endDate){
   const token=await getGarminToken();
   const params=new URLSearchParams({startDate,endDate});
-  const result=await garminJson('/usersummary-service/v2/dailySummaries?'+params,token);
+  const result=await garminJson('/usersummary-service/v2/dailysummaries?'+params,token);
   if(!result||typeof result!=='object'||!Array.isArray(result.data))throw new Error('Formato riepiloghi giornalieri Garmin inatteso');
   return result.data;
 }
