@@ -248,3 +248,34 @@ header.rp-premium-header.rp-global-banner{
 #activities #activityList>.card .activity-open{background:transparent!important;color:#fff!important;box-shadow:none!important}
 #activities #activityList>.card .delete{background:#f36b08!important;color:#fff!important}
 #activities #activityList>.card .activity-open:focus-visible{outline:2px solid #ff8a2a;outline-offset:3px}
+
+/* Runner Pulse: Coach e dettaglio allenamenti in stile Home premium. */
+#coach.rp-coach-page{background:linear-gradient(180deg,#eef3f9 0%,#f7f9fc 100%)!important}
+#coach .rp-coach-intro{background:linear-gradient(135deg,#142840,#203c5c)!important;border:1px solid #38516c;border-radius:24px;margin:12px 8px 4px;padding:14px!important;box-shadow:0 10px 25px #10213b18}
+#coach .rp-coach-intro h1,#coach .rp-coach-intro-text h1{color:#fff!important}
+#coach .rp-coach-presence{color:#d0deed!important}
+#coach .rp-coach-tag{background:#ff7900!important;color:#fff!important}
+#coach .rp-coach-mascot{object-fit:contain!important;mix-blend-mode:normal!important}
+#coach .rp-chat-assistant .rp-chat-bubble{background:linear-gradient(135deg,#142840,#203c5c)!important;color:#fff!important;border:1px solid #38516c!important}
+#coach .rp-chat-assistant .rp-chat-bubble p,#coach .rp-chat-assistant .rp-chat-bubble strong{color:#fff!important}
+#coach .rp-chat-user .rp-chat-bubble{background:#e6effa!important;color:#142840!important;border:1px solid #cbd9eb!important}
+#coach .rp-coach-composer{background:#142840!important;border:1px solid #38516c!important;box-shadow:0 -5px 25px #10213b22!important}
+#coach .rp-coach-form textarea{color:#fff!important;caret-color:#ff922e!important}
+#coach .rp-coach-form textarea::placeholder{color:#c5d3e3!important}
+#coach .rp-coach-round:not(.rp-coach-send){background:#203c5c!important;color:#fff!important;border-color:#526981!important}
+#coach .rp-coach-send{background:#ff7900!important;color:#fff!important}
+#coach .rp-coach-status{color:#60748b!important}
+#coach .rp-coach-suggestions button{background:#142840!important;color:#fff!important;border:1px solid #38516c!important}
+#detailOverlay{background:#eef3f9!important;color:#142840!important}
+#detailOverlay .detail-panel{max-width:650px}
+#detailOverlay .detail-card{background:linear-gradient(135deg,#142840,#203c5c)!important;color:#fff!important;border:1px solid #38516c!important;border-radius:24px!important;box-shadow:0 10px 25px #10213b18!important}
+#detailOverlay .detail-card h1,#detailOverlay .detail-card h2,#detailOverlay .detail-card h3,#detailOverlay .detail-card b,#detailOverlay .detail-card strong{color:#fff!important}
+#detailOverlay .detail-meta,#detailOverlay .detail-note,#detailOverlay .detail-card small,#detailOverlay .detail-card .muted{color:#c0d0e0!important}
+#detailOverlay .detail-stat{background:#29435f!important;border:1px solid #48617b!important;color:#fff!important;border-radius:16px!important}
+#detailOverlay .detail-stat strong{color:#ff9a42!important}
+#detailOverlay .detail-stat small{color:#d0deed!important}
+#detailOverlay #closeDetail{background:#ff7900!important;color:#fff!important}
+#detailOverlay .detail-card table{width:100%;border-collapse:collapse;color:#fff!important}
+#detailOverlay .detail-card th,#detailOverlay .detail-card td{color:#fff!important;border-bottom:1px solid #49617a;padding:9px 6px}
+#detailOverlay .detail-card th{color:#ffb276!important}
+#detailOverlay .detail-card a{color:#ffb276!important}
