@@ -14,9 +14,6 @@
     body > header.rp-global-banner .rp-coach-brand { display:block !important; color:#fff !important; font-weight:900 !important; font-style:italic !important; font-size:clamp(23px,5.5vw,30px) !important; line-height:1.2 !important; }
     body > header.rp-global-banner .rp-coach-brand em,body > header.rp-global-banner .rp-coach-brand-run { color:#ff850b !important; }
     body > main { margin-top:0 !important; }
-    #splash:not([hidden]) { display:flex !important; }
-    #splash[hidden] { display:none !important; }
-    #enterApp:disabled { opacity:.8; cursor:default; }
   </style>
 </head>
 <body>
@@ -58,63 +55,8 @@
   </main>
   <nav aria-label="Navigazione"><button data-page="home" class="selected"><span>⌂</span>Home</button><button data-page="activities"><span>◷</span>Attività</button><button data-page="plan"><span>▦</span>Piano</button><button data-page="coach"><span>♡</span>Coach</button><button data-page="settings"><span>⚙</span>Profilo</button></nav>
   <div id="detailOverlay" hidden><div class="detail-panel"><button id="closeDetail" type="button" aria-label="Chiudi dettagli" hidden>✕</button><div id="detailContent"></div></div><nav id="rp-detail-bottom-nav" aria-label="Menu principale nel dettaglio"></nav></div>
-  <div id="splash"><div class="splash-content"><h1>RUNNER PULSE</h1><div class="splash-heart" aria-hidden="true">♥</div><p>Il tuo cuore. Il tuo ritmo.</p><button id="enterApp" type="button">Entra in Runner Pulse</button></div></div>
-  <script src="/app.js?v=detail-nav-20261108c"></script>
+  <script src="/app.js?v=nav-persist-20261108d"></script>
   <script src="/dashboard.js" defer></script>
-  <script>
-  (() => {
-    const splash = document.getElementById('splash');
-    const enter = document.getElementById('enterApp');
-    if (!splash || !enter) return;
-    sessionStorage.removeItem('runnerPulseSplashSeen');
-    splash.hidden = false;
-    let playing = false;
-    enter.onclick = () => {
-      if (playing) return;
-      playing = true;
-      enter.disabled = true;
-      enter.textContent = 'Ascolta il tuo cuore ♥';
-      const AudioContextType = window.AudioContext || window.webkitAudioContext;
-      let ctx;
-      try { if (AudioContextType) ctx = new AudioContextType(); } catch {}
-      if (ctx) {
-        const master = ctx.createGain();
-        master.gain.value = 0.8;
-        master.connect(ctx.destination);
-        const thump = (at, pitch, strength) => {
-          const oscillator = ctx.createOscillator();
-          const envelope = ctx.createGain();
-          oscillator.type = 'triangle';
-          oscillator.frequency.setValueAtTime(pitch, at);
-          oscillator.frequency.exponentialRampToValueAtTime(65, at + 0.16);
-          envelope.gain.setValueAtTime(0.0001, at);
-          envelope.gain.exponentialRampToValueAtTime(strength, at + 0.014);
-          envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.21);
-          oscillator.connect(envelope).connect(master);
-          oscillator.start(at);
-          oscillator.stop(at + 0.22);
-        };
-        const beat = () => {
-          if (ctx.state !== 'running') return;
-          const t = ctx.currentTime + 0.025;
-          thump(t, 165, 0.62);
-          thump(t + 0.22, 130, 0.42);
-        };
-        void ctx.resume().then(() => {
-          beat();
-          const timer = setInterval(beat, 1050);
-          setTimeout(() => { clearInterval(timer); void ctx.close().catch(() => {}); }, 3400);
-        }).catch(() => {});
-      }
-      setTimeout(() => {
-        splash.hidden = true;
-        enter.disabled = false;
-        enter.textContent = 'Entra in Runner Pulse';
-        playing = false;
-      }, 3700);
-    };
-  })();
-  </script>
   <script type="module" src="/login.js?v=detail-nav-20261108c"></script>
   <script type="module" src="/coach-memory.js"></script>
   <!-- Blocca l'invio HTML tradizionale anche se Firebase non si carica. -->

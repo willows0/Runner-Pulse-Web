@@ -26,7 +26,19 @@ const first=(obj,keys)=>{for(const k of keys){const v=obj?.[k];if(v!==undefined&
 const fmt=n=>Number(n).toLocaleString('it-IT',{maximumFractionDigits:2});
 const pace=(km,min)=>{if(!(km>0&&min>0))return '—';const s=Math.round(min/km*60);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} min/km`;};
 const save=()=>{if(!key)return;localStorage.setItem(key,JSON.stringify(entries));render();window.dispatchEvent(new CustomEvent('runnerpulse:activities-changed'));};
-document.querySelectorAll('nav button').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===btn.dataset.page));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('selected',b===btn));window.scrollTo(0,0);});
+// Conserva la sezione corrente anche dopo il refresh del browser.
+const RP_PAGE_KEY='runnerPulseCurrentPageV2';
+const RP_PAGES=new Set(['home','activities','plan','coach','settings']);
+function rpActivatePage(page, remember=true){
+  if(!RP_PAGES.has(page))page='home';
+  document.querySelectorAll('main > .page').forEach(el=>el.classList.toggle('active',el.id===page));
+  document.querySelectorAll('body > nav button[data-page]').forEach(el=>el.classList.toggle('selected',el.dataset.page===page));
+  if(remember){try{sessionStorage.setItem(RP_PAGE_KEY,page);}catch{}}
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('body > nav button[data-page]').forEach(btn=>btn.addEventListener('click',()=>rpActivatePage(btn.dataset.page)));
+try{rpActivatePage(sessionStorage.getItem(RP_PAGE_KEY)||'home',false);}catch{rpActivatePage('home',false);}
+
 const manualModal=$('rp-manual-modal');
 const openManual=$('rp-open-manual');
 const closeManual=()=>{manualModal.hidden=true;document.body.classList.remove('rp-manual-modal-open');openManual.focus();};
