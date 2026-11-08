@@ -393,3 +393,7 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 .rp-notify-accept{background:#fa7008;color:white;border:0;margin-bottom:10px}
 .rp-notify-later{background:transparent;color:white;border:1px solid #aabbd0}
 .rp-notify-dialog small{display:block;margin-top:14px;color:#b9c9da}
+
+/* Logout in fondo alla pagina Profilo */
+.rp-logout-footer{margin:28px auto 110px;padding:0 20px;max-width:560px;text-align:center}
+.rp-logout-footer .rp-profile-logout{display:block;margin:0 auto;min-height:54px}
