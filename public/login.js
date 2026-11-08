@@ -94,12 +94,34 @@ loginButton.addEventListener('click', async () => {
   } finally { loginButton.disabled = false; }
 });
 getRedirectResult(auth).catch(showError);
+// La scelta viene memorizzata per account su questo browser; i permessi push restano per dispositivo.
+let rpNotifyShownForSession = null;
+function rpOfferCoachNotifications(user){
+  if(!user || rpNotifyShownForSession===user.uid)return;
+  rpNotifyShownForSession=user.uid;
+  const key='runnerPulseNotifyChoiceV1:'+user.uid;
+  try{if(localStorage.getItem(key))return;}catch(_){return;}
+  if(document.getElementById('rp-notify-overlay'))return;
+  const overlay=document.createElement('div');
+  overlay.id='rp-notify-overlay';overlay.className='rp-notify-overlay';
+  overlay.innerHTML=`<section class="rp-notify-dialog" role="dialog" aria-modal="true" aria-labelledby="rp-notify-title"><img src="/coach-notification.png" alt="Robottino Coach"><h2 id="rp-notify-title">Il tuo Coach è pronto! 🏃</h2><p>Vuoi ricevere le notifiche di Runner Pulse? Ti avviserò quando sarà pronto il tuo allenamento e ogni domenica alle 20:00 per il resoconto settimanale.</p><button class="rp-notify-accept" type="button">Sì, attiva le notifiche</button><button class="rp-notify-later" type="button">Magari più tardi</button><small>Puoi cambiare la scelta dal Profilo.</small></section>`;
+  document.body.append(overlay);
+  const close=(choice)=>{try{localStorage.setItem(key,choice);}catch(_){} overlay.remove();};
+  overlay.querySelector('.rp-notify-later').addEventListener('click',()=>close('later'));
+  overlay.querySelector('.rp-notify-accept').addEventListener('click',()=>{
+    close('accepted');
+    // L'azione parte direttamente dal gesto dell'utente, requisito dei browser.
+    const button=document.getElementById('rp-enable-weekly-push');
+    if(button)button.click();
+  });
+  overlay.querySelector('.rp-notify-accept').focus();
+}
 onAuthStateChanged(auth, async user => {
   const allowed = Boolean(user && googleVerifiedUser(user));
   document.body.classList.toggle('rp-authenticated', allowed);
   if(!allowed)rpSavedName='';
   rpRefreshWelcome(allowed?user:null);
-  if(allowed)void rpLoadWelcomeProfile(user);
+  if(allowed){void rpLoadWelcomeProfile(user);setTimeout(()=>rpOfferCoachNotifications(user),500);}
   if(allowed){
     document.getElementById('importGarmin')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
