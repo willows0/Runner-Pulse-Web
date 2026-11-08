@@ -7,22 +7,37 @@
   <title>Runner Pulse Web</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/login.css">
-  <link rel="stylesheet" href="/orange.css">
+  <link rel="stylesheet" href="/orange.css?v=header-fix-20261107-2">
   <style>
+    /* Intestazione definitiva: prevale anche su CSS memorizzati dal browser. */
+    body > header.rp-global-banner { display:flex !important; position:relative !important; top:auto !important; width:100% !important; min-height:0 !important; height:auto !important; margin:0 !important; padding:19px 16px 24px !important; align-items:center !important; justify-content:center !important; background:linear-gradient(120deg,#0d1b32,#182b4a) !important; border:0 !important; border-bottom:6px solid #ff7900 !important; border-radius:0 0 45% 9% !important; box-shadow:none !important; color:#fff !important; }
+    body > header.rp-global-banner .rp-coach-brand { display:block !important; color:#fff !important; font-weight:900 !important; font-style:italic !important; font-size:clamp(23px,5.5vw,30px) !important; line-height:1.2 !important; }
+    body > header.rp-global-banner .rp-coach-brand em,body > header.rp-global-banner .rp-coach-brand-run { color:#ff850b !important; }
+    body > main { margin-top:0 !important; }
     #splash:not([hidden]) { display:flex !important; }
     #splash[hidden] { display:none !important; }
     #enterApp:disabled { opacity:.8; cursor:default; }
   </style>
 </head>
 <body>
-  <header><div class="brand"><span class="heart">♥</span><div><b>RUNNER PULSE</b><small>Il tuo percorso, il tuo ritmo</small></div></div><span class="pill">WEB</span></header>
+  <header class="rp-premium-header rp-global-banner" aria-label="Runner Pulse">
+    <div class="rp-coach-brand"><span class="rp-coach-brand-run" aria-hidden="true">➤</span> Runner <em>Pulse</em></div>
+  </header>
   <main>
-    <section id="home" class="page active">
-      <h1>La tua corsa, ogni giorno.</h1><p class="muted">Il tuo spazio per allenarti verso la mezza maratona.</p>
-      <div class="hero"><div class="ecg">♥ <span>⌁⌁</span></div><h2>Mezza maratona</h2><p>Obiettivo · 21,097 km</p><div class="chips"><span>Avanzato</span><span>3 giorni/settimana</span></div></div>
-      <h2>Riepilogo allenamenti</h2>
-      <div class="stats"><div><strong id="count">0</strong><small>Sessioni registrate</small></div><div><strong id="distance">0,0</strong><small>Km registrati</small></div><div><strong id="avgPace">—</strong><small>Passo medio (min/km)</small></div></div>
-      <div class="card"><h3>Garmin Connect</h3><p id="garminStatus" class="muted">Verifica collegamento in corso…</p><p id="garminUpdated" class="note"></p><p class="note">Vengono visualizzati soltanto dati reali importati da Garmin.</p></div>
+    <section id="home" class="page active rp-sport-home">
+      <section class="rp-elite-hero" aria-label="Panoramica sportiva">
+        <div class="rp-elite-top"><span class="rp-elite-kicker">RUNNER PULSE <span class="rp-elite-dot">●</span> PERFORMANCE</span><span class="rp-elite-live">IL TUO SPORT</span></div>
+        <div class="rp-elite-main"><div class="rp-elite-copy"><h1>Corri forte.<br><em>Vai oltre.</em></h1><p>Ogni corsa racconta i tuoi progressi.</p></div><div class="rp-elite-watch"><span class="rp-watch-caption">GARMIN CONNECT</span><button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Stato sincronizzazione Garmin" title="Stato sincronizzazione Garmin">
+      <svg class="rp-watch" viewBox="0 0 58 82" aria-hidden="true"><defs><linearGradient id="watchframe" x1="0" x2="1"><stop stop-color="#242b31"/><stop offset=".5" stop-color="#53595e"/><stop offset="1" stop-color="#11151b"/></linearGradient></defs><path d="M17 2h24l4 16H13zM13 64h32l-4 16H17z" fill="#171b20"/><rect x="4" y="15" width="50" height="52" rx="13" fill="url(#watchframe)"/><rect x="9" y="20" width="40" height="42" rx="9" fill="#10151a"/><rect x="54" y="33" width="3" height="13" rx="1.5" fill="#252b30"/><circle cx="33" cy="29" r="4" fill="#ff6b16"/><path d="m28 36-8 8-10 3m19-11 10 6 7-2m-18-4-3 12-9 10m9-10 12 6 7 7" stroke="#ff6b16" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg class="rp-ring-svg" viewBox="0 0 48 48" aria-hidden="true"><circle class="rp-sync-track" cx="24" cy="24" r="19"/><circle id="rp-sync-ring" class="rp-sync-ring" cx="24" cy="24" r="19"/></svg>
+    </button><strong id="rp-sync-percent" class="rp-watch-percent" aria-live="polite">—</strong><span id="rp-sync-text" class="rp-watch-sync-status" role="status">Verifica sincronizzazione…</span><span class="rp-watch-hint">Tocca per sincronizzare</span></div></div>
+        <div class="rp-elite-footer"><div><span>ALLENAMENTI REGISTRATI</span><strong id="count">0</strong></div><div class="rp-elite-sync-summary"><span>GARMIN</span><span>Storico conservato</span></div></div>
+      </section>
+      <div class="rp-section-head"><div><span class="rp-overline">PERFORMANCE</span><h2>Ultimi 7 giorni</h2></div><span class="rp-section-tag">Le tue corse</span></div>
+      <div class="rp-performance-grid"><article class="rp-performance-card rp-performance-primary"><span>CHILOMETRI PERCORSI</span><strong id="rp-week-km">—</strong><small>Negli ultimi 7 giorni</small></article><article class="rp-performance-card"><span>USCITE</span><strong id="rp-week-runs">—</strong><small>Corse registrate</small></article><article class="rp-performance-card"><span>PASSO MEDIO</span><strong id="avgPace">—</strong><small>Min/km</small></article></div>
+      <span id="distance" hidden aria-hidden="true">0</span>
+      <div class="rp-watch-actions"><button type="button" id="rp-check-new-activities" class="rp-refresh-button">↻ Controlla nuove attività</button><p id="rp-new-activities-result" role="status" class="rp-watch-result">Lo storico Garmin già salvato non viene riscaricato.</p></div>
+      <div hidden aria-hidden="true"><p id="garminStatus"></p><p id="garminUpdated"></p></div>
     </section>
     <section id="activities" class="page">
       <h1>Allenamenti</h1><p class="muted">Registra o importa i tuoi dati reali. Rimangono in questo browser.</p>
@@ -30,16 +45,21 @@
       <form id="activityForm" class="card"><label>Data<input id="date" type="date" required></label><label>Tipo<select id="kind"><option>Corsa facile</option><option>Ripetute</option><option>Tempo run</option><option>Lungo</option><option>Gara</option></select></label><label>Distanza (km)<input id="km" type="number" min=".1" step=".1" required placeholder="Es. 10.5"></label><label>Durata (minuti)<input id="minutes" type="number" min="1" step="1" required placeholder="Es. 55"></label><button type="submit">Salva allenamento</button></form>
       <div id="activityList"></div>
     </section>
-    <section id="plan" class="page"><h1>Il tuo programma</h1><p class="muted">Bozza di settimana tipo per un corridore avanzato: da adattare ai tuoi dati reali e al recupero.</p><div class="card workout"><b>Martedì · Qualità</b><p>Riscaldamento, intervalli a ritmo controllato, defaticamento.</p></div><div class="card workout"><b>Giovedì · Ritmo</b><p>Corsa a ritmo facile o medio, secondo il recupero.</p></div><div class="card workout"><b>Domenica · Lungo</b><p>Progressione prudente della distanza in base allo storico reale.</p></div><button id="calendar">Scarica settimana per il calendario (.ics)</button><p class="note">Non è ancora sincronizzato con Google Calendar: il file può essere importato manualmente.</p></section>
-    <section id="coach" class="page"><h1>Allenatore</h1><div class="card"><h2>Analisi dei tuoi allenamenti</h2><p id="coachText">Registra un allenamento per vedere il riepilogo.</p></div><div class="card"><h3>Allenatore AI</h3><p class="muted">La chat AI richiede un servizio dedicato e una chiave server privata. Non è ancora attiva in questa versione.</p></div></section>
-    <section id="settings" class="page"><h1>Impostazioni</h1><div class="card"><h3>Privacy e dati</h3><p>I tuoi allenamenti sono salvati sul dispositivo in uso, tramite memoria del browser. Non sono sincronizzati tra dispositivi.</p><button id="export">Esporta allenamenti (JSON)</button></div><div class="card"><h3>Garmin API</h3><p id="garminSettings">Collegamento non ancora configurato.</p><p class="note">Non incollare mai la chiave Garmin in questa pagina o su GitHub.</p></div></section>
+    <section id="plan" class="page"><h1>Il tuo programma</h1><div class="card"><h2>Nessun programma automatico</h2><p>Il programma di allenamento viene creato soltanto su tua richiesta. Puoi chiedere all'allenatore AI un piano personalizzato usando i dati disponibili.</p><button id="rp-request-plan" type="button">Chiedi un programma al Coach</button><p class="note">Non verrà creato né inserito alcun allenamento in calendario senza una tua richiesta.</p></div></section>
+    <section id="coach" class="page rp-coach-page" aria-label="Chat con l’allenatore Runner Pulse">
+      <div class="rp-coach-intro"><img class="rp-coach-mascot" src="/coach-robot.png" alt="Robottino allenatore con fascia arancione e calzoncini da corsa"><div class="rp-coach-intro-text"><span class="rp-coach-tag">Il tuo allenatore</span><h1>Runner Pulse</h1><span class="rp-coach-presence"><i></i> Allenatore AI</span></div></div>
+      <p id="coachText" hidden></p>
+      <div class="rp-coach-chat" id="rp-ai-history" role="log" aria-label="Conversazione con l’allenatore" aria-live="polite"></div>
+      <div class="rp-coach-composer"><form id="rp-ai-form" class="rp-coach-form"><label class="rp-sr-only" for="rp-ai-question">Scrivi al tuo allenatore</label><textarea id="rp-ai-question" rows="1" maxlength="1500" required placeholder="Scrivi al tuo allenatore…"></textarea><button id="rp-coach-quick" class="rp-coach-round rp-coach-plus" type="button" aria-label="Suggerimenti rapidi">+</button><button id="rp-coach-mic" class="rp-coach-round rp-coach-mic" type="button" aria-label="Detta un messaggio">♩</button><button id="rp-ai-send" class="rp-coach-round rp-coach-send" type="submit" aria-label="Invia messaggio">➤</button></form><p id="rp-ai-status" role="status" class="rp-coach-status"></p><div id="rp-coach-suggestions" class="rp-coach-suggestions" hidden><button type="button" data-prompt="Analizza i miei ultimi allenamenti e consigliami il prossimo.">Prossimo allenamento</button><button type="button" data-prompt="Aiutami a preparare la mezza maratona con tre allenamenti a settimana.">Mezza maratona</button></div></div>
+    </section>
+    <section id="settings" class="page rp-profile-page" aria-label="Il mio profilo"><div class="rp-profile-header"><span class="rp-profile-kicker">RUNNER PULSE</span><h1>Il mio profilo</h1><p>I tuoi dati per un allenatore che ti conosce davvero.</p></div><form id="rp-profile-form" class="rp-profile-card"><h2>Dati personali</h2><div class="rp-profile-grid"><label>Nome<input name="name" maxlength="70" autocomplete="given-name" placeholder="Il tuo nome"></label><label>Sesso<select name="sex"><option value="">Seleziona</option><option value="female">Donna</option><option value="male">Uomo</option><option value="other">Altro / preferisco non specificare</option></select></label><label>Data di nascita<input name="birthDate" type="date" max="2026-11-07"></label><label>Altezza (cm)<input name="heightCm" type="number" min="90" max="240" step="1" placeholder="cm"></label><label>Peso (kg)<input name="weightKg" type="number" min="25" max="350" step="0.1" placeholder="kg"></label><label>Livello runner<select name="level"><option value="">Seleziona</option><option value="beginner">Principiante</option><option value="intermediate">Intermedio</option><option value="advanced">Avanzato</option></select></label></div><h2>Frequenza cardiaca <small>(facoltativo)</small></h2><p class="rp-profile-help">Inserisci valori misurati, se li conosci. Il Coach non li inventerà.</p><div class="rp-profile-grid"><label>FC massima (bpm)<input name="maxHR" type="number" min="80" max="240" step="1"></label><label>FC a riposo (bpm)<input name="restHR" type="number" min="25" max="120" step="1"></label><label>FC di soglia (bpm)<input name="thresholdHR" type="number" min="70" max="230" step="1"></label></div><button class="rp-profile-save" type="submit">Salva il mio profilo</button><p id="rp-profile-status" role="status" aria-live="polite"></p><p class="rp-profile-help">Il profilo è privato, associato al tuo account Google e disponibile all'allenatore AI. Puoi modificarlo quando vuoi.</p></form></section>
   </main>
-  <nav aria-label="Navigazione"><button data-page="home" class="selected"><span>⌂</span>Home</button><button data-page="activities"><span>◷</span>Attività</button><button data-page="plan"><span>▦</span>Piano</button><button data-page="coach"><span>♡</span>Coach</button><button data-page="settings"><span>⚙</span>Altro</button></nav>
+  <nav aria-label="Navigazione"><button data-page="home" class="selected"><span>⌂</span>Home</button><button data-page="activities"><span>◷</span>Attività</button><button data-page="plan"><span>▦</span>Piano</button><button data-page="coach"><span>♡</span>Coach</button><button data-page="settings"><span>⚙</span>Profilo</button></nav>
   <div id="detailOverlay" hidden><div class="detail-panel"><button id="closeDetail" type="button" aria-label="Chiudi dettagli">✕</button><div id="detailContent"></div></div></div>
   <div id="splash"><div class="splash-content"><h1>RUNNER PULSE</h1><div class="splash-heart" aria-hidden="true">♥</div><p>Il tuo cuore. Il tuo ritmo.</p><button id="enterApp" type="button">Entra in Runner Pulse</button></div></div>
   <script src="/app.js"></script>
+  <script src="/dashboard.js" defer></script>
   <script>
-  // Sovrascrive solo il comportamento dello splash, senza modificare app.js.
   (() => {
     const splash = document.getElementById('splash');
     const enter = document.getElementById('enterApp');
@@ -78,7 +98,6 @@
           thump(t, 165, 0.62);
           thump(t + 0.22, 130, 0.42);
         };
-        // Il contesto audio viene attivato direttamente dal tocco.
         void ctx.resume().then(() => {
           beat();
           const timer = setInterval(beat, 1050);
@@ -95,5 +114,7 @@
   })();
   </script>
   <script type="module" src="/login.js"></script>
+  <script type="module" src="/coach-memory.js"></script>
+  <script type="module" src="/runner-profile.js"></script>
 </body>
 </html>
