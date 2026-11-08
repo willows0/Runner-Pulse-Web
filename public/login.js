@@ -438,6 +438,27 @@ function renderSplits(container, splits) {
   });
   scroll.append(table); section.append(scroll); container.append(section);
 }
+// Zone FC personali: percentuali calcolate soltanto quando esistono campioni reali Garmin.
+// Le zone non cambiano automaticamente con il passo: cambiano quando il profilo viene aggiornato.
+const rpZoneColors = ['#a9b9cf','#3c9dff','#1fbd76','#ffb84d','#f56b35'];
+function rpAge(birthDate){if(!/^\d{4}-\d{2}-\d{2}$/.test(birthDate||''))return null;const born=new Date(birthDate+'T12:00:00');if(!Number.isFinite(born.getTime()))return null;const now=new Date();let age=now.getFullYear()-born.getFullYear();if(now.getMonth()<born.getMonth()||(now.getMonth()===born.getMonth()&&now.getDate()<born.getDate()))age--;return age>=12&&age<=100?age:null;}
+function rpHrZones(profile){const age=rpAge(profile?.birthDate);const measured=numeric(profile?.maxHR);const rest=numeric(profile?.restHR);let max=measured>=100&&measured<=240?measured:null;let method='FC massima misurata dal profilo';if(!max&&age!==null){max=Math.round(208-.7*age);method='FC massima stimata dall’età (208 − 0,7 × età)';}if(!max)return null;const useReserve=rest>=25&&rest<max-20;const bounds=[.5,.6,.7,.8,.9,1].map(p=>Math.round(useReserve?rest+(max-rest)*p:max*p));return {bounds,method:method+(useReserve?' · riserva cardiaca (Karvonen)':' · percentuale FC massima'),max,rest:useReserve?rest:null};}
+function rpZoneIndex(hr,z){if(!Number.isFinite(hr)||hr<30||hr>240)return -1;const b=z.bounds;return hr<b[1]?0:hr<b[2]?1:hr<b[3]?2:hr<b[4]?3:4;}
+function rpZoneLabel(i,z){const b=z.bounds;return i===0?`< ${b[1]} bpm`:i===4?`≥ ${b[4]} bpm`:`${b[i]}–${b[i+1]-1} bpm`;}
+function rpZoneCard(parent,heart,rows,profile){const section=document.createElement('section');section.className='rp-hr-zones rp-chart';const h=document.createElement('h4');h.textContent='Tempo nelle zone di intensità';section.append(h);const z=rpHrZones(profile);const note=document.createElement('p');note.className='rp-hint';if(!z){note.textContent='Compila data di nascita oppure FC massima nel Profilo per definire le zone cardiache.';section.append(note);parent.append(section);return;}
+ note.textContent=z.method+'. Le soglie cambiano quando aggiorni i valori misurati nel Profilo.';section.append(note);
+ if(!heart||heart.length<2){const p=document.createElement('p');p.className='rp-hint';p.textContent='Dati FC istantanei Garmin non disponibili: impossibile calcolare il tempo nelle zone senza inventare valori.';section.append(p);parent.append(section);return;}
+ // I campioni possono essere irregolari: non equipariamo il numero di campioni ai secondi.
+ const timeNames=['elapsedtime','elapsedtimems','timestamp','time','timerseconds','elapsedseconds','elapsedtimeinseconds'];let times=null;
+ for(const key of timeNames){const candidate=rows.map(r=>numeric(r[key]));if(candidate.filter(Number.isFinite).length===rows.length&&candidate.length===heart.length&&candidate.every((v,i)=>i===0||v>=candidate[i-1])){times=candidate;break;}}
+ let counts=[0,0,0,0,0],total=0,weighted=false;
+ if(times){const deltas=times.slice(1).map((v,i)=>v-times[i]);const positive=deltas.filter(v=>v>0);const med=positive.length?positive.slice().sort((a,b)=>a-b)[Math.floor(positive.length/2)]:0;const scale=med>1000?1000:1;for(let i=0;i<heart.length-1;i++){const delta=(times[i+1]-times[i])/scale;if(!(delta>0&&delta<=120))continue;const zone=rpZoneIndex(heart[i],z);if(zone<0)continue;counts[zone]+=delta;total+=delta;}weighted=total>0;}
+ if(!weighted){for(const hr of heart){const zone=rpZoneIndex(hr,z);if(zone>=0){counts[zone]++;total++;}}}
+ if(!total){section.append('Campioni FC validi insufficienti.');parent.append(section);return;}
+ const sub=document.createElement('p');sub.className='rp-hint';sub.textContent=weighted?'Durate calcolate dai campioni FC con intervalli temporali validi.':'Distribuzione dei campioni FC (non durata): Garmin non ha fornito tempi affidabili per ogni campione.';section.append(sub);
+ const names=['Riscaldamento','Facile','Aerobico','Soglia','Massima'];for(let i=4;i>=0;i--){const pct=counts[i]/total*100;const row=document.createElement('div');row.className='rp-hr-zone';const label=document.createElement('div');label.className='rp-hr-zone-label';const title=document.createElement('strong');title.textContent=`Zona ${i+1} · ${names[i]}`;const range=document.createElement('span');range.textContent=rpZoneLabel(i,z);label.append(title,range);const line=document.createElement('div');line.className='rp-hr-zone-line';const track=document.createElement('div');track.className='rp-hr-zone-track';const fill=document.createElement('div');fill.className='rp-hr-zone-fill';fill.style.width=pct.toFixed(2)+'%';fill.style.background=rpZoneColors[i];track.append(fill);const val=document.createElement('span');val.className='rp-hr-zone-value';const secs=Math.round(counts[i]);val.textContent=(weighted?`${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}`:`${Math.round(counts[i])} camp.`)+` · ${Math.round(pct)}%`;line.append(track,val);row.append(label,line);section.append(row);}
+ parent.append(section);
+}
 let detailRequest = 0;
 async function loadDetailForActivity(activity) {
   const content = document.getElementById('detailContent');
@@ -464,6 +485,11 @@ async function loadDetailForActivity(activity) {
     drawSeries(panel, '🏔️ Altitudine', altitude, v => v, ' m');
     drawSeries(panel, '👟 Cadenza', cadence, v => v, ' spm');
     renderSplits(panel, data.splits);
+    // Il profilo resta su Firebase; non salvare dati sanitari in localStorage.
+    let profile = null;
+    try { const saved = await authorizedPost('/api/coach/chat', {action:'profile-get'}); profile=saved.profile||null; }
+    catch (_) { /* Le zone saranno mostrate come non configurate. */ }
+    if(request===detailRequest && !document.getElementById('detailOverlay')?.hidden) rpZoneCard(panel,heart,rows,profile);
   } catch (err) {
     if (request !== detailRequest) return;
     panel.replaceChildren();

@@ -294,3 +294,15 @@ header.rp-premium-header.rp-global-banner{
 
 /* Profilo Runner Pulse: coerente con la Home */
 .rp-profile-page{padding-bottom:110px!important}.rp-profile-header,.rp-profile-card{background:linear-gradient(145deg,#122640,#203f60)!important;border:1px solid #55718b!important;border-radius:25px!important;color:#fff!important;box-shadow:0 12px 30px #102a4520!important;padding:24px!important;margin:16px 0!important}.rp-profile-header h1{color:#fff!important;font-size:30px!important;margin:8px 0!important}.rp-profile-header p,.rp-profile-help{color:#c8d8e7!important}.rp-profile-kicker{font-size:12px;letter-spacing:2px;color:#ff8b21;font-weight:800}.rp-profile-card h2{color:#ff922d!important;font-size:19px;margin:12px 0 18px}.rp-profile-card h2 small{color:#d0deeb;font-size:12px;font-weight:400}.rp-profile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.rp-profile-grid label{color:#e6eef7!important;font-size:13px;font-weight:700;display:flex;flex-direction:column;gap:7px;min-width:0}.rp-profile-grid input,.rp-profile-grid select{width:100%!important;min-width:0!important;box-sizing:border-box!important;background:#f5f8fd!important;color:#142940!important;border:1px solid #9ab0c8!important;border-radius:13px!important;padding:12px 9px!important;font-size:16px!important;min-height:47px!important}.rp-profile-save{width:100%;background:#fa7906!important;color:white!important;border:0!important;border-radius:15px!important;padding:15px!important;margin-top:24px;font-size:17px;font-weight:800}.rp-profile-card #rp-profile-status{min-height:24px;color:#fff!important}.rp-profile-help{font-size:13px;line-height:1.5}@media(max-width:390px){.rp-profile-grid{grid-template-columns:1fr}}
+
+/* Zone FC nei dettagli: palette della Home */
+#detailOverlay .rp-hr-zones{background:linear-gradient(135deg,#142840,#203c5c)!important;color:#f7fbff!important;border:1px solid #38516c;border-radius:20px;padding:18px;margin-top:18px}
+#detailOverlay .rp-hr-zones h4{color:#ffad65!important;font-size:19px;margin:0 0 10px}
+#detailOverlay .rp-hr-zone{margin:17px 0}
+#detailOverlay .rp-hr-zone-label{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:8px}
+#detailOverlay .rp-hr-zone-label strong{color:#fff!important}
+#detailOverlay .rp-hr-zone-label span{color:#c0d0e0}
+#detailOverlay .rp-hr-zone-line{display:flex;align-items:center;gap:10px}
+#detailOverlay .rp-hr-zone-track{flex:1;min-width:0;height:12px;border-radius:12px;background:#3b5067;overflow:hidden}
+#detailOverlay .rp-hr-zone-fill{height:100%;border-radius:12px}
+#detailOverlay .rp-hr-zone-value{min-width:95px;text-align:right;color:#fff;font-size:12px;white-space:nowrap}
