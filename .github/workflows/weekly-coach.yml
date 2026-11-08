@@ -6,6 +6,12 @@ name: Runner Pulse - Resoconto Coach domenicale
     - cron: '0 18 * * 0'
     - cron: '0 19 * * 0'
   workflow_dispatch:
+    inputs:
+      test_report:
+        description: 'Genera e invia un resoconto di prova adesso'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -17,6 +23,7 @@ jobs:
     steps:
       - name: Richiedi resoconto settimanale al server
         env:
+          RUNNER_PULSE_TEST: ${{ inputs.test_report || 'false' }}
           RUNNER_PULSE_URL: ${{ secrets.RUNNER_PULSE_URL }}
           RUNNER_PULSE_CRON_SECRET: ${{ secrets.RUNNER_PULSE_CRON_SECRET }}
         shell: bash
@@ -27,10 +34,14 @@ jobs:
             exit 1
           fi
           # Il server accetta solo domenica alle 20:00 Europe/Rome e blocca i duplicati.
+          extra_header=()
+          if [[ "$RUNNER_PULSE_TEST" == 'true' ]]; then
+            extra_header=(-H 'x-runner-pulse-test: weekly-report-test')
+          fi
           status=$(curl --silent --show-error --location --retry 2 --retry-delay 10 \
             --connect-timeout 20 --max-time 240 \
             -o /tmp/runner-pulse-weekly-response.json -w '%{http_code}' \
-            -X POST -H "x-cron-secret: $RUNNER_PULSE_CRON_SECRET" \
+            -X POST -H "x-cron-secret: $RUNNER_PULSE_CRON_SECRET" "${extra_header[@]}" \
             "${RUNNER_PULSE_URL%/}/api/push/weekly")
           echo "Risposta HTTP: $status"
           cat /tmp/runner-pulse-weekly-response.json
