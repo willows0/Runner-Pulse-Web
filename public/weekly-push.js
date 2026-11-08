@@ -32,7 +32,7 @@ if(button)button.addEventListener('click',async()=>{
 });
 function openWeeklyCoach(){
  if(new URLSearchParams(location.search).get('weeklyCoach')!=='1')return;
- const show=()=>{const coach=document.querySelector('nav button[data-page="coach"]');if(!coach)return false;coach.click();const question=document.getElementById('rp-ai-question');if(question&&!question.value.trim())question.value='Prepara il resoconto della mia ultima settimana di allenamenti utilizzando soltanto i dati Garmin e gli allenamenti realmente registrati. Analizza carico, progressi, recupero e suggerisci la prossima settimana; indica i dati mancanti.';history.replaceState(null,'',location.pathname);return true;};
+ const show=()=>{const coach=document.querySelector('nav button[data-page="coach"]');if(!coach)return false;coach.click();history.replaceState(null,'',location.pathname);return true;};
  if(!show()){window.addEventListener('runnerpulse:auth-user',()=>setTimeout(show,250),{once:true});}
 }
 openWeeklyCoach();
