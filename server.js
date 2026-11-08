@@ -7,7 +7,7 @@ import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
-import { handleCoachAI } from './coach-api.js';
+import { handleCoachAI, generateWeeklyCoachReport } from './coach-api.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -366,12 +366,15 @@ async function weeklyPushRoute(req,res,pathname){
    const run=db.collection('runnerPulsePush').doc(owner.uid).collection('weeklyRuns').doc(week);
    const shouldSend=await db.runTransaction(async tx=>{const d=await tx.get(run);if(d.exists)return false;tx.create(run,{createdAt:new Date(),status:'started'});return true;});
    if(!shouldSend)return json(res,200,{success:true,alreadySent:true});
+   // Prima si genera e salva il resoconto; soltanto dopo si notifica il telefono.
+   const report=await generateWeeklyCoachReport(owner.uid,week);
+   await run.set({status:'report_ready',reportId:report.messageId,activitiesCount:report.activitiesCount},{merge:true});
    const snap=await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').where('enabled','==',true).get();
    const tokens=snap.docs.map(d=>d.data().token).filter(Boolean);
    let delivered=0,failed=0;
    for(let i=0;i<tokens.length;i+=500){
     const batch=tokens.slice(i,i+500);
-    const result=await getMessaging().sendEachForMulticast({tokens:batch,data:{title:'Runner Pulse · Coach AI',body:'🤖 Il tuo resoconto settimanale ti aspetta. Tocca per analizzare gli allenamenti Garmin.',tag:'runnerpulse-weekly',url:'/index.html?weeklyCoach=1'},webpush:{headers:{Urgency:'high',TTL:'86400'}}});
+    const result=await getMessaging().sendEachForMulticast({tokens:batch,data:{title:'Runner Pulse · Coach AI',body:'🤖 Il tuo resoconto settimanale è pronto! Tocca per leggerlo nella chat Coach.',tag:'runnerpulse-weekly',url:'/index.html?weeklyCoach=1'},webpush:{headers:{Urgency:'high',TTL:'86400'}}});
     delivered+=result.successCount;failed+=result.failureCount;
     for(let j=0;j<result.responses.length;j++)if(['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(result.responses[j].error?.code)){
       const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(batch[j]).digest('hex');await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').doc(id).delete();
@@ -379,7 +382,7 @@ async function weeklyPushRoute(req,res,pathname){
    }
    await run.set({status:'finished',delivered,failed,completedAt:new Date()},{merge:true});
    return json(res,200,{success:true,delivered,failed});
-  }catch(error){console.error('Weekly push:',error.message);return json(res,500,{success:false,message:'Invio push non riuscito'});}
+  }catch(error){console.error('Weekly push:',error.message);try{const owner=await getAuth().getUserByEmail(OWNER_EMAIL);const db=getFirestore();const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const date=k=>parts.find(p=>p.type===k)?.value;await db.collection('runnerPulsePush').doc(owner.uid).collection('weeklyRuns').doc(`${date('year')}-${date('month')}-${date('day')}`).delete();}catch(e){console.error('Weekly retry cleanup:',e.message);}return json(res,500,{success:false,message:'Generazione o invio del report non riusciti'});}
  }
 }
 
