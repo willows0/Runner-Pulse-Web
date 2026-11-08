@@ -35,3 +35,19 @@ function openWeeklyCoach(){
  if(!show()){window.addEventListener('runnerpulse:auth-user',()=>setTimeout(show,250),{once:true});}
 }
 openWeeklyCoach();
+
+// Prova FCM su richiesta esplicita dell'utente, con controllo server proprietario e limite di frequenza.
+const testButton=document.getElementById('rp-test-weekly-push');
+if(testButton)testButton.addEventListener('click',async()=>{
+ testButton.disabled=true;
+ try{
+  const user=getAuth(app).currentUser;
+  if(!user)throw new Error('Accedi con Google prima di eseguire il test.');
+  const idToken=await user.getIdToken();
+  const response=await fetch('/api/push/test',{method:'POST',headers:{Authorization:'Bearer '+idToken}});
+  const result=await response.json();
+  say(result.message||'Nessuna risposta dal server.');
+  if(!response.ok||!result.success)return;
+ }catch(error){say('Errore nel test: '+(error.message||'riprova'));}
+ finally{testButton.disabled=false;}
+});
