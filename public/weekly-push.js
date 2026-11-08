@@ -16,7 +16,8 @@ if(button)button.addEventListener('click',async()=>{
   if(Notification.permission==='denied')throw new Error('Notifiche bloccate: abilita le notifiche di Runner Pulse nelle impostazioni di Chrome.');
   const permission=await Notification.requestPermission();
   if(permission!=='granted')throw new Error('Devi consentire le notifiche per attivarle.');
-  const registration=await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+  const registration=await navigator.serviceWorker.register('/firebase-messaging-sw.js',{updateViaCache:'none'});
+  await registration.update();
   const vapidKey=window.RUNNER_PULSE_VAPID_KEY;
   if(!vapidKey)throw new Error('Chiave pubblica Web Push non configurata.');
   const token=await getToken(getMessaging(app),{vapidKey,serviceWorkerRegistration:registration});
