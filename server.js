@@ -320,6 +320,39 @@ async function weeklyPushRoute(req,res,pathname){
    return json(res,200,{success:true});
   }catch(error){console.error('Push subscribe:',error.message);return json(res,500,{success:false,message:'Registrazione notifica non riuscita'});}
  }
+ if(pathname==='/api/push/test'){
+  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso riservato al proprietario'});
+  try{
+   const owner=await getAuth().getUserByEmail(OWNER_EMAIL);
+   const db=getFirestore();const root=db.collection('runnerPulsePush').doc(owner.uid);
+   const snap=await root.collection('devices').where('enabled','==',true).get();
+   const tokens=[...new Set(snap.docs.map(d=>d.data().token).filter(Boolean))];
+   if(!tokens.length)return json(res,409,{success:false,message:'Nessun telefono registrato. Premi prima Attiva notifiche Coach.'});
+   const throttle=root.collection('settings').doc('testThrottle');
+   const allowed=await db.runTransaction(async tx=>{
+    const doc=await tx.get(throttle);
+    const last=doc.data()?.at?.toMillis?.()||0;
+    if(Date.now()-last<60000)return false;
+    tx.set(throttle,{at:new Date()});return true;
+   });
+   if(!allowed)return json(res,429,{success:false,message:'Attendi un minuto prima di ripetere il test.'});
+   let delivered=0,failed=0;
+   for(let i=0;i<tokens.length;i+=500){
+    const batch=tokens.slice(i,i+500);
+    const result=await getMessaging().sendEachForMulticast({
+     tokens:batch,
+     notification:{title:'Runner Pulse · Coach AI',body:'🤖 Notifica di prova! Le notifiche del tuo allenatore sono collegate.'},
+     webpush:{notification:{icon:'/coach-notification.png',badge:'/coach-notification.png',tag:'runnerpulse-push-test'},fcmOptions:{link:'/index.html?weeklyCoach=1'}}
+    });
+    delivered+=result.successCount;failed+=result.failureCount;
+    for(let j=0;j<result.responses.length;j++)if(['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(result.responses[j].error?.code)){
+     const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(batch[j]).digest('hex');await root.collection('devices').doc(id).delete();
+    }
+   }
+   return json(res,200,{success:delivered>0,delivered,failed,message:delivered>0?'Firebase ha accettato '+delivered+' invio/i. Controlla le notifiche Android.':'Firebase non ha accettato la notifica. Riattiva le notifiche Coach.'});
+  }catch(error){console.error('Push test:',error.code||error.message);return json(res,500,{success:false,message:'Test non riuscito. Controlla i log di Render.'});}
+ }
  if(pathname==='/api/push/weekly'){
   if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
   const secret=process.env.RUNNER_PULSE_CRON_SECRET;
