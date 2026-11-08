@@ -507,10 +507,12 @@ function rpZoneCard(parent,heart,rows,profile){const section=document.createElem
 }
 let detailRequest = 0;
 async function loadDetailForActivity(activity) {
-  const content = document.getElementById('detailContent');
-  if (!content) return;
-  content.querySelector('.rp-detail-charts')?.remove();
-  if (activity?.source !== 'garmin' || !/^\d{1,20}$/.test(String(activity.garminId || ''))) return;
+  const content = document.getElementById('rp-detail-charts');
+  const lapContent = document.getElementById('rp-detail-laps');
+  if (!content || !lapContent) return;
+  content.replaceChildren();
+  lapContent.replaceChildren();
+  if (activity?.source !== 'garmin' || !/^\d{1,20}$/.test(String(activity.garminId || ''))) { content.textContent='Grafici non disponibili per questo allenamento.';lapContent.textContent='Lap non disponibili per questo allenamento.';return; }
   const request = ++detailRequest;
   const panel = document.createElement('div'); panel.className = 'rp-detail-charts';
   panel.innerHTML = '<h3>Grafici</h3><p class="rp-hint" role="status">Caricamento dei dati dettagliati…</p>';
@@ -525,13 +527,15 @@ async function loadDetailForActivity(activity) {
     const speed = findSeries(rows, ['speed', 'enhancedspeed', 'velocity', 'directspeed']);
     const altitude = findSeries(rows, ['elevation', 'altitude', 'enhancedaltitude', 'directelevation']);
     const cadence = findSeries(rows, ['directruncadence', 'runcadence', 'cadence', 'runningcadence', 'directcadence']);
-    // Il grafico FC viene disegnato dopo il caricamento del profilo, per usare i colori delle zone.
-    // Non disegnare prima una linea arancione che nasconde un eventuale errore.
+    // Mostra SEMPRE subito il grafico FC: il profilo e i colori sono opzionali.
+    const heartHolder = document.createElement('div');
+    panel.append(heartHolder);
+    drawSeries(heartHolder, '❤️ Frequenza cardiaca', heart, v => v, ' bpm');
     // Garmin activity detail normalmente esprime speed in m/s; non stimiamo dati mancanti.
     drawSeries(panel, '📈 Passo', speed, v => v > 0 ? 1000 / v / 60 : NaN, ' min/km');
     drawSeries(panel, '🏔️ Altitudine', altitude, v => v, ' m');
     drawSeries(panel, '👟 Cadenza', cadence, v => v, ' spm');
-    renderSplits(panel, data.splits);
+    renderSplits(lapContent, data.splits);
     // Recupera il profilo salvato, anche se non sono disponibili tutti i campi.
     let profile = null;
     let profileError = false;
@@ -540,7 +544,13 @@ async function loadDetailForActivity(activity) {
       profile = saved?.profile || null;
     } catch (_) { profileError = true; }
     if(request===detailRequest && !document.getElementById('detailOverlay')?.hidden) {
-      drawSeries(panel, '❤️ Frequenza cardiaca', heart, v => v, ' bpm', profile);
+      // Sostituisci il grafico neutro soltanto quando le zone sono disponibili.
+      // Se il profilo non si carica, il grafico originale resta visibile.
+      if (heart && rpHrZones(profile)) {
+        const colored = document.createElement('div');
+        drawSeries(colored, '❤️ Frequenza cardiaca', heart, v => v, ' bpm', profile);
+        if (colored.firstElementChild) heartHolder.replaceChildren(colored.firstElementChild);
+      }
       if (!rpHrZones(profile)) {
         const note=document.createElement('p'); note.className='rp-hint';
         note.textContent=profileError
@@ -557,6 +567,7 @@ async function loadDetailForActivity(activity) {
     const p = document.createElement('p'); p.className = 'rp-hint';
     p.textContent = 'Dati dettagliati non disponibili: ' + (err.message || String(err));
     panel.append(h, p);
+    const lapMessage=document.createElement('p');lapMessage.className='rp-hint';lapMessage.textContent='Lap non disponibili: impossibile caricare i dettagli Garmin.';lapContent.replaceChildren(lapMessage);
   }
 }
 // I pulsanti vengono ricreati da app.js. Leggiamo la lista nell'ordine corrente del DOM.

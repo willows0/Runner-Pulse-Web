@@ -326,3 +326,23 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 #home .rp-welcome-message { display:block; width:100%; box-sizing:border-box; text-align:center !important; color:#152941 !important; font-size:20px !important; font-weight:750 !important; line-height:1.4; margin:18px auto 18px !important; padding:0 12px; }
 #home .rp-welcome-message strong { color:#ed6d0b !important; }
 @media(max-width:370px){body > header.rp-global-banner .rp-welcome-user{width:38px !important;height:38px !important;left:10px}body > header.rp-global-banner .rp-coach-brand{margin-left:32px;font-size:23px !important}}
+
+/* Dettaglio allenamento: testata e tre schede coerenti con Runner Pulse */
+#detailOverlay{padding:0 0 26px!important}
+#detailOverlay .detail-panel{max-width:650px;padding:0 14px 45px!important}
+#detailOverlay .rp-detail-header{margin:0 -14px 14px;padding:18px 20px 19px;background:linear-gradient(125deg,#102039,#203c5c);color:#fff;border-bottom:5px solid #ff7900;border-radius:0 0 24px 24px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px}
+#detailOverlay .rp-detail-brand{font-size:23px;color:#fff;white-space:nowrap}
+#detailOverlay .rp-detail-brand>strong{font-style:italic}
+#detailOverlay .rp-detail-brand strong span{color:#ff7900}
+#detailOverlay .rp-detail-header-title{font-size:13px;color:#c5d5e7}
+#detailOverlay #closeDetail{position:sticky;top:8px;z-index:5;margin:10px 0 6px auto!important}
+#detailOverlay .rp-detail-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:10px 0 22px;padding:5px;background:#142840;border-radius:16px}
+#detailOverlay .rp-detail-tabs button{min-width:0;border:0;border-radius:12px;background:transparent;color:#d0deed;padding:12px 3px;font-size:14px;font-weight:750;cursor:pointer}
+#detailOverlay .rp-detail-tabs button[aria-selected=true]{background:#ff7900;color:#fff;box-shadow:0 2px 10px #0002}
+#detailOverlay .rp-detail-pane[hidden]{display:none!important}
+#detailOverlay #rp-detail-charts .rp-detail-charts{margin:0 0 16px}
+#detailOverlay #rp-detail-laps>.rp-chart{background:linear-gradient(135deg,#142840,#203c5c)!important;color:#fff;border:1px solid #38516c;border-radius:20px;padding:18px}
+#detailOverlay #rp-detail-laps h4{color:#ffad65!important;font-size:20px}
+#detailOverlay #rp-detail-laps table{width:100%;border-collapse:collapse;color:#fff}
+#detailOverlay #rp-detail-laps th,#detailOverlay #rp-detail-laps td{border-bottom:1px solid #48617b;padding:9px 6px;text-align:left}
+#detailOverlay #rp-detail-laps th{color:#ffad65}
