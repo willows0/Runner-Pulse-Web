@@ -317,3 +317,12 @@ header.rp-premium-header.rp-global-banner{
 .rp-profile-logout{width:100%;max-width:480px;border:1px solid #fd8a35;border-radius:15px;background:linear-gradient(135deg,#152941,#233c5c);color:#fff;padding:15px 18px;font-size:16px;font-weight:750;cursor:pointer}
 .rp-profile-logout:disabled{opacity:.6}
 #rp-logout-status{color:#e8f1fc;font-size:13px}
+
+/* Avatar Google piccolo a sinistra del logo, saluto leggibile e centrato */
+body > header.rp-global-banner { gap:12px !important; padding-left:18px !important; padding-right:18px !important; }
+body > header.rp-global-banner .rp-welcome-user { position:absolute; left:16px; top:50%; transform:translateY(-58%); margin:0 !important; width:43px !important; height:43px !important; padding:2px !important; flex-shrink:0; box-shadow:0 2px 8px #0004; }
+body > header.rp-global-banner .rp-welcome-user img,body > header.rp-global-banner .rp-welcome-user span { font-size:18px; }
+body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
+#home .rp-welcome-message { display:block; width:100%; box-sizing:border-box; text-align:center !important; color:#152941 !important; font-size:20px !important; font-weight:750 !important; line-height:1.4; margin:18px auto 18px !important; padding:0 12px; }
+#home .rp-welcome-message strong { color:#ed6d0b !important; }
+@media(max-width:370px){body > header.rp-global-banner .rp-welcome-user{width:38px !important;height:38px !important;left:10px}body > header.rp-global-banner .rp-coach-brand{margin-left:32px;font-size:23px !important}}
