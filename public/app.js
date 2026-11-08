@@ -27,8 +27,16 @@ const fmt=n=>Number(n).toLocaleString('it-IT',{maximumFractionDigits:2});
 const pace=(km,min)=>{if(!(km>0&&min>0))return '—';const s=Math.round(min/km*60);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} min/km`;};
 const save=()=>{if(!key)return;localStorage.setItem(key,JSON.stringify(entries));render();window.dispatchEvent(new CustomEvent('runnerpulse:activities-changed'));};
 document.querySelectorAll('nav button').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===btn.dataset.page));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('selected',b===btn));window.scrollTo(0,0);});
+const manualModal=$('rp-manual-modal');
+const openManual=$('rp-open-manual');
+const closeManual=()=>{manualModal.hidden=true;document.body.classList.remove('rp-manual-modal-open');openManual.focus();};
+openManual.addEventListener('click',()=>{manualModal.hidden=false;document.body.classList.add('rp-manual-modal-open');$('rp-manual-message').textContent='';$('date').focus();});
+$('rp-close-manual').addEventListener('click',closeManual);
+$('rp-cancel-manual').addEventListener('click',closeManual);
+manualModal.querySelector('[data-manual-close]').addEventListener('click',closeManual);
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!manualModal.hidden)closeManual();});
 $('date').value=new Date().toLocaleDateString('en-CA');
-$('activityForm').onsubmit=e=>{e.preventDefault();if(!key)return;entries.unshift({id:'manual-'+Date.now(),date:$('date').value,kind:$('kind').value,km:Number($('km').value),minutes:Number($('minutes').value),source:'manual'});save();e.target.reset();$('date').value=new Date().toLocaleDateString('en-CA');};
+$('activityForm').onsubmit=e=>{e.preventDefault();if(!key){$('rp-manual-message').textContent='Accedi con Google prima di salvare un allenamento.';return;}entries.unshift({id:'manual-'+Date.now(),date:$('date').value,kind:$('kind').value,km:Number($('km').value),minutes:Number($('minutes').value),source:'manual'});save();e.target.reset();$('date').value=new Date().toLocaleDateString('en-CA');closeManual();};
 function stat(label,value){const d=document.createElement('div');d.className='detail-stat';const strong=document.createElement('strong');strong.textContent=value;const small=document.createElement('small');small.textContent=label;d.append(strong,small);return d;}
 function activityDateKey(value){
   const text=String(value||'').trim();
