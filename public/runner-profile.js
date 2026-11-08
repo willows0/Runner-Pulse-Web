@@ -1,15 +1,17 @@
 // Runner Pulse — Profilo permanente, account Google / Firebase.
+import {getApps} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 const form=document.getElementById('rp-profile-form');
 const status=document.getElementById('rp-profile-status');
-const auth=getAuth();
+const app=getApps()[0];
+const auth=app?getAuth(app):null;
 let generation=0,loaded=false,dirty=false,saving=false,timer=null;
 const fields=()=>[...form.querySelectorAll('[name]')];
 async function request(action,profile){
- const user=auth.currentUser;if(!user)throw new Error('Accedi con Google.');
+ const user=auth?.currentUser;if(!user)throw new Error('Accesso Google non ancora pronto. Ricarica la pagina e riprova.');
  const token=await user.getIdToken();
  const response=await fetch('/api/coach/chat',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({action,...(profile?{profile}:{})})});
- const data=await response.json();if(!response.ok||!data.success)throw new Error(data.message||'Errore nel salvataggio.');return data;
+ const contentType=response.headers.get('content-type')||'';if(!contentType.includes('application/json'))throw new Error('Il server non ha risposto correttamente (HTTP '+response.status+'). Verifica il deploy.');const data=await response.json();if(!response.ok||!data.success)throw new Error(data.message||'Errore nel salvataggio.');return data;
 }
 function snapshot(){return Object.fromEntries(fields().map(input=>[input.name,input.value.trim()]));}
 function fill(profile={}){for(const input of fields())input.value=profile[input.name]??'';}
@@ -19,7 +21,7 @@ if(form&&!zoneBox){zoneBox=document.createElement('div');zoneBox.id='rp-profile-
 
 function garminObservedPeak(){
  try {
-  const uid=auth.currentUser?.uid;if(!uid)return null;
+  const uid=auth?.currentUser?.uid;if(!uid)return null;
   const key='runnerPulseActivitiesV1:uid:'+uid;
   const entries=JSON.parse(localStorage.getItem(key)||'[]');
   if(!Array.isArray(entries))return null;
@@ -52,10 +54,11 @@ async function save(){if(!loaded||!dirty||saving)return;const seq=generation;con
  finally{saving=false;if(seq===generation&&dirty){clearTimeout(timer);timer=setTimeout(save,1200);}}
 }
 function schedule(){if(!loaded)return;dirty=true;showZones();clearTimeout(timer);timer=setTimeout(save,1100);}
+window.runnerPulseProfileReady=Boolean(auth&&form);
 form?.addEventListener('input',schedule);
 form?.addEventListener('change',schedule);
 form?.addEventListener('submit',event=>{event.preventDefault();if(!loaded){status.textContent='Attendi il caricamento del profilo.';return;}dirty=true;clearTimeout(timer);save();});
-onAuthStateChanged(auth,load);
+if(auth)onAuthStateChanged(auth,load);else if(status)status.textContent='Autenticazione non pronta. Aggiorna la pagina e riprova.';
 
 window.addEventListener('runnerpulse:activities-changed',showZones);
 window.addEventListener('runnerpulse:garmin-data',showZones);

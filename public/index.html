@@ -115,6 +115,18 @@
   </script>
   <script type="module" src="/login.js"></script>
   <script type="module" src="/coach-memory.js"></script>
-  <script type="module" src="/runner-profile.js"></script>
+  <!-- Blocca l'invio HTML tradizionale anche se Firebase non si carica. -->
+  <script>
+    document.addEventListener('submit', function(e) {
+      if (e.target && e.target.id === 'rp-profile-form') {
+        e.preventDefault();
+        if (!window.runnerPulseProfileReady) {
+          const st=document.getElementById('rp-profile-status');
+          if(st) st.textContent='Il modulo Profilo non è pronto. Ricarica la pagina e riprova; i dati non sono stati salvati.';
+        }
+      }
+    }, true);
+  </script>
+  <script type="module" src="/runner-profile.js?v=20261108-savefix"></script>
 </body>
 </html>
