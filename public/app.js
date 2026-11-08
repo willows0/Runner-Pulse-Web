@@ -26,7 +26,23 @@ const first=(obj,keys)=>{for(const k of keys){const v=obj?.[k];if(v!==undefined&
 const fmt=n=>Number(n).toLocaleString('it-IT',{maximumFractionDigits:2});
 const pace=(km,min)=>{if(!(km>0&&min>0))return '—';const s=Math.round(min/km*60);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} min/km`;};
 const save=()=>{if(!key)return;localStorage.setItem(key,JSON.stringify(entries));render();window.dispatchEvent(new CustomEvent('runnerpulse:activities-changed'));};
-document.querySelectorAll('nav button').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===btn.dataset.page));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('selected',b===btn));window.scrollTo(0,0);});
+// Mantiene la sezione corrente anche dopo un aggiornamento della pagina.
+// sessionStorage vale soltanto per questa scheda del browser, non cambia account o dati.
+const RP_PAGE_KEY='runnerPulseCurrentPage';
+const rpPages=new Set(['home','activities','plan','coach','settings']);
+function rpNavigate(page,{remember=true,scroll=true}={}){
+  if(!rpPages.has(page))return;
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===page));
+  document.querySelectorAll('nav button[data-page]').forEach(b=>b.classList.toggle('selected',b.dataset.page===page));
+  if(remember){try{sessionStorage.setItem(RP_PAGE_KEY,page);}catch{}}
+  if(scroll)window.scrollTo(0,0);
+}
+document.querySelectorAll('nav button[data-page]').forEach(btn=>btn.onclick=()=>rpNavigate(btn.dataset.page));
+try{
+  const remembered=sessionStorage.getItem(RP_PAGE_KEY);
+  if(rpPages.has(remembered))rpNavigate(remembered,{remember:false,scroll:false});
+}catch{}
+
 $('date').value=new Date().toLocaleDateString('en-CA');
 $('activityForm').onsubmit=e=>{e.preventDefault();if(!key)return;entries.unshift({id:'manual-'+Date.now(),date:$('date').value,kind:$('kind').value,km:Number($('km').value),minutes:Number($('minutes').value),source:'manual'});save();e.target.reset();$('date').value=new Date().toLocaleDateString('en-CA');};
 function stat(label,value){const d=document.createElement('div');d.className='detail-stat';const strong=document.createElement('strong');strong.textContent=value;const small=document.createElement('small');small.textContent=label;d.append(strong,small);return d;}
