@@ -6,6 +6,7 @@ import { inflateRawSync } from 'node:zlib';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 import { handleCoachAI } from './coach-api.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
@@ -16,7 +17,7 @@ const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-
 if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
 initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpulse' });
 
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png'};
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 function verifiedGoogleIdentity(user){return user.email_verified===true || (user.firebase?.sign_in_provider==='google.com' && user.firebase?.identities?.['google.com']?.length>0);}
@@ -302,7 +303,55 @@ async function garminVo2Check(req,res){
   }catch(error){console.warn('Verifica VO2 Garmin:',error.message);return json(res,502,{success:false,message:'Verifica Garmin non riuscita: '+error.message});}
 }
 
+
+// Notifiche settimanali: token FCM privati, cron protetto, nessun dato sanitario nel payload.
+async function weeklyPushRoute(req,res,pathname){
+ if(pathname==='/api/push/subscribe'){
+  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+  if(!match)return json(res,401,{success:false,message:'Accesso richiesto'});
+  let user;try{user=await getAuth().verifyIdToken(match[1],true);}catch{return json(res,401,{success:false,message:'Sessione non valida'});}
+  if(!verifiedGoogleIdentity(user)||user.email?.toLowerCase()!==OWNER_EMAIL)return json(res,403,{success:false,message:'Solo proprietario'});
+  try{
+   const body=await readJsonBody(req,4096);
+   if(typeof body.token!=='string'||body.token.length<50||body.token.length>3000)return json(res,400,{success:false,message:'Token push non valido'});
+   const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(body.token).digest('hex');
+   await getFirestore().collection('runnerPulsePush').doc(user.uid).collection('devices').doc(id).set({token:body.token,updatedAt:new Date(),enabled:true},{merge:true});
+   return json(res,200,{success:true});
+  }catch(error){console.error('Push subscribe:',error.message);return json(res,500,{success:false,message:'Registrazione notifica non riuscita'});}
+ }
+ if(pathname==='/api/push/weekly'){
+  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  const secret=process.env.RUNNER_PULSE_CRON_SECRET;
+  if(!secret||req.headers['x-cron-secret']!==secret)return json(res,403,{success:false,message:'Non autorizzato'});
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',weekday:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+  const get=k=>parts.find(p=>p.type===k)?.value;
+  if(get('weekday')!=='Sun'||get('hour')!=='20')return json(res,409,{success:false,message:'Invio consentito soltanto domenica alle 20:00 ora italiana'});
+  try{
+   const owner=await getAuth().getUserByEmail(OWNER_EMAIL);
+   const db=getFirestore();const week=`${get('year')}-${get('month')}-${get('day')}`;
+   const run=db.collection('runnerPulsePush').doc(owner.uid).collection('weeklyRuns').doc(week);
+   const shouldSend=await db.runTransaction(async tx=>{const d=await tx.get(run);if(d.exists)return false;tx.create(run,{createdAt:new Date(),status:'started'});return true;});
+   if(!shouldSend)return json(res,200,{success:true,alreadySent:true});
+   const snap=await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').where('enabled','==',true).get();
+   const tokens=snap.docs.map(d=>d.data().token).filter(Boolean);
+   let delivered=0,failed=0;
+   for(let i=0;i<tokens.length;i+=500){
+    const batch=tokens.slice(i,i+500);
+    const result=await getMessaging().sendEachForMulticast({tokens:batch,notification:{title:'Runner Pulse · Coach AI',body:'🤖 Il tuo resoconto settimanale ti aspetta. Tocca per analizzare gli allenamenti Garmin.'},webpush:{notification:{icon:'/coach-notification.png',badge:'/coach-notification.png',tag:'runnerpulse-weekly',renotify:true},fcmOptions:{link:'/index.html?weeklyCoach=1'}}});
+    delivered+=result.successCount;failed+=result.failureCount;
+    for(let j=0;j<result.responses.length;j++)if(['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(result.responses[j].error?.code)){
+      const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(batch[j]).digest('hex');await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').doc(id).delete();
+    }
+   }
+   await run.set({status:'finished',delivered,failed,completedAt:new Date()},{merge:true});
+   return json(res,200,{success:true,delivered,failed});
+  }catch(error){console.error('Weekly push:',error.message);return json(res,500,{success:false,message:'Invio push non riuscito'});}
+ }
+}
+
 http.createServer(async(req,res)=>{
+  if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
   if(pathname==='/api/garmin/vo2-check'){await garminVo2Check(req,res);return;}
   // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
