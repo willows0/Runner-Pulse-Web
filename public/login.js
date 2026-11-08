@@ -374,7 +374,7 @@ function findSeries(rows, names) {
   }
   return null;
 }
-function drawSeries(parent, title, values, convert = v => v, unit = '') {
+function drawSeries(parent, title, values, convert = v => v, unit = '', zoneProfile = null) {
   const card = document.createElement('div'); card.className = 'rp-chart';
   const heading = document.createElement('h4'); heading.textContent = title; card.append(heading);
   if (!values) {
@@ -396,6 +396,7 @@ function drawSeries(parent, title, values, convert = v => v, unit = '') {
     const label = svgEl('text', { x: 30, y: y + 4, 'text-anchor': 'end', 'font-size': 10, fill: '#74685e' });
     label.textContent = (hi - (hi - lo) * k / 3).toFixed(0); svg.append(label);
   }
+  const zones = zoneProfile ? rpHrZones(zoneProfile) : null;
   let segment = [];
   const flush = () => {
     if (segment.length > 1) svg.append(svgEl('polyline', {
@@ -408,7 +409,32 @@ function drawSeries(parent, title, values, convert = v => v, unit = '') {
     if (!Number.isFinite(v)) { flush(); return; }
     segment.push(`${34 + i / Math.max(1, converted.length - 1) * 298},${153 - (v - lo) / (hi - lo) * 135}`);
   });
-  flush(); card.append(svg);
+  flush();
+  if (zones) {
+    // Sovrappone segmenti colorati in base alla zona FC di ogni campione.
+    // Nessun colore di zona è assegnato a campioni mancanti o non validi.
+    const x = i => 34 + i / Math.max(1, converted.length - 1) * 298;
+    const y = v => 153 - (v - lo) / (hi - lo) * 135;
+    for (let i = 1; i < converted.length; i++) {
+      const a = converted[i - 1], b = converted[i];
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      const zi = rpZoneIndex((a + b) / 2, zones);
+      if (zi < 0) continue;
+      svg.append(svgEl('line', {x1:x(i-1),y1:y(a),x2:x(i),y2:y(b),
+        stroke:rpZoneColors[zi], 'stroke-width':3.3,'stroke-linecap':'round'}));
+    }
+    const legend = document.createElement('div'); legend.className = 'rp-hr-chart-legend';
+    ['Z1','Z2','Z3','Z4','Z5'].forEach((name,i)=>{
+      const item=document.createElement('span');item.className='rp-hr-chart-legend-item';
+      const dot=document.createElement('i');dot.style.background=rpZoneColors[i];
+      item.append(dot,document.createTextNode(name));legend.append(item);
+    });
+    card.append(legend);
+    const method=document.createElement('p');method.className='rp-hint';
+    method.textContent='Colori in base alle zone FC del Profilo · '+zones.method;
+    card.append(method);
+  }
+  card.append(svg);
   const p = document.createElement('p'); p.className = 'rp-hint';
   p.textContent = `Min ${min.toFixed(1)}${unit} · Max ${max.toFixed(1)}${unit}`;
   card.append(p); parent.append(card);
@@ -509,7 +535,15 @@ async function loadDetailForActivity(activity) {
     let profile = null;
     try { const saved = await authorizedPost('/api/coach/chat', {action:'profile-get'}); profile=saved.profile||null; }
     catch (_) { /* Le zone saranno mostrate come non configurate. */ }
-    if(request===detailRequest && !document.getElementById('detailOverlay')?.hidden) rpZoneCard(panel,heart,rows,profile);
+    if(request===detailRequest && !document.getElementById('detailOverlay')?.hidden) {
+      if (heart && profile) {
+        const previous = panel.querySelector('.rp-chart');
+        const wrapper = document.createElement('div');
+        drawSeries(wrapper, '❤️ Frequenza cardiaca', heart, v => v, ' bpm', profile);
+        if (previous && wrapper.firstElementChild) previous.replaceWith(wrapper.firstElementChild);
+      }
+      rpZoneCard(panel,heart,rows,profile);
+    }
   } catch (err) {
     if (request !== detailRequest) return;
     panel.replaceChildren();
