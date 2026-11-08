@@ -342,8 +342,8 @@ async function weeklyPushRoute(req,res,pathname){
     const batch=tokens.slice(i,i+500);
     const result=await getMessaging().sendEachForMulticast({
      tokens:batch,
-     notification:{title:'Runner Pulse · Coach AI',body:'🤖 Notifica di prova! Le notifiche del tuo allenatore sono collegate.'},
-     webpush:{notification:{icon:'/coach-notification.png',badge:'/coach-notification.png',tag:'runnerpulse-push-test'},fcmOptions:{link:'/index.html?weeklyCoach=1'}}
+     data:{title:'Runner Pulse · Coach AI',body:'🤖 Notifica di prova! Le notifiche del tuo allenatore sono collegate.',tag:'runnerpulse-push-test',url:'/index.html?weeklyCoach=1'},
+     webpush:{headers:{Urgency:'high',TTL:'3600'}}
     });
     delivered+=result.successCount;failed+=result.failureCount;
     for(let j=0;j<result.responses.length;j++)if(['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(result.responses[j].error?.code)){
@@ -371,7 +371,7 @@ async function weeklyPushRoute(req,res,pathname){
    let delivered=0,failed=0;
    for(let i=0;i<tokens.length;i+=500){
     const batch=tokens.slice(i,i+500);
-    const result=await getMessaging().sendEachForMulticast({tokens:batch,notification:{title:'Runner Pulse · Coach AI',body:'🤖 Il tuo resoconto settimanale ti aspetta. Tocca per analizzare gli allenamenti Garmin.'},webpush:{notification:{icon:'/coach-notification.png',badge:'/coach-notification.png',tag:'runnerpulse-weekly',renotify:true},fcmOptions:{link:'/index.html?weeklyCoach=1'}}});
+    const result=await getMessaging().sendEachForMulticast({tokens:batch,data:{title:'Runner Pulse · Coach AI',body:'🤖 Il tuo resoconto settimanale ti aspetta. Tocca per analizzare gli allenamenti Garmin.',tag:'runnerpulse-weekly',url:'/index.html?weeklyCoach=1'},webpush:{headers:{Urgency:'high',TTL:'86400'}}});
     delivered+=result.successCount;failed+=result.failureCount;
     for(let j=0;j<result.responses.length;j++)if(['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(result.responses[j].error?.code)){
       const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(batch[j]).digest('hex');await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').doc(id).delete();
