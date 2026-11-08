@@ -346,3 +346,19 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 #detailOverlay #rp-detail-laps table{width:100%;border-collapse:collapse;color:#fff}
 #detailOverlay #rp-detail-laps th,#detailOverlay #rp-detail-laps td{border-bottom:1px solid #48617b;padding:9px 6px;text-align:left}
 #detailOverlay #rp-detail-laps th{color:#ffad65}
+
+/* Correzione finale: fascia dettaglio uguale alla testata blu notte della Home. */
+#detailOverlay .detail-panel{padding-top:0!important}
+#detailOverlay .rp-detail-header{
+  box-sizing:border-box!important;width:calc(100% + 28px)!important;
+  margin:0 -14px 18px!important;padding:19px 16px 23px!important;
+  min-height:0!important;display:flex!important;align-items:center!important;
+  justify-content:center!important;flex-wrap:nowrap!important;
+  background:linear-gradient(120deg,#0d1b32,#182b4a)!important;
+  color:#fff!important;border:0!important;border-bottom:6px solid #ff7900!important;
+  border-radius:0 0 45% 9%!important;box-shadow:none!important;
+}
+#detailOverlay .rp-detail-header .rp-coach-brand{font-size:clamp(23px,5.5vw,30px)!important;font-weight:900!important;font-style:italic!important;letter-spacing:-.7px!important;text-align:center!important;color:#fff!important;line-height:1.2!important}
+#detailOverlay .rp-detail-header .rp-coach-brand em,#detailOverlay .rp-detail-header .rp-coach-brand-run{color:#ff850b!important}
+#detailOverlay .rp-detail-tabs button:not([aria-selected=true]){background:transparent!important;color:#d0deed!important}
+#detailOverlay .rp-detail-tabs button[aria-selected=true]{background:#ff7900!important;color:#fff!important}

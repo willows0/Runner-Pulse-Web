@@ -14,6 +14,46 @@ const OWNER_EMAIL = 'utrefiletti@gmail.com';
 const isOwner = () => auth.currentUser?.email?.toLowerCase() === OWNER_EMAIL;
 const auth = getAuth(initializeApp(firebaseConfig));
 const provider = new GoogleAuthProvider();
+// Foto Google e saluto della Home: mantenuti anche con gli aggiornamenti ai grafici.
+const rpAvatar=document.getElementById('rp-google-avatar');
+const rpFallback=document.getElementById('rp-google-avatar-fallback');
+const rpWelcomeName=document.getElementById('rp-welcome-name');
+let rpSavedName='';
+function rpRefreshWelcome(user){
+  const active=Boolean(user && googleVerifiedUser(user));
+  const name=(active ? rpSavedName || user.displayName || '' : '').trim();
+  if(rpWelcomeName)rpWelcomeName.textContent=name ? name.split(/\s+/)[0] : 'runner';
+  const photo=active ? (user.photoURL || user.providerData?.find(p=>p.providerId==='google.com')?.photoURL || '') : '';
+  if(rpAvatar){
+    if(photo && /^https:\/\//.test(photo)){
+      rpAvatar.onerror=()=>{rpAvatar.hidden=true;if(rpFallback)rpFallback.hidden=false;};
+      rpAvatar.src=photo;rpAvatar.hidden=false;
+      if(rpFallback)rpFallback.hidden=true;
+    }else{rpAvatar.hidden=true;rpAvatar.removeAttribute('src');if(rpFallback)rpFallback.hidden=false;}
+  }
+}
+async function rpLoadWelcomeProfile(user){
+  if(!user)return;
+  try{
+    const token=await user.getIdToken();
+    const response=await fetch('/api/coach/chat',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({action:'profile-get'})});
+    if(!response.ok)return;
+    const data=await response.json();
+    if(auth.currentUser?.uid!==user.uid)return;
+    rpSavedName=String(data.profile?.name || data.profile?.firstName || '').trim();
+    rpRefreshWelcome(user);
+  }catch(_){/* Il saluto Google resta disponibile anche senza risposta del profilo. */}
+}
+window.addEventListener('runnerpulse:profile-loaded',event=>{rpSavedName=String(event.detail?.name||'').trim();rpRefreshWelcome(auth.currentUser);});
+const rpProfileNameInput=document.querySelector('#rp-profile-form [name="name"]');
+rpProfileNameInput?.addEventListener('input',()=>{rpSavedName=rpProfileNameInput.value.trim();rpRefreshWelcome(auth.currentUser);});
+const rpLogout=document.getElementById('rp-profile-logout');
+rpLogout?.addEventListener('click',async()=>{
+  if(!confirm('Vuoi uscire dal tuo account Google? I dati salvati resteranno nel tuo account.'))return;
+  rpLogout.disabled=true;
+  try{await signOut(auth);}catch(e){const status=document.getElementById('rp-logout-status');if(status)status.textContent='Errore: '+(e.message||e);}
+  finally{rpLogout.disabled=false;}
+});
 provider.setCustomParameters({ prompt: 'select_account' });
 const googleVerifiedUser = u => Boolean(u && (u.emailVerified || u.providerData?.some(p => p.providerId === 'google.com' && p.email?.toLowerCase() === u.email?.toLowerCase())));
 const allowedUser = () => {
@@ -57,6 +97,9 @@ getRedirectResult(auth).catch(showError);
 onAuthStateChanged(auth, async user => {
   const allowed = Boolean(user && googleVerifiedUser(user));
   document.body.classList.toggle('rp-authenticated', allowed);
+  if(!allowed)rpSavedName='';
+  rpRefreshWelcome(allowed?user:null);
+  if(allowed)void rpLoadWelcomeProfile(user);
   if(allowed){
     document.getElementById('importGarmin')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
