@@ -1,10 +1,12 @@
 // Runner Pulse — Profilo permanente, account Google / Firebase.
-import {getApps} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import {getApps,initializeApp} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 const form=document.getElementById('rp-profile-form');
 const status=document.getElementById('rp-profile-status');
-const app=getApps()[0];
-const auth=app?getAuth(app):null;
+// Use the same Firebase project as login.js. ES modules can execute in a different order.
+const firebaseConfig={apiKey:'AIzaSyBVTj9i4545kOmvx3H78_YliE54nPSFyLg',authDomain:'runnerpulse.firebaseapp.com',projectId:'runnerpulse',storageBucket:'runnerpulse.firebasestorage.app',messagingSenderId:'602428716854',appId:'1:602428716854:web:1bd814e1ce8534fce6e597'};
+const app=getApps().find(a=>a.options.projectId===firebaseConfig.projectId)||initializeApp(firebaseConfig);
+const auth=getAuth(app);
 let generation=0,loaded=false,dirty=false,saving=false,timer=null;
 const fields=()=>[...form.querySelectorAll('[name]')];
 async function request(action,profile){
@@ -55,6 +57,7 @@ async function save(){if(!loaded||!dirty||saving)return;const seq=generation;con
 }
 function schedule(){if(!loaded)return;dirty=true;showZones();clearTimeout(timer);timer=setTimeout(save,1100);}
 window.runnerPulseProfileReady=Boolean(auth&&form);
+if(!form) console.error('Runner Pulse: profilo non trovato nella pagina');
 form?.addEventListener('input',schedule);
 form?.addEventListener('change',schedule);
 form?.addEventListener('submit',event=>{event.preventDefault();if(!loaded){status.textContent='Attendi il caricamento del profilo.';return;}dirty=true;clearTimeout(timer);save();});
