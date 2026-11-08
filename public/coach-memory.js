@@ -20,7 +20,7 @@ if(coach){
  history.parentNode.insertBefore(resetCoach,history);
 
  let version=0, busy=false;
- function scrollToLatest(){requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;});}
+ function scrollToLatest(){requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;setTimeout(()=>{history.scrollTop=history.scrollHeight;},120);});}
  // Anche quando la scheda viene riaperta, mostra la fine della conversazione.
  document.querySelectorAll('nav button[data-page="coach"]').forEach(button=>button.addEventListener('click',()=>{scrollToLatest();setTimeout(scrollToLatest,80);}));
  async function api(payload){const user=auth.currentUser;if(!user)throw new Error('Accedi con Google per parlare con il Coach.');const token=await user.getIdToken();const r=await fetch('/api/coach/chat',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.success)throw new Error(data.message||`Errore HTTP ${r.status}`);return data;}
