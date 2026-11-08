@@ -1,6 +1,6 @@
 name: Runner Pulse - Resoconto Coach domenicale
 
-on:
+"on":
   schedule:
     # 20:00 in Italia: 18 UTC in estate, 19 UTC in inverno.
     - cron: '0 18 * * 0'
