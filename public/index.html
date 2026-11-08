@@ -42,8 +42,8 @@
       <div hidden aria-hidden="true"><p id="garminStatus"></p><p id="garminUpdated"></p></div>
     </section>
     <section id="activities" class="page">
-      <h1>Allenamenti</h1><p class="muted">Registra o importa i tuoi dati reali. Rimangono in questo browser.</p>
-      <div class="card"><h3>Garmin Connect</h3><p class="muted">Importa le attività dal tuo account Garmin.</p><button id="importGarmin" type="button">Importa attività Garmin</button><p id="importResult" class="note" role="status"></p></div>
+      <h1>Allenamenti</h1><p class="muted">Consulta i tuoi allenamenti Garmin sincronizzati.</p>
+      <div hidden aria-hidden="true"><button id="importGarmin" type="button">Importa attività Garmin</button><p id="importResult" role="status"></p></div>
       <form id="activityForm" class="card"><label>Data<input id="date" type="date" required></label><label>Tipo<select id="kind"><option>Corsa facile</option><option>Ripetute</option><option>Tempo run</option><option>Lungo</option><option>Gara</option></select></label><label>Distanza (km)<input id="km" type="number" min=".1" step=".1" required placeholder="Es. 10.5"></label><label>Durata (minuti)<input id="minutes" type="number" min="1" step="1" required placeholder="Es. 55"></label><button type="submit">Salva allenamento</button></form>
       <div id="activityList"></div>
     </section>
