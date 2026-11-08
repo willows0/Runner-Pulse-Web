@@ -397,10 +397,3 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 /* Logout in fondo alla pagina Profilo */
 .rp-logout-footer{margin:28px auto 110px;padding:0 20px;max-width:560px;text-align:center}
 .rp-logout-footer .rp-profile-logout{display:block;margin:0 auto;min-height:54px}
-
-/* Coach: conversazione leggibile sopra la barra di scrittura su Android. */
-#coach.rp-coach-page{display:flex!important;flex-direction:column!important;min-height:0!important;height:calc(100dvh - 205px)!important;padding-bottom:8px!important;overflow:hidden!important}
-#coach .rp-coach-intro,#coach #coachText,#coach > button{flex:0 0 auto}
-#coach .rp-coach-chat{flex:1 1 auto!important;min-height:100px!important;height:auto!important;max-height:none!important;overflow-y:auto!important;overscroll-behavior:contain;padding-bottom:28px!important;scroll-padding-bottom:28px!important}
-#coach .rp-coach-composer{position:relative!important;bottom:auto!important;flex:0 0 auto!important;margin:8px 4px 6px!important;z-index:2!important}
-@media(max-height:700px){#coach.rp-coach-page{height:calc(100dvh - 165px)!important}#coach .rp-coach-intro{padding:8px!important}}
