@@ -397,3 +397,19 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 /* Logout in fondo alla pagina Profilo */
 .rp-logout-footer{margin:28px auto 110px;padding:0 20px;max-width:560px;text-align:center}
 .rp-logout-footer .rp-profile-logout{display:block;margin:0 auto;min-height:54px}
+
+/* Correzione isolata Coach 2026-11-08: la barra non copre piu' la chat. */
+#coach.rp-coach-page{display:flex!important;flex-direction:column!important;min-height:0!important;padding-bottom:18px!important;overflow:visible!important}
+#coach .rp-coach-chat{height:clamp(300px,48dvh,600px)!important;min-height:300px!important;max-height:600px!important;overflow-y:auto!important;overflow-x:hidden!important;flex:0 0 auto!important;scroll-padding-bottom:28px!important;padding-bottom:32px!important;box-sizing:border-box!important}
+#coach .rp-coach-composer{position:relative!important;bottom:auto!important;top:auto!important;flex-shrink:0!important;margin:10px 8px 16px!important;z-index:1!important}
+#coach .rp-coach-form textarea{max-height:120px!important;min-height:44px!important}
+#coach .rp-coach-chat .rp-chat-row:last-child{margin-bottom:10px!important}
+
+/* Coach: barra fissa sopra la navigazione; la cronologia ha spazio reale per l'ultimo messaggio. */
+#coach.rp-coach-page{padding-bottom:calc(175px + env(safe-area-inset-bottom,0px))!important;}
+#coach .rp-coach-chat{height:clamp(280px,52dvh,650px)!important;max-height:none!important;min-height:280px!important;overflow-y:auto!important;overscroll-behavior:contain!important;padding-bottom:110px!important;scroll-padding-bottom:110px!important;box-sizing:border-box!important;}
+#coach .rp-coach-chat::after{content:"";display:block;flex:0 0 85px;min-height:85px;}
+#coach .rp-coach-composer{position:fixed!important;left:50%!important;transform:translateX(-50%)!important;right:auto!important;bottom:calc(76px + env(safe-area-inset-bottom,0px))!important;width:min(calc(100% - 22px),630px)!important;box-sizing:border-box!important;margin:0!important;z-index:100!important;}
+#coach:not(.active) .rp-coach-composer{display:none!important;}
+#coach .rp-coach-form textarea{min-height:44px!important;max-height:104px!important;overflow-y:auto!important;}
+@media(max-width:390px){#coach .rp-coach-composer{width:calc(100% - 14px)!important;}}
