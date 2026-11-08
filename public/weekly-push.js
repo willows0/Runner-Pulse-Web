@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { getMessaging, getToken, isSupported } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js';
+import { getMessaging, getToken, onMessage, isSupported } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js';
 
 const config={apiKey:'AIzaSyBVTj9i4545kOmvx3H78_YliE54nPSFyLg',authDomain:'runnerpulse.firebaseapp.com',projectId:'runnerpulse',messagingSenderId:'602428716854',appId:'1:602428716854:web:1bd814e1ce8534fce6e597'};
 const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(config);
@@ -44,11 +44,35 @@ if(testButton)testButton.addEventListener('click',async()=>{
  try{
   const user=getAuth(app).currentUser;
   if(!user)throw new Error('Accedi con Google prima di eseguire il test.');
+  const reg=await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+  if(!reg || !reg.active)throw new Error('Service worker non attivo: premi Attiva notifiche Coach.');
+  if(Notification.permission!=='granted')throw new Error('Permesso notifiche non attivo.');
+  const subscription=await reg.pushManager.getSubscription();
+  if(!subscription)throw new Error('Nessuna sottoscrizione Push: premi Attiva notifiche Coach.');
+  say('Browser registrato. Invio prova a Firebase in corso…');
   const idToken=await user.getIdToken();
   const response=await fetch('/api/push/test',{method:'POST',headers:{Authorization:'Bearer '+idToken}});
   const result=await response.json();
-  say(result.message||'Nessuna risposta dal server.');
+  say((result.message||'Nessuna risposta dal server.')+' Se non compare una notifica, il messaggio non è ancora confermato come ricevuto da Chrome.');
   if(!response.ok||!result.success)return;
  }catch(error){say('Errore nel test: '+(error.message||'riprova'));}
  finally{testButton.disabled=false;}
 });
+
+// Diagnostica: messaggi in primo piano non sono mostrati automaticamente da FCM.
+if (await isSupported()) {
+ onMessage(getMessaging(app), async payload => {
+  try {
+   const data=payload.data||{};
+   const reg=await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+   if(Notification.permission==='granted' && reg){
+    await reg.showNotification(data.title||'Runner Pulse · Coach AI',{
+     body:data.body||'Messaggio ricevuto dal Coach',icon:'/coach-notification.png',
+     badge:'/coach-notification.png',tag:data.tag||'runnerpulse-foreground',
+     data:{url:data.url||'/index.html?weeklyCoach=1'}
+    });
+    say('Messaggio Firebase ricevuto da Chrome e notifica visualizzata.');
+   }else say('Messaggio Firebase ricevuto, ma notifiche o service worker non disponibili.');
+  }catch(error){say('Messaggio Firebase ricevuto, ma visualizzazione fallita: '+error.message);}
+ });
+}
