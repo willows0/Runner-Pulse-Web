@@ -7,13 +7,16 @@
   <title>Runner Pulse Web</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/login.css">
-  <link rel="stylesheet" href="/orange.css?v=detail-nav-20261108c">
+  <link rel="stylesheet" href="/orange.css?v=heart-restored-20261108">
   <style>
     /* Intestazione definitiva: prevale anche su CSS memorizzati dal browser. */
     body > header.rp-global-banner { display:flex !important; position:relative !important; top:auto !important; width:100% !important; min-height:0 !important; height:auto !important; margin:0 !important; padding:19px 16px 24px !important; align-items:center !important; justify-content:center !important; background:linear-gradient(120deg,#0d1b32,#182b4a) !important; border:0 !important; border-bottom:6px solid #ff7900 !important; border-radius:0 0 45% 9% !important; box-shadow:none !important; color:#fff !important; }
     body > header.rp-global-banner .rp-coach-brand { display:block !important; color:#fff !important; font-weight:900 !important; font-style:italic !important; font-size:clamp(23px,5.5vw,30px) !important; line-height:1.2 !important; }
     body > header.rp-global-banner .rp-coach-brand em,body > header.rp-global-banner .rp-coach-brand-run { color:#ff850b !important; }
     body > main { margin-top:0 !important; }
+    #splash:not([hidden]) { display:flex !important; }
+    #splash[hidden] { display:none !important; }
+    #enterApp:disabled { opacity:.8; cursor:default; }
   </style>
 </head>
 <body>
@@ -55,8 +58,66 @@
   </main>
   <nav aria-label="Navigazione"><button data-page="home" class="selected"><span>⌂</span>Home</button><button data-page="activities"><span>◷</span>Attività</button><button data-page="plan"><span>▦</span>Piano</button><button data-page="coach"><span>♡</span>Coach</button><button data-page="settings"><span>⚙</span>Profilo</button></nav>
   <div id="detailOverlay" hidden><div class="detail-panel"><button id="closeDetail" type="button" aria-label="Chiudi dettagli" hidden>✕</button><div id="detailContent"></div></div><nav id="rp-detail-bottom-nav" aria-label="Menu principale nel dettaglio"></nav></div>
+  <div id="splash" hidden><div class="splash-content"><div class="splash-heart" aria-hidden="true">♥</div><h1>RUNNER PULSE</h1><p>Il tuo cuore. Il tuo ritmo.</p><button id="enterApp" type="button">Entra in Runner Pulse</button></div></div>
   <script src="/app.js?v=nav-persist-20261108d"></script>
   <script src="/dashboard.js" defer></script>
+  <script>
+  (() => {
+    const splash = document.getElementById('splash');
+    const enter = document.getElementById('enterApp');
+    if (!splash || !enter) return;
+    // Mostra il cuore all'ingresso, ma non a ogni refresh nella stessa scheda.
+    const seenKey = 'runnerPulseSplashSeen';
+    try { splash.hidden = sessionStorage.getItem(seenKey) === '1'; }
+    catch { splash.hidden = false; }
+    let playing = false;
+    enter.addEventListener('click', () => {
+      if (playing) return;
+      playing = true;
+      enter.disabled = true;
+      enter.textContent = 'Ascolta il tuo cuore ♥';
+      const AudioContextType = window.AudioContext || window.webkitAudioContext;
+      let ctx;
+      try { if (AudioContextType) ctx = new AudioContextType(); } catch {}
+      if (ctx) {
+        const master = ctx.createGain();
+        master.gain.value = 0.8;
+        master.connect(ctx.destination);
+        const thump = (at, pitch, strength) => {
+          const oscillator = ctx.createOscillator();
+          const envelope = ctx.createGain();
+          oscillator.type = 'triangle';
+          oscillator.frequency.setValueAtTime(pitch, at);
+          oscillator.frequency.exponentialRampToValueAtTime(65, at + 0.16);
+          envelope.gain.setValueAtTime(0.0001, at);
+          envelope.gain.exponentialRampToValueAtTime(strength, at + 0.014);
+          envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.21);
+          oscillator.connect(envelope).connect(master);
+          oscillator.start(at);
+          oscillator.stop(at + 0.22);
+        };
+        void ctx.resume().then(() => {
+          const beat = () => {
+            if (ctx.state !== 'running') return;
+            const t = ctx.currentTime + 0.025;
+            thump(t, 165, 0.62);
+            thump(t + 0.22, 130, 0.42);
+          };
+          beat();
+          const timer = setInterval(beat, 1050);
+          setTimeout(() => { clearInterval(timer); void ctx.close().catch(() => {}); }, 3400);
+        }).catch(() => {});
+      }
+      setTimeout(() => {
+        splash.hidden = true;
+        try { sessionStorage.setItem(seenKey, '1'); } catch {}
+        enter.disabled = false;
+        enter.textContent = 'Entra in Runner Pulse';
+        playing = false;
+      }, 3700);
+    });
+  })();
+  </script>
   <script type="module" src="/login.js?v=detail-nav-20261108c"></script>
   <script type="module" src="/coach-memory.js"></script>
   <!-- Blocca l'invio HTML tradizionale anche se Firebase non si carica. -->
