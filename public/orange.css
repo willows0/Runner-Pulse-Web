@@ -306,3 +306,6 @@ header.rp-premium-header.rp-global-banner{
 #detailOverlay .rp-hr-zone-track{flex:1;min-width:0;height:12px;border-radius:12px;background:#3b5067;overflow:hidden}
 #detailOverlay .rp-hr-zone-fill{height:100%;border-radius:12px}
 #detailOverlay .rp-hr-zone-value{min-width:95px;text-align:right;color:#fff;font-size:12px;white-space:nowrap}
+
+/* Frequenza cardiaca: legenda delle cinque zone */
+.rp-hr-chart-legend{display:flex;gap:9px;flex-wrap:wrap;margin:8px 0 6px;color:#e9f2ff;font-size:12px}.rp-hr-chart-legend-item{display:inline-flex;align-items:center;gap:5px}.rp-hr-chart-legend-item i{width:10px;height:10px;border-radius:50%;display:inline-block}.rp-detail-charts .rp-chart svg text{fill:#d0deed!important}.rp-detail-charts .rp-chart svg line:not([stroke-width]){stroke:#47617d!important}
