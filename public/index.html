@@ -25,6 +25,8 @@
   </header>
   <main>
     <section id="home" class="page active rp-sport-home">
+      <div class="rp-welcome-user" aria-label="Il tuo account Google"><img id="rp-google-avatar" alt="Foto del profilo Google" hidden><span id="rp-google-avatar-fallback" aria-hidden="true">●</span></div>
+      <div class="rp-welcome-message">Benvenuto, <strong id="rp-welcome-name">runner</strong>!</div>
       <section class="rp-elite-hero" aria-label="Panoramica sportiva">
         <div class="rp-elite-top"><span class="rp-elite-kicker">RUNNER PULSE <span class="rp-elite-dot">●</span> PERFORMANCE</span><span class="rp-elite-live">IL TUO SPORT</span></div>
         <div class="rp-elite-main"><div class="rp-elite-copy"><h1>Corri forte.<br><em>Vai oltre.</em></h1><p>Ogni corsa racconta i tuoi progressi.</p></div><div class="rp-elite-watch"><span class="rp-watch-caption">GARMIN CONNECT</span><button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Stato sincronizzazione Garmin" title="Stato sincronizzazione Garmin">
@@ -113,7 +115,7 @@
     };
   })();
   </script>
-  <script type="module" src="/login.js"></script>
+  <script type="module" src="/login.js?v=welcome-20261108"></script>
   <script type="module" src="/coach-memory.js"></script>
   <!-- Blocca l'invio HTML tradizionale anche se Firebase non si carica. -->
   <script>
@@ -127,6 +129,6 @@
       }
     }, true);
   </script>
-  <script type="module" src="/runner-profile.js?v=20261108-authfix2"></script>
+  <script type="module" src="/runner-profile.js?v=welcome-20261108"></script>
 </body>
 </html>

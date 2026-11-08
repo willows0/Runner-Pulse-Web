@@ -47,11 +47,11 @@ function showZones(){
  for(let i=0;i<5;i++){const line=document.createElement('div');line.className='rp-profile-zone-line';line.textContent=`Zona ${i+1} · ${names[i]}: ${bounds[i]}–${bounds[i+1]} bpm`;zoneBox.append(line);}
 }
 async function load(user){const seq=++generation;loaded=false;dirty=false;clearTimeout(timer);fill();showZones();if(!user){status.textContent='Accedi con Google per caricare il profilo.';return;}
- status.textContent='Caricamento profilo salvato…';try{const result=await request('profile-get');if(seq!==generation)return;fill(result.profile||{});loaded=true;status.textContent='Profilo caricato. Le modifiche vengono salvate automaticamente.';showZones();}
+ status.textContent='Caricamento profilo salvato…';try{const result=await request('profile-get');if(seq!==generation)return;fill(result.profile||{});window.dispatchEvent(new CustomEvent('runnerpulse:profile-loaded',{detail:{name:result.profile?.name||''}}));loaded=true;status.textContent='Profilo caricato. Le modifiche vengono salvate automaticamente.';showZones();}
  catch(error){if(seq!==generation)return;status.textContent=error.message+' Riprova aprendo nuovamente il Profilo.';}
 }
 async function save(){if(!loaded||!dirty||saving)return;const seq=generation;const profile=snapshot();dirty=false;saving=true;status.textContent='Salvataggio su Firebase…';try{
- await request('profile-save',profile);if(seq===generation)status.textContent='Profilo salvato e disponibile al Coach.';
+ await request('profile-save',profile);window.dispatchEvent(new CustomEvent('runnerpulse:profile-loaded',{detail:{name:profile.name||''}}));if(seq===generation)status.textContent='Profilo salvato e disponibile al Coach.';
  }catch(error){if(seq===generation){dirty=true;status.textContent='Non salvato: '+error.message+' Premi “Salva il mio profilo” per riprovare.';}}
  finally{saving=false;if(seq===generation&&dirty){clearTimeout(timer);timer=setTimeout(save,1200);}}
 }

@@ -14,6 +14,32 @@ const OWNER_EMAIL = 'utrefiletti@gmail.com';
 const isOwner = () => auth.currentUser?.email?.toLowerCase() === OWNER_EMAIL;
 const auth = getAuth(initializeApp(firebaseConfig));
 const provider = new GoogleAuthProvider();
+// Profilo Google per l'intestazione; nessuna immagine inventata.
+const welcomeAvatar=document.getElementById('rp-google-avatar');
+const welcomeFallback=document.getElementById('rp-google-avatar-fallback');
+const welcomeName=document.getElementById('rp-welcome-name');
+let welcomeProfileName='';
+function updateWelcome(user){
+  const active=Boolean(user && googleVerifiedUser(user));
+  const name=(active ? welcomeProfileName || user.displayName || '' : '').trim();
+  if(welcomeName)welcomeName.textContent=name ? name.split(/\s+/)[0] : 'runner';
+  if(welcomeAvatar){
+    welcomeAvatar.hidden=true;welcomeAvatar.removeAttribute('src');
+    if(active && typeof user.photoURL==='string' && /^https:\/\//.test(user.photoURL)){welcomeAvatar.src=user.photoURL;welcomeAvatar.hidden=false;}
+  }
+  if(welcomeFallback)welcomeFallback.hidden=Boolean(active && user.photoURL && /^https:\/\//.test(user.photoURL));
+}
+window.addEventListener('runnerpulse:profile-loaded',e=>{welcomeProfileName=String(e.detail?.name||'').trim();updateWelcome(auth.currentUser);});
+const logoutButton=document.getElementById('rp-profile-logout');
+logoutButton?.addEventListener('click',async()=>{
+  if(!confirm('Vuoi uscire dal tuo account Google su Runner Pulse? I dati salvati rimarranno nel tuo account.'))return;
+  logoutButton.disabled=true;const message=document.getElementById('rp-logout-status');
+  if(message)message.textContent='Disconnessione…';
+  try{await signOut(auth);welcomeProfileName='';updateWelcome(null);if(message)message.textContent='Disconnesso.';}
+  catch(error){if(message)message.textContent='Impossibile uscire: '+(error.message||String(error));}
+  finally{logoutButton.disabled=false;}
+});
+
 provider.setCustomParameters({ prompt: 'select_account' });
 const googleVerifiedUser = u => Boolean(u && (u.emailVerified || u.providerData?.some(p => p.providerId === 'google.com' && p.email?.toLowerCase() === u.email?.toLowerCase())));
 const allowedUser = () => {
@@ -56,6 +82,8 @@ loginButton.addEventListener('click', async () => {
 getRedirectResult(auth).catch(showError);
 onAuthStateChanged(auth, async user => {
   const allowed = Boolean(user && googleVerifiedUser(user));
+  if(!allowed)welcomeProfileName='';
+  updateWelcome(allowed?user:null);
   document.body.classList.toggle('rp-authenticated', allowed);
   if(allowed){
     document.getElementById('importGarmin')?.toggleAttribute('disabled',!isOwner());
@@ -374,7 +402,7 @@ function findSeries(rows, names) {
   }
   return null;
 }
-function drawSeries(parent, title, values, convert = v => v, unit = '', zoneProfile = null) {
+function drawSeries(parent, title, values, convert = v => v, unit = '') {
   const card = document.createElement('div'); card.className = 'rp-chart';
   const heading = document.createElement('h4'); heading.textContent = title; card.append(heading);
   if (!values) {
@@ -396,7 +424,6 @@ function drawSeries(parent, title, values, convert = v => v, unit = '', zoneProf
     const label = svgEl('text', { x: 30, y: y + 4, 'text-anchor': 'end', 'font-size': 10, fill: '#74685e' });
     label.textContent = (hi - (hi - lo) * k / 3).toFixed(0); svg.append(label);
   }
-  const zones = zoneProfile ? rpHrZones(zoneProfile) : null;
   let segment = [];
   const flush = () => {
     if (segment.length > 1) svg.append(svgEl('polyline', {
@@ -409,32 +436,7 @@ function drawSeries(parent, title, values, convert = v => v, unit = '', zoneProf
     if (!Number.isFinite(v)) { flush(); return; }
     segment.push(`${34 + i / Math.max(1, converted.length - 1) * 298},${153 - (v - lo) / (hi - lo) * 135}`);
   });
-  flush();
-  if (zones) {
-    // Sovrappone segmenti colorati in base alla zona FC di ogni campione.
-    // Nessun colore di zona è assegnato a campioni mancanti o non validi.
-    const x = i => 34 + i / Math.max(1, converted.length - 1) * 298;
-    const y = v => 153 - (v - lo) / (hi - lo) * 135;
-    for (let i = 1; i < converted.length; i++) {
-      const a = converted[i - 1], b = converted[i];
-      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-      const zi = rpZoneIndex((a + b) / 2, zones);
-      if (zi < 0) continue;
-      svg.append(svgEl('line', {x1:x(i-1),y1:y(a),x2:x(i),y2:y(b),
-        stroke:rpZoneColors[zi], 'stroke-width':3.3,'stroke-linecap':'round'}));
-    }
-    const legend = document.createElement('div'); legend.className = 'rp-hr-chart-legend';
-    ['Z1','Z2','Z3','Z4','Z5'].forEach((name,i)=>{
-      const item=document.createElement('span');item.className='rp-hr-chart-legend-item';
-      const dot=document.createElement('i');dot.style.background=rpZoneColors[i];
-      item.append(dot,document.createTextNode(name));legend.append(item);
-    });
-    card.append(legend);
-    const method=document.createElement('p');method.className='rp-hint';
-    method.textContent='Colori in base alle zone FC del Profilo · '+zones.method;
-    card.append(method);
-  }
-  card.append(svg);
+  flush(); card.append(svg);
   const p = document.createElement('p'); p.className = 'rp-hint';
   p.textContent = `Min ${min.toFixed(1)}${unit} · Max ${max.toFixed(1)}${unit}`;
   card.append(p); parent.append(card);
@@ -535,15 +537,7 @@ async function loadDetailForActivity(activity) {
     let profile = null;
     try { const saved = await authorizedPost('/api/coach/chat', {action:'profile-get'}); profile=saved.profile||null; }
     catch (_) { /* Le zone saranno mostrate come non configurate. */ }
-    if(request===detailRequest && !document.getElementById('detailOverlay')?.hidden) {
-      if (heart && profile) {
-        const previous = panel.querySelector('.rp-chart');
-        const wrapper = document.createElement('div');
-        drawSeries(wrapper, '❤️ Frequenza cardiaca', heart, v => v, ' bpm', profile);
-        if (previous && wrapper.firstElementChild) previous.replaceWith(wrapper.firstElementChild);
-      }
-      rpZoneCard(panel,heart,rows,profile);
-    }
+    if(request===detailRequest && !document.getElementById('detailOverlay')?.hidden) rpZoneCard(panel,heart,rows,profile);
   } catch (err) {
     if (request !== detailRequest) return;
     panel.replaceChildren();
