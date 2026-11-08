@@ -7,7 +7,7 @@
   <title>Runner Pulse Web</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/login.css">
-  <link rel="stylesheet" href="/orange.css?v=header-fix-20261108b">
+  <link rel="stylesheet" href="/orange.css?v=detail-nav-20261108c">
   <style>
     /* Intestazione definitiva: prevale anche su CSS memorizzati dal browser. */
     body > header.rp-global-banner { display:flex !important; position:relative !important; top:auto !important; width:100% !important; min-height:0 !important; height:auto !important; margin:0 !important; padding:19px 16px 24px !important; align-items:center !important; justify-content:center !important; background:linear-gradient(120deg,#0d1b32,#182b4a) !important; border:0 !important; border-bottom:6px solid #ff7900 !important; border-radius:0 0 45% 9% !important; box-shadow:none !important; color:#fff !important; }
@@ -57,9 +57,9 @@
     <section id="settings" class="page rp-profile-page" aria-label="Il mio profilo"><div class="rp-profile-header"><span class="rp-profile-kicker">RUNNER PULSE</span><h1>Il mio profilo</h1><p>I tuoi dati per un allenatore che ti conosce davvero.</p></div><form id="rp-profile-form" class="rp-profile-card"><h2>Dati personali</h2><div class="rp-profile-grid"><label>Nome<input name="name" maxlength="70" autocomplete="given-name" placeholder="Il tuo nome"></label><label>Sesso<select name="sex"><option value="">Seleziona</option><option value="female">Donna</option><option value="male">Uomo</option><option value="other">Altro / preferisco non specificare</option></select></label><label>Data di nascita<input name="birthDate" type="date" max="2026-11-07"></label><label>Altezza (cm)<input name="heightCm" type="number" min="90" max="240" step="1" placeholder="cm"></label><label>Peso (kg)<input name="weightKg" type="number" min="25" max="350" step="0.1" placeholder="kg"></label><label>Livello runner<select name="level"><option value="">Seleziona</option><option value="beginner">Principiante</option><option value="intermediate">Intermedio</option><option value="advanced">Avanzato</option></select></label></div><h2>Frequenza cardiaca <small>(facoltativo)</small></h2><p class="rp-profile-help">Inserisci valori misurati, se li conosci. Il Coach non li inventerà.</p><div class="rp-profile-grid"><label>FC massima (bpm)<input name="maxHR" type="number" min="80" max="240" step="1"></label><label>FC a riposo (bpm)<input name="restHR" type="number" min="25" max="120" step="1"></label><label>FC di soglia (bpm)<input name="thresholdHR" type="number" min="70" max="230" step="1"></label></div><button class="rp-profile-save" type="submit">Salva il mio profilo</button><p id="rp-profile-status" role="status" aria-live="polite"></p><p class="rp-profile-help">Il profilo è privato, associato al tuo account Google e disponibile all'allenatore AI. Puoi modificarlo quando vuoi.</p></form></section>
   </main>
   <nav aria-label="Navigazione"><button data-page="home" class="selected"><span>⌂</span>Home</button><button data-page="activities"><span>◷</span>Attività</button><button data-page="plan"><span>▦</span>Piano</button><button data-page="coach"><span>♡</span>Coach</button><button data-page="settings"><span>⚙</span>Profilo</button></nav>
-  <div id="detailOverlay" hidden><div class="detail-panel"><button id="closeDetail" type="button" aria-label="Chiudi dettagli">✕</button><div id="detailContent"></div></div></div>
+  <div id="detailOverlay" hidden><div class="detail-panel"><button id="closeDetail" type="button" aria-label="Chiudi dettagli" hidden>✕</button><div id="detailContent"></div></div><nav id="rp-detail-bottom-nav" aria-label="Menu principale nel dettaglio"></nav></div>
   <div id="splash"><div class="splash-content"><h1>RUNNER PULSE</h1><div class="splash-heart" aria-hidden="true">♥</div><p>Il tuo cuore. Il tuo ritmo.</p><button id="enterApp" type="button">Entra in Runner Pulse</button></div></div>
-  <script src="/app.js?v=header-fix-20261108b"></script>
+  <script src="/app.js?v=detail-nav-20261108c"></script>
   <script src="/dashboard.js" defer></script>
   <script>
   (() => {
@@ -115,7 +115,7 @@
     };
   })();
   </script>
-  <script type="module" src="/login.js?v=header-fix-20261108b"></script>
+  <script type="module" src="/login.js?v=detail-nav-20261108c"></script>
   <script type="module" src="/coach-memory.js"></script>
   <!-- Blocca l'invio HTML tradizionale anche se Firebase non si carica. -->
   <script>
