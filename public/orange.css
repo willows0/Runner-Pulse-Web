@@ -413,3 +413,7 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 #coach:not(.active) .rp-coach-composer{display:none!important;}
 #coach .rp-coach-form textarea{min-height:44px!important;max-height:104px!important;overflow-y:auto!important;}
 @media(max-width:390px){#coach .rp-coach-composer{width:calc(100% - 14px)!important;}}
+
+/* Fix: Coach deve apparire esclusivamente nella sua scheda. */
+#coach.page:not(.active){display:none!important;}
+#coach.page.active{display:flex!important;}
