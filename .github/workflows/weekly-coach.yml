@@ -1,1 +1,41 @@
+name: Runner Pulse - Resoconto Coach domenicale
 
+on:
+  schedule:
+    # 20:00 in Italia: 18 UTC in estate, 19 UTC in inverno.
+    - cron: '0 18 * * 0'
+    - cron: '0 19 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  weekly-coach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Richiedi resoconto settimanale al server
+        env:
+          RUNNER_PULSE_URL: ${{ secrets.RUNNER_PULSE_URL }}
+          RUNNER_PULSE_CRON_SECRET: ${{ secrets.RUNNER_PULSE_CRON_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$RUNNER_PULSE_URL" || -z "$RUNNER_PULSE_CRON_SECRET" ]]; then
+            echo 'Configurare RUNNER_PULSE_URL e RUNNER_PULSE_CRON_SECRET nei repository secrets.' >&2
+            exit 1
+          fi
+          # Il server accetta solo domenica alle 20:00 Europe/Rome e blocca i duplicati.
+          status=$(curl --silent --show-error --location --retry 2 --retry-delay 10 \
+            --connect-timeout 20 --max-time 240 \
+            -o /tmp/runner-pulse-weekly-response.json -w '%{http_code}' \
+            -X POST -H "x-cron-secret: $RUNNER_PULSE_CRON_SECRET" \
+            "${RUNNER_PULSE_URL%/}/api/push/weekly")
+          echo "Risposta HTTP: $status"
+          cat /tmp/runner-pulse-weekly-response.json
+          if [[ "$status" == "409" ]]; then
+            echo 'Fuori dalla finestra delle 20:00 italiane: nessun invio previsto.'
+            exit 0
+          fi
+          [[ "$status" =~ ^2[0-9][0-9]$ ]]
