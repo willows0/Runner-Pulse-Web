@@ -409,6 +409,18 @@ async function weeklyPushRoute(req,res,pathname){
 http.createServer(async(req,res)=>{
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+  // Multiutente: stato personale. Non usare mai la Personal API per altri account.
+  if(pathname==='/api/garmin/account-status'){
+    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+    if(!match)return json(res,401,{success:false,message:'Accedi con Google'});
+    try{
+      const user=await getAuth().verifyIdToken(match[1],true);
+      if(!verifiedGoogleIdentity(user))return json(res,403,{success:false,message:'Account Google non verificato'});
+      // Nessuna connessione viene dichiarata attiva prima del completamento di OAuth ufficiale.
+      return json(res,200,{success:true,connected:false,oauthAvailable:false,accountId:user.uid,message:'Connessione Garmin personale in preparazione: in attesa delle credenziali Business e di OAuth 2.0.'});
+    }catch{return json(res,401,{success:false,message:'Sessione scaduta: accedi nuovamente'});}
+  }
   if(pathname==='/api/garmin/vo2-check'){await garminVo2Check(req,res);return;}
   // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
   // Accesso limitato al proprietario e paginazione per evitare risposte troppo grandi.

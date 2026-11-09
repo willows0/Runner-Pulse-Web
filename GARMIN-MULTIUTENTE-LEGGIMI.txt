@@ -1,0 +1,20 @@
+RUNNER PULSE - PREPARAZIONE GARMIN MULTIUTENTE
+
+AGGIUNTO
+- Scheda Garmin Connect nella pagina Profilo.
+- Endpoint GET /api/garmin/account-status protetto da Firebase ID token.
+- Stato per account, senza esporre token o dati di altri utenti.
+- Pulsante di connessione volutamente disabilitato: NON è ancora disponibile OAuth Garmin Business.
+
+NON ANCORA IMPLEMENTATO
+- OAuth 2.0 Garmin Business: attendere approvazione, client ID, client secret, documentazione e redirect URI.
+- Memorizzazione cifrata dei token Garmin per UID, refresh/revoca e webhook ufficiali.
+- Importazione Garmin per ogni utente.
+- Verifica end-to-end dei permessi Firestore e dei flussi dati del Coach AI.
+
+ATTENZIONE
+Gli endpoint Garmin precedenti usano la Personal API e rimangono riservati al proprietario. Non renderli accessibili a tutti e non sostituire la chiave personale con credenziali Business.
+La scheda non finge una connessione. Per un rilascio multiutente occorre una revisione di sicurezza completa, privacy policy e consenso esplicito.
+
+PUBBLICAZIONE
+Caricare il contenuto dello ZIP su GitHub come fatto in precedenza e attendere il deploy Render. Nessuna nuova variabile segreta è richiesta per questa fase.
