@@ -259,19 +259,10 @@ async function loadGarminArchive(){
     archiveNotice('Errore caricamento archivio Firebase: '+(error.message||String(error)),true);
   }finally{archiveLoading=false;}
 }
-const archiveStatus=document.createElement('p');
-archiveStatus.id='rp-archive-status';
-archiveStatus.setAttribute('role','status');
-archiveStatus.setAttribute('aria-live','polite');
-archiveStatus.style.cssText='font-size:13px;line-height:1.5;margin:12px 0;color:#39465b';
-archiveStatus.textContent='Lo storico Garmin sarà caricato dopo l’accesso con Google.';
-const archiveRetry=document.createElement('button');
-archiveRetry.type='button';
-archiveRetry.textContent='Ricarica allenamenti da Firebase';
-archiveRetry.style.cssText='margin:8px 0 16px;padding:11px 14px;border-radius:12px';
-archiveRetry.addEventListener('click',()=>void loadGarminArchive());
-const activityList=document.getElementById('activityList');
-if(activityList){activityList.before(archiveStatus,archiveRetry);}
+document.getElementById('rp-archive-retry')?.addEventListener('click',()=>{
+  if(!allowedUser()||!isOwner()){archiveNotice('Accedi con Google con il tuo account proprietario per leggere lo storico Garmin.',true);return;}
+  void loadGarminArchive();
+});
 // Importazione automatica a blocchi: il progresso percentuale è mostrato solo
 // quando Garmin ha terminato la scoperta delle attività (totale noto).
 let syncActive=false,syncCancel=false;

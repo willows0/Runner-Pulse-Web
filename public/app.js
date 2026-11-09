@@ -72,7 +72,33 @@ function showDetail(x){const wrap=$('detailContent');wrap.replaceChildren();cons
 $('closeDetail').onclick=()=>{$('detailOverlay').hidden=true;document.body.style.overflow='';};
 function render(){const totalKm=entries.reduce((s,x)=>s+(Number(x.km)||0),0);const totalMin=entries.reduce((s,x)=>s+(Number(x.minutes)||0),0);$('count').textContent=entries.length;$('distance').textContent=fmt(totalKm);$('avgPace').textContent=pace(totalKm,totalMin).replace(' min/km','');$('activityList').replaceChildren();[...entries].sort(activityNewestFirst).forEach(x=>{const c=document.createElement('div');c.className='card';const open=document.createElement('button');open.className='activity-open';open.type='button';const title=document.createElement('b');title.textContent=`${x.kind||'Corsa'} · ${fmt(x.km)} km`;const sub=document.createElement('small');sub.textContent=`${activityDateIT(x.date)} · ${fmt(x.minutes)} min · ${pace(x.km,x.minutes)}`;open.append(title,sub);open.onclick=()=>showDetail(x);const del=document.createElement('button');del.className='delete';del.textContent='Elimina';del.onclick=()=>{entries=entries.filter(e=>e!==x);save();};c.append(open,del);$('activityList').append(c);});$('coachText').textContent=entries.length?`Hai registrato ${entries.length} allenamenti per ${fmt(totalKm)} km totali. Passo medio complessivo: ${pace(totalKm,totalMin)}. È un riepilogo matematico, non un'analisi AI o una valutazione medica.`:'Registra o importa un allenamento per vedere il riepilogo.';if(entries.some(e=>e.source==='garmin')){$('garminStatus').textContent='Attività importate su questo dispositivo';const last=localStorage.getItem('runnerPulseGarminLastSync');$('garminUpdated').textContent=last?'Ultima importazione riuscita: '+new Date(last).toLocaleString('it-IT'):'Le attività sono disponibili nella sezione Attività.';}renderAnalytics();}
 fetch('/api/status').then(r=>r.json()).then(s=>{if(!entries.some(e=>e.source==='garmin'))$('garminStatus').textContent=s.garminConnected?'Collegato':s.message;$('garminSettings').textContent=s.garminConfigured?'Chiave presente sul server. Usa Verifica Garmin oppure Importa attività per controllare l’accesso.':'Chiave non configurata sul server.';}).catch(()=>{if(!entries.some(e=>e.source==='garmin'))$('garminStatus').textContent='Impossibile verificare lo stato del server.';});
-function normalizeGarmin(a){const id=first(a,['activityId','id']);const meters=safeNumber(first(a,['distance','distanceMeters']));const seconds=safeNumber(first(a,['duration','elapsedDuration','movingDuration']));const rawDate=first(a,['startTimeLocal','startTimeGMT','startTime','date']);const date=typeof rawDate==='string'?rawDate.slice(0,10):null;const kind=first(a,['activityType','activityTypeName','type']);const type=typeof kind==='object'?first(kind,['typeKey','typeName','name']):kind;const km=meters!=null?meters/1000:null;const minutes=seconds!=null?seconds/60:null;if(id==null||!date||!Number.isFinite(km)||km<=0||!Number.isFinite(minutes)||minutes<=0)return null;const num=keys=>safeNumber(first(a,keys));const speed=num(['averageSpeed','avgSpeed']);return {id:'garmin-'+id,garminId:String(id),date,kind:String(type||'Corsa'),km:Math.round(km*100)/100,minutes:Math.round(minutes*10)/10,source:'garmin',avgHR:num(['averageHR','averageHeartRate','avgHeartRate']),maxHR:num(['maxHR','maxHeartRate']),elevation:num(['elevationGain','totalElevationGain']),calories:num(['calories','activeKilocalories']),avgSpeed:speed!=null?Math.round(speed*3.6*100)/100:null};}
+// Compatibilità con i riepiloghi Garmin ufficiali (Activity API) e con lo storico Personal API.
+function normalizeGarmin(a){
+  if(!a||typeof a!=='object')return null;
+  const id=first(a,['activityId','id','summaryId']);
+  const meters=safeNumber(first(a,['distanceInMeters','distance','distanceMeters']));
+  const seconds=safeNumber(first(a,['durationInSeconds','duration','elapsedDuration','movingDuration']));
+  const epoch=safeNumber(first(a,['startTimeInSeconds']));
+  const rawDate=first(a,['startTimeLocal','startTimeGMT','startTime','date']);
+  let date=null;
+  if(typeof rawDate==='string'&&/^\\d{4}-\\d{2}-\\d{2}/.test(rawDate))date=rawDate.slice(0,10);
+  else if(epoch!=null&&epoch>0)date=new Date(epoch*1000).toISOString().slice(0,10);
+  else if(typeof rawDate==='number'&&rawDate>0)date=new Date(rawDate*(rawDate<1e11?1000:1)).toISOString().slice(0,10);
+  const kind=first(a,['activityType','activityTypeName','type']);
+  const type=typeof kind==='object'?first(kind,['typeKey','typeName','name']):kind;
+  const km=meters!=null?meters/1000:null;
+  const minutes=seconds!=null?seconds/60:null;
+  // Non inventare distanza o durata: gli allenamenti incompleti sono esclusi dal riepilogo numerico.
+  if(id==null||!date||!Number.isFinite(km)||km<=0||!Number.isFinite(minutes)||minutes<=0)return null;
+  const num=keys=>safeNumber(first(a,keys));
+  const speed=num(['averageSpeedInMetersPerSecond','averageSpeed','avgSpeed']);
+  return {id:'garmin-'+id,garminId:String(id),date,kind:String(type||a.activityName||'Corsa'),
+    km:Math.round(km*100)/100,minutes:Math.round(minutes*10)/10,source:'garmin',
+    avgHR:num(['averageHeartRateInBeatsPerMinute','averageHR','averageHeartRate','avgHeartRate']),
+    maxHR:num(['maxHeartRateInBeatsPerMinute','maxHR','maxHeartRate']),
+    elevation:num(['totalElevationGain','elevationGain']),calories:num(['calories','activeKilocalories']),
+    avgSpeed:speed!=null?Math.round(speed*3.6*100)/100:null};
+}
 window.addEventListener('runnerpulse:garmin-data',e=>{if(!key)return;const data=e.detail;const list=Array.isArray(data?.activities)?data.activities:[];let added=0,updated=0,skipped=0;const existing=new Map(entries.map((x,i)=>[String(x.id),i]));for(const raw of list){const item=normalizeGarmin(raw);if(!item){skipped++;continue;}const i=existing.get(item.id);if(i!==undefined){entries[i]={...entries[i],...item};updated++;}else{entries.unshift(item);added++;existing.set(item.id,0);}}if(Array.isArray(data?.activities)){if(!data.fromArchive)localStorage.setItem('runnerPulseGarminLastSync',new Date().toISOString());save();if(!data.fromArchive)$('importResult').textContent=`Importazione completata: ${added} nuove, ${updated} aggiornate, ${skipped} non utilizzabili. ${list.length} attività ricevute dal server.`;if(!list.length&&!data.fromArchive)$('importResult').textContent='Il servizio non ha restituito attività in questa richiesta.';}});
 function download(name,body,type){const url=URL.createObjectURL(new Blob([body],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 $('export').onclick=()=>download('runner-pulse-allenamenti.json',JSON.stringify(entries,null,2),'application/json');
