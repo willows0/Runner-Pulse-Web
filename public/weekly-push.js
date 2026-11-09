@@ -35,10 +35,11 @@ async function refreshPushState(){
   const token=await currentToken(reg);
   if(!token){updateButton(false);return;}
   const response=await fetch('/api/push/status?token='+encodeURIComponent(token),{headers:{Authorization:'Bearer '+await user.getIdToken()}});
-  if(!response.ok)return;
+  if(!response.ok)return false;
   const data=await response.json();updateButton(data.enabled===true);
   if(enabled)say('Notifiche attivate');
- }catch(error){console.warn('Stato notifiche:',error.message);}
+  return enabled;
+ }catch(error){console.warn('Stato notifiche:',error.message);return false;}
 }
 if(button)button.addEventListener('click',async()=>{
  if(busy)return;
@@ -71,8 +72,42 @@ if(button)button.addEventListener('click',async()=>{
  }catch(error){say(error.message||'Impossibile aggiornare le notifiche.');}
  finally{busy=false;button.disabled=false;}
 });
-window.addEventListener('runnerpulse:auth-user',()=>setTimeout(refreshPushState,250));
-setTimeout(refreshPushState,1200);
+// Richiesta di consenso dopo il login Google: la richiesta browser avviene SOLO
+// quando l'utente tocca esplicitamente "Attiva notifiche".
+let promptTimer=null;
+let promptOpen=false;
+async function offerNotificationsAfterLogin(){
+ if(promptOpen || !getAuth(app).currentUser || !button)return;
+ const uid=getAuth(app).currentUser.uid;
+ const seenKey='runnerPulsePushOfferV2:'+uid;
+ try{if(sessionStorage.getItem(seenKey)==='1')return;}catch{}
+ if(!('Notification' in window)||!('serviceWorker' in navigator)||!await isSupported())return;
+ const isActive=await refreshPushState();
+ if(isActive||enabled)return;
+ // Non ripetere l'offerta nella stessa sessione; resta possibile usare il Profilo.
+ try{sessionStorage.setItem(seenKey,'1');}catch{}
+ if(document.getElementById('rp-push-consent-dialog'))return;
+ promptOpen=true;
+ const overlay=document.createElement('div');
+ overlay.id='rp-push-consent-dialog';
+ overlay.setAttribute('role','presentation');
+ overlay.innerHTML=`<section role="dialog" aria-modal="true" aria-labelledby="rp-push-consent-title" style="width:min(92vw,410px);background:#142b48;color:white;border:2px solid #ff7900;border-radius:24px;padding:25px 20px;text-align:center;box-shadow:0 18px 60px #0008;box-sizing:border-box"><img src="/coach-notification.png" alt="Coach Runner Pulse" style="width:76px;height:76px;object-fit:contain;border-radius:16px"><h2 id="rp-push-consent-title" style="font-size:23px;line-height:1.25;margin:12px 0">Vuoi ricevere le notifiche del Coach?</h2><p style="font-size:16px;line-height:1.5;margin:12px 0 20px">Ogni domenica alle 20:00 riceverai il resoconto settimanale, anche con Chrome chiuso.</p><button id="rp-push-consent-yes" type="button" style="display:block;width:100%;border:0;border-radius:14px;background:#fa7900;color:white;font-weight:700;padding:14px;font-size:16px">Attiva notifiche</button><button id="rp-push-consent-later" type="button" style="display:block;width:100%;border:1px solid #a9bbcf;border-radius:14px;background:transparent;color:white;margin-top:10px;padding:12px;font-size:16px">Non ora</button></section>`;
+ Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'99999',background:'rgba(0,0,0,.7)',display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'});
+ document.body.appendChild(overlay);
+ const close=()=>{overlay.remove();promptOpen=false;};
+ overlay.querySelector('#rp-push-consent-later').addEventListener('click',close);
+ overlay.querySelector('#rp-push-consent-yes').addEventListener('click',()=>{
+  close();
+  // Usa esattamente la stessa procedura del pulsante Profilo.
+  button.click();
+ });
+}
+window.addEventListener('runnerpulse:auth-user',(event)=>{
+ clearTimeout(promptTimer);
+ if(!event.detail){document.getElementById('rp-push-consent-dialog')?.remove();promptOpen=false;return;}
+ promptTimer=setTimeout(offerNotificationsAfterLogin,1200);
+});
+setTimeout(()=>{if(getAuth(app).currentUser)offerNotificationsAfterLogin();},2200);
 
 function openWeeklyCoach(){
  if(new URLSearchParams(location.search).get('weeklyCoach')!=='1')return;
