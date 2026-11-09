@@ -56,10 +56,12 @@ async function refresh(){
  }catch(error){if(id===generation)message.textContent=error.message||'Impossibile verificare Garmin.';}
 }
 switches.get('garmin').addEventListener('click',()=>{
- if(garminConnected){message.textContent='Per scollegare Garmin occorre attivare prima la revoca sicura sul server.';return;}
+ if(garminConnected){if(!window.confirm('Vuoi scollegare il tuo account Garmin da Runner Pulse?'))return;void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch('/api/garmin/disconnect',{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok)throw new Error(data.message||'Scollegamento non riuscito');await refresh();}catch(error){message.textContent=error.message||'Scollegamento non riuscito';}})();return;}
  if(!garminOAuthAvailable||!garminConnectUrl){message.textContent='Autorizzazione Garmin non ancora disponibile.';return;}
- // La rotta di avvio deve essere implementata e verificata sul server.
- window.location.assign(garminConnectUrl);
+ void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch(garminConnectUrl,{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok||!data.authorizationUrl)throw new Error(data.message||'Autorizzazione Garmin non disponibile');window.location.assign(data.authorizationUrl);}catch(error){message.textContent=error.message||'Connessione non riuscita';}})();
 });
 onAuthStateChanged(auth,()=>void refresh());
 window.addEventListener('focus',()=>{if(auth.currentUser)void refresh();});
+
+const garminReturn=new URLSearchParams(window.location.search).get('garmin');
+if(garminReturn){message.textContent=garminReturn==='connected'?'Garmin autorizzato! Verifica in corso…':garminReturn==='denied'?'Autorizzazione Garmin annullata.':'Collegamento Garmin non completato: '+garminReturn;history.replaceState(null,'',window.location.pathname);}
