@@ -94,34 +94,12 @@ loginButton.addEventListener('click', async () => {
   } finally { loginButton.disabled = false; }
 });
 getRedirectResult(auth).catch(showError);
-// La scelta viene memorizzata per account su questo browser; i permessi push restano per dispositivo.
-let rpNotifyShownForSession = null;
-function rpOfferCoachNotifications(user){
-  if(!user || rpNotifyShownForSession===user.uid)return;
-  rpNotifyShownForSession=user.uid;
-  const key='runnerPulseNotifyChoiceV1:'+user.uid;
-  try{if(localStorage.getItem(key))return;}catch(_){return;}
-  if(document.getElementById('rp-notify-overlay'))return;
-  const overlay=document.createElement('div');
-  overlay.id='rp-notify-overlay';overlay.className='rp-notify-overlay';
-  overlay.innerHTML=`<section class="rp-notify-dialog" role="dialog" aria-modal="true" aria-labelledby="rp-notify-title"><img src="/coach-notification.png" alt="Robottino Coach"><h2 id="rp-notify-title">Il tuo Coach è pronto! 🏃</h2><p>Vuoi ricevere le notifiche di Runner Pulse? Ti avviserò quando sarà pronto il tuo allenamento e ogni domenica alle 20:00 per il resoconto settimanale.</p><button class="rp-notify-accept" type="button">Sì, attiva le notifiche</button><button class="rp-notify-later" type="button">Magari più tardi</button><small>Puoi cambiare la scelta dal Profilo.</small></section>`;
-  document.body.append(overlay);
-  const close=(choice)=>{try{localStorage.setItem(key,choice);}catch(_){} overlay.remove();};
-  overlay.querySelector('.rp-notify-later').addEventListener('click',()=>close('later'));
-  overlay.querySelector('.rp-notify-accept').addEventListener('click',()=>{
-    close('accepted');
-    // L'azione parte direttamente dal gesto dell'utente, requisito dei browser.
-    const button=document.getElementById('rp-enable-weekly-push');
-    if(button)button.click();
-  });
-  overlay.querySelector('.rp-notify-accept').focus();
-}
 onAuthStateChanged(auth, async user => {
   const allowed = Boolean(user && googleVerifiedUser(user));
   document.body.classList.toggle('rp-authenticated', allowed);
   if(!allowed)rpSavedName='';
   rpRefreshWelcome(allowed?user:null);
-  if(allowed){void rpLoadWelcomeProfile(user);setTimeout(()=>rpOfferCoachNotifications(user),500);}
+  if(allowed)void rpLoadWelcomeProfile(user);
   if(allowed){
     document.getElementById('importGarmin')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
@@ -336,22 +314,6 @@ async function checkNewGarminActivities(){
   finally{checkingNew=false;if(button)button.disabled=false;}
 }
 document.getElementById('rp-check-new-activities')?.addEventListener('click',()=>void checkNewGarminActivities());
-const settings = document.getElementById('settings');
-if (settings) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = '<h3>Verifica collegamento Garmin</h3><p class="muted">Testa la connessione usando il tuo accesso Google. Non vengono creati dati fittizi.</p><button type="button" id="rp-garmin-test" style="width:100%;padding:14px;border:0;border-radius:13px;background:#f36b08;color:#fff;font-weight:700">Verifica Garmin</button><p id="rp-garmin-result" class="note" role="status"></p>';
-  settings.append(card);
-  const testButton = card.querySelector('#rp-garmin-test');
-  const result = card.querySelector('#rp-garmin-result');
-  testButton.addEventListener('click', async () => {
-    testButton.disabled = true;
-    result.textContent = 'Verifica in corso…';
-    try { const data = await authorizedPost('/api/garmin/test'); result.textContent = data.message || 'Verifica riuscita.'; }
-    catch (e) { result.textContent = e.message || String(e); }
-    finally { testButton.disabled = false; }
-  });
-}
 const importBtn = document.getElementById('importGarmin');
 const homeBtn = document.getElementById('homeImport');
 const importResult = document.getElementById('importResult');
