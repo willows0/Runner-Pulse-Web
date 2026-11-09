@@ -66,34 +66,5 @@ window.addEventListener('focus',()=>{if(auth.currentUser)void refresh();});
 const garminReturn=new URLSearchParams(window.location.search).get('garmin');
 if(garminReturn){message.textContent=garminReturn==='connected'?'Garmin autorizzato! Verifica in corso…':garminReturn==='denied'?'Autorizzazione Garmin annullata.':'Collegamento Garmin non completato: '+garminReturn;history.replaceState(null,'',window.location.pathname);}
 
-// Official Garmin Activity API status is separate from legacy Personal API.
-const officialPanel=document.createElement('div');
-officialPanel.style.cssText='margin-top:16px;padding:14px;border:1px solid #f9731655;border-radius:12px';
-officialPanel.innerHTML='<strong>Sincronizzazione Garmin ufficiale</strong><p id="rp-official-status" style="font-size:13px">In attesa di verifica…</p><button type="button" id="rp-official-verify" style="padding:9px 13px;border:0;border-radius:9px;background:#f97316;color:white;font-weight:700">Verifica identità Garmin</button><p style="font-size:12px;opacity:.75">Separata dalla Personal API. Le notifiche vengono importate solo dopo la verifica dell’account e la configurazione dell’endpoint Garmin.</p>';
-section.append(officialPanel);
-const officialStatus=officialPanel.querySelector('#rp-official-status');
-const officialButton=officialPanel.querySelector('#rp-official-verify');
-function dateLabel(value){return value?new Date(value).toLocaleString('it-IT'):'Mai';}
-async function refreshOfficial(){
- const user=auth.currentUser;
- if(!user){officialStatus.textContent='Accedi con Google per vedere lo stato.';officialButton.disabled=true;return;}
- officialButton.disabled=false;
- try{
-  const token=await user.getIdToken();
-  const response=await fetch('/api/garmin/official-sync-status',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
-  const data=await response.json();if(!response.ok)throw new Error(data.message||'Stato non disponibile');
-  officialStatus.textContent=`Account: ${data.connected?'collegato':'non collegato'} · Ricevute: ${data.received} · Importate: ${data.imported} · Già presenti: ${data.duplicates} · Ultima ricezione: ${dateLabel(data.lastReceivedAt)} · Ultima importazione: ${dateLabel(data.lastImportedAt)} · Stato: ${data.status}`;
-  officialButton.disabled=!data.connected;
- }catch(error){officialStatus.textContent=error.message||'Stato non disponibile';}
-}
-officialButton.addEventListener('click',async()=>{
- officialButton.disabled=true;officialStatus.textContent='Verifica con Garmin in corso…';
- try{
-  const token=await auth.currentUser.getIdToken();
-  const response=await fetch('/api/garmin/official-verify',{method:'POST',headers:{Authorization:`Bearer ${token}`}});
-  const data=await response.json();if(!response.ok)throw new Error(data.message||'Verifica non riuscita');
-  await refreshOfficial();
- }catch(error){officialStatus.textContent=error.message||'Verifica non riuscita';officialButton.disabled=false;}
-});
-onAuthStateChanged(auth,()=>void refreshOfficial());
-window.addEventListener('focus',()=>{if(auth.currentUser)void refreshOfficial();});
+// Il riepilogo tecnico della sincronizzazione resta disponibile sul server,
+// ma non viene mostrato nel Profilo. La connessione Garmin resta attiva.
