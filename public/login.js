@@ -229,24 +229,49 @@ async function refreshGarminHealth(){
 // La pagina Attività e la Home ricevono gli stessi eventi, senza richiedere
 // all'utente di premere il pulsante di importazione.
 let archiveLoading=false;
+let archiveLastResult='';
+function archiveNotice(message, error=false){
+  archiveLastResult=message;
+  const el=document.getElementById('rp-archive-status');
+  if(el){el.textContent=message;el.style.color=error?'#a52a17':'';}
+}
 async function loadGarminArchive(){
   if(archiveLoading||!allowedUser()||!isOwner())return;
   archiveLoading=true;
   const expectedUid=auth.currentUser.uid;
+  let total=0;
+  archiveNotice('Caricamento degli allenamenti salvati su Firebase…');
   try{
     let after=null;
     for(let page=0;page<100;page++){
       const result=await authorizedPost('/api/garmin/archive',after?{after}:{});
-      if(!allowedUser()||!isOwner()||auth.currentUser.uid!==expectedUid)break;
+      if(!allowedUser()||!isOwner()||auth.currentUser.uid!==expectedUid)return;
       if(result.activities?.length){
+        total+=result.activities.length;
         window.dispatchEvent(new CustomEvent('runnerpulse:garmin-data',{detail:{activities:result.activities,fromArchive:true}}));
       }
       if(!result.next)break;
       after=result.next;
     }
-  }catch(error){console.warn('Archivio Garmin non disponibile:',error.message);}
-  finally{archiveLoading=false;}
+    archiveNotice(total?`Archivio Firebase letto: ${total} attività ricevute. Se non compaiono, verifica il formato dei dati.`:'Archivio Firebase vuoto: nessuna attività restituita dal server.');
+  }catch(error){
+    console.warn('Archivio Garmin non disponibile:',error.message);
+    archiveNotice('Errore caricamento archivio Firebase: '+(error.message||String(error)),true);
+  }finally{archiveLoading=false;}
 }
+const archiveStatus=document.createElement('p');
+archiveStatus.id='rp-archive-status';
+archiveStatus.setAttribute('role','status');
+archiveStatus.setAttribute('aria-live','polite');
+archiveStatus.style.cssText='font-size:13px;line-height:1.5;margin:12px 0;color:#39465b';
+archiveStatus.textContent='Lo storico Garmin sarà caricato dopo l’accesso con Google.';
+const archiveRetry=document.createElement('button');
+archiveRetry.type='button';
+archiveRetry.textContent='Ricarica allenamenti da Firebase';
+archiveRetry.style.cssText='margin:8px 0 16px;padding:11px 14px;border-radius:12px';
+archiveRetry.addEventListener('click',()=>void loadGarminArchive());
+const activityList=document.getElementById('activityList');
+if(activityList){activityList.before(archiveStatus,archiveRetry);}
 // Importazione automatica a blocchi: il progresso percentuale è mostrato solo
 // quando Garmin ha terminato la scoperta delle attività (totale noto).
 let syncActive=false,syncCancel=false;
