@@ -686,7 +686,7 @@ http.createServer(async(req,res)=>{
       let query=collection.orderBy('__name__').limit(100);
       if(after)query=query.startAfter(collection.doc(after));
       const snapshot=await query.get();
-      const activities=snapshot.docs.map(doc=>doc.data()?.summary).filter(a=>a&&typeof a==='object');
+      const activities=snapshot.docs.map(doc=>{const data=doc.data()||{};const summary=data.summary;if(!summary||typeof summary!=='object')return null;return {...summary,activityId:summary.activityId??summary.summaryId??data.garminId??doc.id};}).filter(Boolean);
       const next=snapshot.size===100?snapshot.docs[snapshot.docs.length-1].id:null;
       return json(res,200,{success:true,activities,next});
     }catch(error){console.error('Archivio Garmin:',error.message);return json(res,502,{success:false,message:'Impossibile leggere lo storico Garmin'});}
