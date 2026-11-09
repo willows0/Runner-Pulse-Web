@@ -79,14 +79,16 @@ let promptOpen=false;
 async function offerNotificationsAfterLogin(){
  if(promptOpen || !getAuth(app).currentUser || !button)return;
  const uid=getAuth(app).currentUser.uid;
- const seenKey='runnerPulsePushOfferV2:'+uid;
- try{if(sessionStorage.getItem(seenKey)==='1')return;}catch{}
+ const seenKey='runnerPulsePushOfferV3:'+uid;
+ // Memorizza la scelta in modo persistente, non soltanto per la sessione.
+ try{if(localStorage.getItem(seenKey)==='1')return;}catch{}
  if(!('Notification' in window)||!('serviceWorker' in navigator)||!await isSupported())return;
  const isActive=await refreshPushState();
  if(isActive||enabled)return;
- // Non ripetere l'offerta nella stessa sessione; resta possibile usare il Profilo.
- try{sessionStorage.setItem(seenKey,'1');}catch{}
+ // Non ripetere l'offerta dopo il primo accesso, anche chiudendo Chrome.
+ // La scelta è distinta per account Google e modificabile dal Profilo.
  if(document.getElementById('rp-push-consent-dialog'))return;
+ try{localStorage.setItem(seenKey,'1');}catch{}
  promptOpen=true;
  const overlay=document.createElement('div');
  overlay.id='rp-push-consent-dialog';
