@@ -81,7 +81,7 @@ function normalizeGarmin(a){
   const epoch=safeNumber(first(a,['startTimeInSeconds']));
   const rawDate=first(a,['startTimeLocal','startTimeGMT','startTime','date']);
   let date=null;
-  if(typeof rawDate==='string'&&/^\\d{4}-\\d{2}-\\d{2}/.test(rawDate))date=rawDate.slice(0,10);
+  if(typeof rawDate==='string'&&/^\d{4}-\d{2}-\d{2}/.test(rawDate))date=rawDate.slice(0,10);
   else if(epoch!=null&&epoch>0)date=new Date(epoch*1000).toISOString().slice(0,10);
   else if(typeof rawDate==='number'&&rawDate>0)date=new Date(rawDate*(rawDate<1e11?1000:1)).toISOString().slice(0,10);
   const kind=first(a,['activityType','activityTypeName','type']);
