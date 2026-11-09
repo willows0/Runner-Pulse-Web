@@ -128,6 +128,83 @@ async function garminOAuthRoutes(req,res,pathname){
  }
 }
 
+// Garmin official identity: retrieved from Garmin itself using the user's OAuth token.
+// This never uses the legacy Personal API key. If Garmin does not return a user ID,
+// automatic import remains blocked rather than attributing data to the wrong person.
+async function officialGarminIdentity(uid){
+ const ref=garminOAuthDoc(uid),snap=await ref.get();
+ if(!snap.exists||!snap.data()?.encryptedToken)return null;
+ let token=decryptGarminToken(snap.data().encryptedToken);
+ if(token.refresh_token&&token.expires_in&&Date.now()-snap.data().updatedAt>Math.max(0,Number(token.expires_in)-300)*1000){
+  token=await garminOAuthExchange({grant_type:'refresh_token',refresh_token:token.refresh_token,client_id:GARMIN_CLIENT_ID});
+  await ref.set({encryptedToken:encryptGarminToken(token),updatedAt:Date.now()},{merge:true});
+ }
+ const response=await fetch('https://apis.garmin.com/wellness-api/rest/user/id',{headers:{Authorization:'Bearer '+token.access_token,Accept:'application/json'},signal:AbortSignal.timeout(12000)});
+ if(!response.ok)throw new Error('Garmin user identity HTTP '+response.status);
+ const result=await response.json();
+ const id=result?.userId;
+ if(typeof id!=='string'||!id||id.length>150)throw new Error('Garmin user identity unavailable');
+ return id;
+}
+async function officialSyncStatus(req,res){
+ if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+ const user=await garminGoogleUser(req);if(!user)return json(res,401,{success:false,message:'Accedi con Google'});
+ const oauth=await garminOAuthDoc(user.uid).get();
+ const state=(await getFirestore().collection('runnerPulseGarminOfficialSync').doc(user.uid).get()).data()||{};
+ return json(res,200,{success:true,connected:Boolean(oauth.data()?.encryptedToken),
+  received:state.received||0,imported:state.imported||0,duplicates:state.duplicates||0,
+  lastReceivedAt:state.lastReceivedAt||null,lastImportedAt:state.lastImportedAt||null,
+  mode:'push',status:state.status||'awaiting_endpoint',
+  message:'I dati sono importati solo dopo la verifica dell’identità Garmin. La Personal API resta indipendente.'});
+}
+// Explicit owner action establishes the Garmin userId <-> Firebase UID association.
+async function officialVerifyIdentity(req,res){
+ if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+ const user=await garminGoogleUser(req);if(!user)return json(res,401,{success:false,message:'Accedi con Google'});
+ try{
+  const id=await officialGarminIdentity(user.uid);
+  if(!id)return json(res,409,{success:false,message:'Collega prima Garmin'});
+  const db=getFirestore();
+  const mapping=db.collection('runnerPulseGarminOfficialUsers').doc(createHash('sha256').update(id).digest('hex'));
+  await db.runTransaction(async tx=>{
+   const doc=await tx.get(mapping);
+   if(doc.exists&&doc.data()?.uid!==user.uid)throw new Error('Garmin già associato a un altro account');
+   tx.set(mapping,{uid:user.uid,garminUserId:id,verifiedAt:Date.now()},{merge:true});
+  });
+  await db.collection('runnerPulseGarminOfficialSync').doc(user.uid).set({status:'identity_verified',verifiedAt:Date.now()},{merge:true});
+  return json(res,200,{success:true,message:'Identità Garmin verificata. In attesa di notifiche ufficiali.'});
+ }catch(error){console.warn('Garmin official identity:',error.message);return json(res,502,{success:false,message:'Verifica identità Garmin non riuscita. Nessun dato è stato importato.'});}
+}
+// Notification ingestion is intentionally conservative: only Garmin's known
+// Activity API push summaries with a previously verified Garmin userId are imported.
+async function importOfficialActivities(payload){
+ const entries=Array.isArray(payload?.activities)?payload.activities:[];
+ const db=getFirestore();let imported=0,duplicates=0,unmatched=0;
+ for(const a of entries.slice(0,100)){
+  if(!a||typeof a!=='object'||Array.isArray(a))continue;
+  const id=String(a.activityId??'');const userId=a.userId;
+  if(!/^\d{1,20}$/.test(id)||typeof userId!=='string'||!userId||userId.length>150){unmatched++;continue;}
+  const mapping=await db.collection('runnerPulseGarminOfficialUsers').doc(createHash('sha256').update(userId).digest('hex')).get();
+  if(!mapping.exists||mapping.data()?.garminUserId!==userId){unmatched++;continue;}
+  const uid=mapping.data().uid;
+  const oauth=await garminOAuthDoc(uid).get();if(!oauth.data()?.encryptedToken){unmatched++;continue;}
+  const now=Date.now();const ref=db.collection('runnerPulseGarmin').doc(uid).collection('activities').doc(id);
+  // Firestore transaction prevents overwriting historic Personal API entries.
+  const created=await db.runTransaction(async tx=>{
+   const existing=await tx.get(ref);if(existing.exists)return false;
+   tx.create(ref,{summary:a,garminId:id,seenAt:now,source:'garmin-official-activity-api'});return true;
+  });
+  await db.collection('runnerPulseGarminOfficialSync').doc(uid).set({
+   received: (await import('firebase-admin/firestore')).FieldValue.increment(1),
+   imported:(await import('firebase-admin/firestore')).FieldValue.increment(created?1:0),
+   duplicates:(await import('firebase-admin/firestore')).FieldValue.increment(created?0:1),
+   lastReceivedAt:now,...(created?{lastImportedAt:now}:{}),status:'receiving'
+  },{merge:true});
+  if(created)imported++;else duplicates++;
+ }
+ return {imported,duplicates,unmatched};
+}
+
 // Garmin Activity API webhook intake (push). Isolato dalla Personal API.
 // IMPORTANTE: ricevere un evento non significa che sia gia stato verificato,
 // associato a un utente o importato nello storico. Non mostrare dati non verificati.
@@ -153,9 +230,12 @@ async function receiveGarminWebhook(req,res,pathname){
   // the Garmin user association and deduplicates actual activities.
   const receivedAt=Date.now();
   const id=randomBytes(16).toString('hex');
-  await getFirestore().collection('runnerPulseGarminWebhookInbox').doc(id).create({
-   receivedAt,source:'garmin-activity-api',status:'pending_verification',payload
-  });
+  const inbox=getFirestore().collection('runnerPulseGarminWebhookInbox').doc(id);
+  await inbox.create({receivedAt,source:'garmin-activity-api',status:'pending_verification',payload});
+  try{
+   const result=await importOfficialActivities(payload);
+   await inbox.update({status:result.unmatched?'partial_unmatched':'processed',...result,processedAt:Date.now()});
+  }catch(error){console.error('Garmin official import:',error.name||'Error');await inbox.update({status:'import_failed',errorAt:Date.now()});}
   return json(res,202,{success:true,received:true});
  }catch(e){console.error('Garmin webhook inbox:',e.code||e.name);return json(res,503,{success:false,message:'Ricezione temporaneamente non disponibile'});}
 }
@@ -539,6 +619,8 @@ http.createServer(async(req,res)=>{
   if(req.url?.startsWith('/api/garmin/webhook/')){let webhookPath;try{webhookPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await receiveGarminWebhook(req,res,webhookPath);return;}
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+  if(pathname==='/api/garmin/official-sync-status'){await officialSyncStatus(req,res);return;}
+  if(pathname==='/api/garmin/official-verify'){await officialVerifyIdentity(req,res);return;}
   if(['/api/garmin/account-status','/api/garmin/connect','/api/garmin/callback','/api/garmin/disconnect'].includes(pathname)){await garminOAuthRoutes(req,res,pathname);return;}
   if(pathname==='/api/garmin/vo2-check'){await garminVo2Check(req,res);return;}
   // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
