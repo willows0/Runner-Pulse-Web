@@ -13,6 +13,7 @@ const firebaseConfig = {
 const OWNER_EMAIL = 'utrefiletti@gmail.com';
 const isOwner = () => auth.currentUser?.email?.toLowerCase() === OWNER_EMAIL;
 const auth = getAuth(initializeApp(firebaseConfig));
+window.runnerPulseAuthBooted=true;
 const provider = new GoogleAuthProvider();
 // Foto Google e saluto della Home: mantenuti anche con gli aggiornamenti ai grafici.
 const rpAvatar=document.getElementById('rp-google-avatar');
@@ -97,7 +98,7 @@ getRedirectResult(auth).catch(showError);
 onAuthStateChanged(auth, async user => {
   const allowed = Boolean(user && googleVerifiedUser(user));
   document.body.classList.toggle('rp-authenticated', allowed);
-  if(!allowed)rpSavedName='';
+  if(!allowed){rpSavedName='';archiveNotice('Accedi con Google per caricare lo storico Garmin.');}
   rpRefreshWelcome(allowed?user:null);
   if(allowed)void rpLoadWelcomeProfile(user);
   if(allowed){

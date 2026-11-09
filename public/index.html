@@ -125,7 +125,20 @@
     });
   })();
   </script>
-  <script type="module" src="/login.js?v=garmin-archive-diagnostic-20261109"></script>
+  <script type="module">
+  try { await import('/login.js?v=auth-recovery-20261109'); }
+  catch(error) {
+    console.error('Runner Pulse: errore avvio Google Login',error);
+    document.body.classList.remove('rp-authenticated');
+    const gate=document.getElementById('rp-login-gate')||document.createElement('section');
+    gate.id='rp-login-gate';gate.style.cssText='position:fixed;inset:0;z-index:99999;display:grid;place-items:center;background:#101d33;color:white;padding:24px;font:16px system-ui';
+    const card=document.createElement('div');card.style.cssText='max-width:420px;text-align:center';
+    const heading=document.createElement('h2');heading.textContent='Accesso Google non disponibile';
+    const detail=document.createElement('p');detail.textContent='Errore avvio Firebase: '+(error?.message||String(error));
+    const retry=document.createElement('button');retry.type='button';retry.textContent='Riprova';retry.style.cssText='padding:12px 22px;background:#f97316;color:white;border:0;border-radius:10px';retry.onclick=()=>location.reload();
+    card.append(heading,detail,retry);gate.replaceChildren(card);document.body.append(gate);
+  }
+</script>
   <script type="module" src="/coach-memory.js"></script>
   <script>window.RUNNER_PULSE_VAPID_KEY = "BImx7Smy2xK7i2J_o5bCvC2Q4pzx8I0nIYQQCy93mYCRmo2vl7fE08sc-phyPvEiHs_Q33PIkJfNJDjJamP2ojk"; /* Inserire la chiave Web Push pubblica Firebase */</script>
   <script type="module" src="/weekly-push.js"></script>
