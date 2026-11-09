@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import {randomBytes,createHash,createCipheriv,createDecipheriv} from 'node:crypto';
+import {randomBytes,createHash,createCipheriv,createDecipheriv,timingSafeEqual} from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -126,6 +126,38 @@ async function garminOAuthRoutes(req,res,pathname){
    await ref.delete();return json(res,200,{success:true,connected:false});
   }catch(error){console.warn('Garmin disconnect:',error.message);return json(res,502,{success:false,message:'Scollegamento Garmin non riuscito. Riprova più tardi.'});}
  }
+}
+
+// Garmin Activity API webhook intake (push). Isolato dalla Personal API.
+// IMPORTANTE: ricevere un evento non significa che sia gia stato verificato,
+// associato a un utente o importato nello storico. Non mostrare dati non verificati.
+const GARMIN_WEBHOOK_SECRET=(process.env.GARMIN_WEBHOOK_SECRET||'').trim();
+const GARMIN_WEBHOOK_PATH='/api/garmin/webhook/'+GARMIN_WEBHOOK_SECRET;
+function secureEqual(a,b){
+ const x=Buffer.from(a),y=Buffer.from(b);
+ return x.length===y.length&&timingSafeEqual(x,y);
+}
+async function receiveGarminWebhook(req,res,pathname){
+ if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+ if(!GARMIN_WEBHOOK_SECRET||GARMIN_WEBHOOK_SECRET.length<32||!secureEqual(pathname,GARMIN_WEBHOOK_PATH))
+  return json(res,404,{success:false,message:'Not found'});
+ // Reject overly large payloads and non-JSON requests. No activity data in logs.
+ const mime=(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();
+ if(mime!=='application/json')return json(res,415,{success:false,message:'JSON richiesto'});
+ let payload;
+ try{payload=await readJsonBody(req,256*1024);}
+ catch(e){return json(res,e.status||400,{success:false,message:e.message});}
+ if(!payload||typeof payload!=='object'||Array.isArray(payload))return json(res,400,{success:false,message:'Formato non valido'});
+ try{
+  // Incoming data is quarantined until a separate authenticated importer validates
+  // the Garmin user association and deduplicates actual activities.
+  const receivedAt=Date.now();
+  const id=randomBytes(16).toString('hex');
+  await getFirestore().collection('runnerPulseGarminWebhookInbox').doc(id).create({
+   receivedAt,source:'garmin-activity-api',status:'pending_verification',payload
+  });
+  return json(res,202,{success:true,received:true});
+ }catch(e){console.error('Garmin webhook inbox:',e.code||e.name);return json(res,503,{success:false,message:'Ricezione temporaneamente non disponibile'});}
 }
 
 // Garmin Connect Personal API: riepiloghi salute, solo per il proprietario.
@@ -504,6 +536,7 @@ async function weeklyPushRoute(req,res,pathname){
 }
 
 http.createServer(async(req,res)=>{
+  if(req.url?.startsWith('/api/garmin/webhook/')){let webhookPath;try{webhookPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await receiveGarminWebhook(req,res,webhookPath);return;}
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
   if(['/api/garmin/account-status','/api/garmin/connect','/api/garmin/callback','/api/garmin/disconnect'].includes(pathname)){await garminOAuthRoutes(req,res,pathname);return;}
