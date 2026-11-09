@@ -1,4 +1,4 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
 // Runner Pulse: autenticazione Google e grafici basati solo su dati ricevuti.
@@ -12,8 +12,8 @@ const firebaseConfig = {
 };
 const OWNER_EMAIL = 'utrefiletti@gmail.com';
 const isOwner = () => auth.currentUser?.email?.toLowerCase() === OWNER_EMAIL;
-const auth = getAuth(initializeApp(firebaseConfig));
-window.runnerPulseAuthBooted=true;
+const existingApp = getApps().find(app => app.options.projectId === firebaseConfig.projectId);
+const auth = getAuth(existingApp || initializeApp(firebaseConfig));
 const provider = new GoogleAuthProvider();
 // Foto Google e saluto della Home: mantenuti anche con gli aggiornamenti ai grafici.
 const rpAvatar=document.getElementById('rp-google-avatar');
@@ -98,7 +98,7 @@ getRedirectResult(auth).catch(showError);
 onAuthStateChanged(auth, async user => {
   const allowed = Boolean(user && googleVerifiedUser(user));
   document.body.classList.toggle('rp-authenticated', allowed);
-  if(!allowed){rpSavedName='';archiveNotice('Accedi con Google per caricare lo storico Garmin.');}
+  if(!allowed)rpSavedName='';
   rpRefreshWelcome(allowed?user:null);
   if(allowed)void rpLoadWelcomeProfile(user);
   if(allowed){
