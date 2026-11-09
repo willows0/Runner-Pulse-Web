@@ -2,6 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import {randomBytes,createHash,createCipheriv,createDecipheriv} from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -30,6 +31,102 @@ const GARMIN_TOKEN_URL=GARMIN_BASE+'/personalapitoken-service/personal-api/perso
 async function getGarminToken(){if(!GARMIN_API_KEY)throw new Error('Chiave Garmin non configurata');const response=await fetch(GARMIN_TOKEN_URL,{method:'POST',headers:{Authorization:`ApiKey ${GARMIN_API_KEY}`},signal:AbortSignal.timeout(15000)});if(!response.ok)throw new Error(`Garmin token HTTP ${response.status}`);const token=(await response.text()).trim();if(!token)throw new Error('Garmin token vuoto');return token;}
 async function garminJson(endpoint,token){const response=await fetch(GARMIN_BASE+endpoint,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'},signal:AbortSignal.timeout(20000)});if(!response.ok)throw new Error(`Garmin HTTP ${response.status} per ${endpoint.split('?')[0]}`);return response.json();}
 async function getGarminActivities(){const token=await getGarminToken();const url=new URL('/activitylist-service/activities/search/activities',GARMIN_BASE);url.searchParams.set('start','0');url.searchParams.set('limit','20');const data=await garminJson(url.pathname+url.search,token);if(!Array.isArray(data))throw new Error('Formato attività Garmin inatteso');return data;}
+
+// Garmin Business OAuth 2.0 + PKCE. Isolato dalla Personal API esistente.
+const GARMIN_CLIENT_ID=process.env.GARMIN_CLIENT_ID;
+const GARMIN_CLIENT_SECRET=process.env.GARMIN_CLIENT_SECRET;
+const GARMIN_REDIRECT_URI='https://runner-pulse-web.onrender.com/api/garmin/callback';
+const GARMIN_AUTH_URL='https://connect.garmin.com/oauth2Confirm';
+const GARMIN_OAUTH_TOKEN_URL='https://diauth.garmin.com/di-oauth2-service/oauth/token';
+const garminOAuthReady=Boolean(GARMIN_CLIENT_ID&&GARMIN_CLIENT_SECRET);
+const garminCryptoKey=GARMIN_CLIENT_SECRET?createHash('sha256').update('runner-pulse-garmin-oauth-tokens-v1\0'+GARMIN_CLIENT_SECRET).digest():null;
+function encryptGarminToken(value){
+ const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',garminCryptoKey,iv);
+ const ciphertext=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final()]);
+ return {iv:iv.toString('base64'),data:ciphertext.toString('base64'),tag:cipher.getAuthTag().toString('base64')};
+}
+function decryptGarminToken(blob){
+ const decipher=createDecipheriv('aes-256-gcm',garminCryptoKey,Buffer.from(blob.iv,'base64'));
+ decipher.setAuthTag(Buffer.from(blob.tag,'base64'));
+ return JSON.parse(Buffer.concat([decipher.update(Buffer.from(blob.data,'base64')),decipher.final()]).toString('utf8'));
+}
+async function garminGoogleUser(req){
+ const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+ if(!match)return null;
+ try{const user=await getAuth().verifyIdToken(match[1],true);return verifiedGoogleIdentity(user)?user:null;}catch{return null;}
+}
+function garminOAuthDoc(uid){return getFirestore().collection('runnerPulseGarminOAuth').doc(uid);}
+async function garminOAuthExchange(params){
+ const response=await fetch(GARMIN_OAUTH_TOKEN_URL,{method:'POST',headers:{
+  'Content-Type':'application/x-www-form-urlencoded',
+  Authorization:'Basic '+Buffer.from(GARMIN_CLIENT_ID+':'+GARMIN_CLIENT_SECRET).toString('base64'),
+  Accept:'application/json'
+ },body:new URLSearchParams(params),signal:AbortSignal.timeout(20000)});
+ if(!response.ok)throw new Error('Garmin OAuth token HTTP '+response.status);
+ const data=await response.json();
+ if(typeof data.access_token!=='string'||!data.access_token)throw new Error('Risposta token Garmin non valida');
+ return data;
+}
+async function garminOAuthRoutes(req,res,pathname){
+ if(pathname==='/api/garmin/account-status'){
+  if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+  const user=await garminGoogleUser(req);if(!user)return json(res,401,{success:false,message:'Accedi con Google'});
+  const doc=await garminOAuthDoc(user.uid).get();
+  const connected=garminOAuthReady&&Boolean(doc.data()?.encryptedToken);
+  return json(res,200,{success:true,connected,oauthAvailable:garminOAuthReady,accountId:user.uid,
+   connectUrl:garminOAuthReady?'/api/garmin/connect':'',
+   message:connected?'Account Garmin autorizzato.':'Garmin non collegato.'+(garminOAuthReady?' Tocca l’interruttore per autorizzare Garmin.':' Configurazione OAuth non disponibile.')});
+ }
+ if(pathname==='/api/garmin/connect'){
+  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  const user=await garminGoogleUser(req);if(!user)return json(res,401,{success:false,message:'Accedi con Google'});
+  if(!garminOAuthReady)return json(res,503,{success:false,message:'Credenziali Garmin OAuth mancanti su Render'});
+  const state=randomBytes(32).toString('base64url');
+  const verifier=randomBytes(48).toString('base64url');
+  const challenge=createHash('sha256').update(verifier).digest('base64url');
+  const stateHash=createHash('sha256').update(state).digest('hex');
+  await getFirestore().collection('runnerPulseGarminOAuthStates').doc(stateHash).create({uid:user.uid,verifier,createdAt:Date.now(),expiresAt:Date.now()+10*60*1000});
+  const url=new URL(GARMIN_AUTH_URL);
+  for(const [k,v] of Object.entries({client_id:GARMIN_CLIENT_ID,response_type:'code',redirect_uri:GARMIN_REDIRECT_URI,code_challenge:challenge,code_challenge_method:'S256',state}))url.searchParams.set(k,v);
+  return json(res,200,{success:true,authorizationUrl:url.toString()});
+ }
+ if(pathname==='/api/garmin/callback'){
+  if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+  const url=new URL(req.url,'http://localhost');
+  const state=url.searchParams.get('state')||'',code=url.searchParams.get('code')||'';
+  const fail=reason=>{res.writeHead(303,{Location:'/index.html?garmin='+encodeURIComponent(reason),'Cache-Control':'no-store'});res.end();};
+  if(!/^[A-Za-z0-9_-]{40,100}$/.test(state))return fail('invalid_state');
+  const ref=getFirestore().collection('runnerPulseGarminOAuthStates').doc(createHash('sha256').update(state).digest('hex'));
+  // Claim state atomically: a callback can only be used once.
+  const pending=await getFirestore().runTransaction(async tx=>{
+   const doc=await tx.get(ref);if(!doc.exists)return null;
+   tx.delete(ref);return doc.data();
+  });
+  if(!pending||Date.now()>pending.expiresAt)return fail('expired');
+  if(url.searchParams.has('error')||!code)return fail('denied');
+  try{
+   const token=await garminOAuthExchange({grant_type:'authorization_code',client_id:GARMIN_CLIENT_ID,code,redirect_uri:GARMIN_REDIRECT_URI,code_verifier:pending.verifier});
+   await garminOAuthDoc(pending.uid).set({encryptedToken:encryptGarminToken(token),connectedAt:Date.now(),updatedAt:Date.now()},{merge:true});
+   return fail('connected');
+  }catch(error){console.error('Garmin OAuth callback:',error.message);return fail('token_error');}
+ }
+ if(pathname==='/api/garmin/disconnect'){
+  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  const user=await garminGoogleUser(req);if(!user)return json(res,401,{success:false,message:'Accedi con Google'});
+  const ref=garminOAuthDoc(user.uid),doc=await ref.get();
+  if(!doc.exists||!doc.data()?.encryptedToken)return json(res,200,{success:true,connected:false});
+  try{
+   let token=decryptGarminToken(doc.data().encryptedToken);
+   if(token.refresh_token&&token.expires_in&&Date.now()-doc.data().updatedAt>Math.max(0,Number(token.expires_in)-300)*1000){
+    token=await garminOAuthExchange({grant_type:'refresh_token',refresh_token:token.refresh_token,client_id:GARMIN_CLIENT_ID});
+    await ref.set({encryptedToken:encryptGarminToken(token),updatedAt:Date.now()},{merge:true});
+   }
+   const response=await fetch('https://apis.garmin.com/wellness-api/rest/user/registration',{method:'DELETE',headers:{Authorization:'Bearer '+token.access_token},signal:AbortSignal.timeout(20000)});
+   if(!response.ok)throw new Error('Garmin revoke HTTP '+response.status);
+   await ref.delete();return json(res,200,{success:true,connected:false});
+  }catch(error){console.warn('Garmin disconnect:',error.message);return json(res,502,{success:false,message:'Scollegamento Garmin non riuscito. Riprova più tardi.'});}
+ }
+}
 
 // Garmin Connect Personal API: riepiloghi salute, solo per il proprietario.
 // I parametri sono quelli documentati nello Swagger Personal API.
@@ -409,18 +506,7 @@ async function weeklyPushRoute(req,res,pathname){
 http.createServer(async(req,res)=>{
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
-  // Multiutente: stato personale. Non usare mai la Personal API per altri account.
-  if(pathname==='/api/garmin/account-status'){
-    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
-    const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
-    if(!match)return json(res,401,{success:false,message:'Accedi con Google'});
-    try{
-      const user=await getAuth().verifyIdToken(match[1],true);
-      if(!verifiedGoogleIdentity(user))return json(res,403,{success:false,message:'Account Google non verificato'});
-      // Nessuna connessione viene dichiarata attiva prima del completamento di OAuth ufficiale.
-      return json(res,200,{success:true,connected:false,oauthAvailable:false,accountId:user.uid,message:'Connessione Garmin personale in preparazione: in attesa delle credenziali Business e di OAuth 2.0.'});
-    }catch{return json(res,401,{success:false,message:'Sessione scaduta: accedi nuovamente'});}
-  }
+  if(['/api/garmin/account-status','/api/garmin/connect','/api/garmin/callback','/api/garmin/disconnect'].includes(pathname)){await garminOAuthRoutes(req,res,pathname);return;}
   if(pathname==='/api/garmin/vo2-check'){await garminVo2Check(req,res);return;}
   // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
   // Accesso limitato al proprietario e paginazione per evitare risposte troppo grandi.
