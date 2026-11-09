@@ -320,6 +320,25 @@ async function weeklyPushRoute(req,res,pathname){
    return json(res,200,{success:true});
   }catch(error){console.error('Push subscribe:',error.message);return json(res,500,{success:false,message:'Registrazione notifica non riuscita'});}
  }
+ if(pathname==='/api/push/unsubscribe' || pathname==='/api/push/status'){
+  if(pathname==='/api/push/unsubscribe' && req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  if(pathname==='/api/push/status' && req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+  const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+  if(!match)return json(res,401,{success:false,message:'Accesso richiesto'});
+  let user;try{user=await getAuth().verifyIdToken(match[1],true);}catch{return json(res,401,{success:false,message:'Sessione non valida'});}
+  if(!verifiedGoogleIdentity(user)||user.email?.toLowerCase()!==OWNER_EMAIL)return json(res,403,{success:false,message:'Solo proprietario'});
+  try{
+   const crypto=await import('node:crypto');
+   const token=pathname==='/api/push/status' ? new URL(req.url,'http://localhost').searchParams.get('token') : (await readJsonBody(req,4096)).token;
+   if(typeof token!=='string'||token.length<50||token.length>3000)return json(res,400,{success:false,message:'Token non valido'});
+   const id=crypto.createHash('sha256').update(token).digest('hex');
+   const ref=getFirestore().collection('runnerPulsePush').doc(user.uid).collection('devices').doc(id);
+   if(pathname==='/api/push/status'){
+    const doc=await ref.get();return json(res,200,{success:true,enabled:doc.exists && doc.data()?.enabled===true});
+   }
+   await ref.delete();return json(res,200,{success:true,enabled:false});
+  }catch(error){console.error('Push settings:',error.message);return json(res,500,{success:false,message:'Impossibile aggiornare le notifiche'});}
+ }
  if(pathname==='/api/push/test'){
   if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
   if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso riservato al proprietario'});
