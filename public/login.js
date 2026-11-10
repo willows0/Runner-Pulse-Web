@@ -275,8 +275,8 @@ function syncUI(state,message){
   syncClock.classList.toggle('rp-sync-running',syncActive);
   syncClock.classList.toggle('rp-sync-error',phase==='partial'||Boolean(message));
   const label=message|| (complete?`Sincronizzato: ${total} attività Garmin.`:phase==='partial'?`Importazione parziale: ${failed} dettagli non disponibili.`:phase==='discover'?`Ricerca dello storico Garmin: ${total} attività trovate…`:phase==='details'?`Sincronizzazione ${done} di ${total} attività (${Math.floor(done/total*100)||0}%).`:'In attesa della sincronizzazione.');
-  syncText.textContent=label;
-  if(syncPercent)syncPercent.textContent=complete?'100%':phase==='details'&&total?`${Math.min(99,Math.floor(done/total*100))}%`:phase==='partial'&&total?`${Math.min(100,Math.floor(done/total*100))}%`:'—';
+  if(window.runnerPulseConnectedService==='garmin')syncText.textContent=label;
+  if(syncPercent&&window.runnerPulseConnectedService==='garmin')syncPercent.textContent=complete?'100%':phase==='details'&&total?`${Math.min(99,Math.floor(done/total*100))}%`:phase==='partial'&&total?`${Math.min(100,Math.floor(done/total*100))}%`:'—';
   syncClock.title=label;syncClock.setAttribute('aria-label',label);
 }
 function stopAutoSync(){syncCancel=true;syncActive=false;syncUI(null,'Accedi con Google per sincronizzare Garmin.');}

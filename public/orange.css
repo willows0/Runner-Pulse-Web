@@ -428,3 +428,12 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 #rp-detail-coach .rp-hint{color:#e2ebf5;}
 
 .rp-privacy-footer{margin:28px auto 0;max-width:520px;font-size:13px;line-height:1.6;color:#586273;text-align:center}.rp-privacy-footer p{margin:0 0 9px}.rp-privacy-footer a{color:#c35b00;text-decoration:underline;font-weight:700}
+
+/* Dispositivi: stessa palette blu notte/arancio del Profilo. */
+#settings .rp-devices{background:linear-gradient(145deg,#122640,#203f60)!important;border:1px solid #55718b!important;border-radius:25px!important;color:#fff!important;box-shadow:0 12px 30px #102a4520!important;padding:24px!important;scroll-margin-top:18px}
+#settings .rp-devices h2{color:#ff922d!important;font-size:20px!important}
+#settings .rp-devices p,#settings .rp-devices .rp-device-sub,#settings .rp-devices .rp-device-state{color:#d0deeb!important}
+#settings .rp-devices .rp-device-name{color:#fff!important}
+#settings .rp-devices .rp-device-switch:disabled{opacity:.5}
+#home .rp-watch-actions[hidden]{display:none!important}
+#home .rp-watch-percent[hidden]{display:none!important}
