@@ -76,7 +76,7 @@ async function garminOAuthRoutes(req,res,pathname){
   const connected=garminOAuthReady&&Boolean(doc.data()?.encryptedToken);
   return json(res,200,{success:true,connected,oauthAvailable:garminOAuthReady,accountId:user.uid,
    connectUrl:garminOAuthReady?'/api/garmin/connect':'',
-   message:connected?'Account Garmin autorizzato.':'Garmin non collegato.'+(garminOAuthReady?' Tocca l’interruttore per autorizzare Garmin.':' Configurazione OAuth non disponibile.')});
+   message:connected?'Dispositivo collegato.':'Nessun dispositivo collegato.'});
  }
  if(pathname==='/api/garmin/connect'){
   if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
