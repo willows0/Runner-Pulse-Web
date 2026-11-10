@@ -27,12 +27,12 @@ const watchActions=document.querySelector('.rp-watch-actions');
 function publishConnection(service){
  const name=service==='garmin'?'Garmin Connect':service==='polar'?'Polar Flow':service==='suunto'?'Suunto App':service==='samsung'?'Samsung Health':'';
  window.runnerPulseConnectedService=service||null;
- if(caption)caption.textContent=name||'COLLEGA OROLOGIO';
+ if(caption)caption.textContent=name||'';
  if(watchHint)watchHint.textContent='Tocca per gestire';
  if(watchButton){watchButton.title='Gestisci dispositivi nel Profilo';watchButton.setAttribute('aria-label','Apri dispositivi nel Profilo');}
  if(watchActions)watchActions.hidden=service!=='garmin';
- if(!service){if(watchText)watchText.textContent='Nessun orologio collegato';if(watchPercent)watchPercent.hidden=true;}
- else {if(watchPercent)watchPercent.hidden=service!=='garmin';if(service!=='garmin'&&watchText)watchText.textContent='Orologio collegato';}
+ if(!service){if(watchText){watchText.textContent='';watchText.hidden=true;}if(watchPercent){watchPercent.textContent='';watchPercent.hidden=true;}}
+ else {if(watchText)watchText.hidden=false;if(watchPercent)watchPercent.hidden=service!=='garmin';if(service!=='garmin'&&watchText)watchText.textContent='Orologio collegato';}
  window.dispatchEvent(new CustomEvent('runnerpulse:device-status',{detail:{service:service||null}}));
 }
 watchButton?.addEventListener('click',event=>{event.stopImmediatePropagation();document.querySelector('nav button[data-page="settings"]')?.click();requestAnimationFrame(()=>section.scrollIntoView({behavior:'smooth',block:'start'}));},true);
@@ -62,7 +62,7 @@ async function refresh(){
  const user=auth.currentUser;
  setGarminUI(false,false);
  if(!user){message.textContent='Accedi con Google per collegare i dispositivi.';publishConnection(null);return;}
- message.textContent='Verifica connessione Garmin…';
+ message.textContent='Verifica connessione del servizio…';
  try{
   const token=await user.getIdToken();
   const response=await fetch('/api/garmin/account-status',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
@@ -88,3 +88,31 @@ if(garminReturn){message.textContent=garminReturn==='connected'?'Garmin autorizz
 
 // Il riepilogo tecnico della sincronizzazione resta disponibile sul server,
 // ma non viene mostrato nel Profilo. La connessione Garmin resta attiva.
+
+// Etichette dell'interfaccia: i riferimenti al fornitore sono dinamici.
+// Le scelte nella lista dei servizi restano esplicite per consentire il collegamento.
+const originalVisibleText=new WeakMap();
+let brandingScheduled=false;
+function refreshVisibleBranding(){
+ const service=window.runnerPulseConnectedService;
+ const displayName=service==='garmin'?'Garmin':service==='polar'?'Polar':service==='suunto'?'Suunto':service==='samsung'?'Samsung':'';
+ const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+ const nodes=[];
+ while(walker.nextNode())nodes.push(walker.currentNode);
+ for(const node of nodes){
+  const parent=node.parentElement;
+  if(!parent||parent.closest('#rp-connected-devices, .rp-garmin-account, script, style, noscript, [hidden], #rp-sync-text, #rp-sync-percent'))continue;
+  const current=node.nodeValue;
+  if(!originalVisibleText.has(node)){
+   if(!/garmin/i.test(current))continue;
+   originalVisibleText.set(node,current);
+  }else if(current!==originalVisibleText.get(node)&&!/garmin/i.test(current)&&!displayName)continue;
+  const original=originalVisibleText.get(node);
+  const replacement=original.replace(/Garmin Connect/gi,displayName?`${displayName} Connect`:'servizio collegato').replace(/Garmin/gi,displayName||'servizio');
+  if(current!==replacement)node.nodeValue=replacement;
+ }
+}
+function scheduleBranding(){if(brandingScheduled)return;brandingScheduled=true;requestAnimationFrame(()=>{brandingScheduled=false;refreshVisibleBranding();});}
+window.addEventListener('runnerpulse:device-status',scheduleBranding);
+new MutationObserver(scheduleBranding).observe(document.body,{childList:true,subtree:true,characterData:true});
+scheduleBranding();

@@ -437,3 +437,6 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 #settings .rp-devices .rp-device-switch:disabled{opacity:.5}
 #home .rp-watch-actions[hidden]{display:none!important}
 #home .rp-watch-percent[hidden]{display:none!important}
+
+/* Nascondi sempre indicatori non validi, anche quando lo stile precedente forza display */
+#home .rp-watch-sync-status[hidden],#home .rp-watch-percent[hidden],#home .rp-watch-caption:empty{display:none!important}
