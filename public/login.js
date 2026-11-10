@@ -625,3 +625,19 @@ document.getElementById('closeDetail')?.addEventListener('click', () => { detail
 // La chat Coach è gestita da coach-memory.js, con cronologia Firebase.
 
 // Il VO2 max stimato e' gestito da dashboard.js sui dati Garmin archiviati.
+
+// Valutazione critica dell'allenamento selezionato, salvata su Firestore per utente.
+window.addEventListener('runnerpulse:activity-coach',async event=>{
+ const id=String(event.detail?.activityId||'');
+ const pane=document.getElementById('rp-detail-coach');
+ if(!pane)return;
+ pane.replaceChildren();
+ const title=document.createElement('h3');title.textContent='Parere del Coach AI';
+ const result=document.createElement('p');result.className='rp-hint';result.setAttribute('role','status');
+ result.textContent=id?'Analisi dei dati reali in corso…':'Analisi disponibile per gli allenamenti Garmin salvati in Firebase.';
+ pane.append(title,result);if(!/^\d{1,20}$/.test(id))return;
+ try{const data=await authorizedPost('/api/coach/activity',{activityId:id});
+  if(pane!==document.getElementById('rp-detail-coach')||pane.hidden)return;
+  result.textContent=data.text;result.style.whiteSpace='pre-wrap';
+ }catch(e){if(pane===document.getElementById('rp-detail-coach'))result.textContent='Valutazione non disponibile: '+(e.message||String(e));}
+});
