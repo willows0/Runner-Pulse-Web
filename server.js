@@ -178,6 +178,45 @@ async function officialVerifyIdentity(req,res){
 }
 // Notification ingestion is intentionally conservative: only Garmin's known
 // Activity API push summaries with a previously verified Garmin userId are imported.
+// Usa le registrazioni FCM esistenti del resoconto settimanale.
+// Nessun dato sanitario nel payload; invio solo dopo salvataggio dell'analisi.
+async function notifyActivityCoachReady(uid,id){
+ const db=getFirestore();
+ const root=db.collection('runnerPulsePush').doc(uid);
+ const marker=root.collection('activityNotifications').doc(String(id));
+ const shouldSend=await db.runTransaction(async tx=>{
+  const prior=await tx.get(marker);
+  if(prior.exists)return false;
+  tx.create(marker,{status:'started',createdAt:new Date()});return true;
+ });
+ if(!shouldSend)return;
+ try{
+  const snap=await root.collection('devices').where('enabled','==',true).get();
+  const tokens=snap.docs.map(d=>d.data().token).filter(Boolean);
+  let delivered=0,failed=0;
+  for(let i=0;i<tokens.length;i+=500){
+   const batch=tokens.slice(i,i+500);
+   const result=await getMessaging().sendEachForMulticast({
+    tokens:batch,
+    data:{title:'Runner Pulse · Coach AI',body:'🏃 Allenamento analizzato! Tocca per leggere il giudizio del Coach.',tag:'runnerpulse-activity-'+id,url:'/index.html?coachActivity='+encodeURIComponent(id)},
+    webpush:{headers:{Urgency:'high',TTL:'86400'}}
+   });
+   delivered+=result.successCount;failed+=result.failureCount;
+   for(let j=0;j<result.responses.length;j++)if(['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(result.responses[j].error?.code)){
+    await root.collection('devices').doc(createHash('sha256').update(batch[j]).digest('hex')).delete();
+   }
+  }
+  await marker.set({status:'finished',delivered,failed,completedAt:new Date()},{merge:true});
+ }catch(error){
+  await marker.delete().catch(()=>{});
+  throw error;
+ }
+}
+async function analyzeAndNotifyGarmin(uid,id){
+ await activityCoachReport(uid,id);
+ await notifyActivityCoachReady(uid,id);
+}
+
 async function importOfficialActivities(payload){
  const entries=Array.isArray(payload?.activities)?payload.activities:[];
  const db=getFirestore();let imported=0,duplicates=0,unmatched=0;
@@ -202,7 +241,7 @@ async function importOfficialActivities(payload){
    lastReceivedAt:now,...(created?{lastImportedAt:now}:{}),status:'receiving'
   },{merge:true});
   if(created){imported++; // Analisi asincrona: non blocca la risposta al webhook Garmin.
-   setImmediate(()=>activityCoachReport(uid,id).catch(e=>console.warn('Coach automatico Garmin:',e.message)));
+   setImmediate(()=>analyzeAndNotifyGarmin(uid,id).catch(e=>console.warn('Coach automatico Garmin / push:',e.message)));
   }else duplicates++;
  }
  return {imported,duplicates,unmatched};
