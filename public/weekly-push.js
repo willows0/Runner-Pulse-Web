@@ -126,8 +126,8 @@ if (await isSupported()) {
    const reg=await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
    if(Notification.permission==='granted' && reg){
     await reg.showNotification(data.title||'Runner Pulse · Coach AI',{
-     body:data.body||'Messaggio ricevuto dal Coach',icon:'/coach-notification.png',
-     badge:'/coach-notification.png',tag:data.tag||'runnerpulse-foreground',
+     body:data.body||'Messaggio ricevuto dal Coach',icon:'/runner-pulse-icon-192.png',
+     badge:'/runner-pulse-notification-badge.png',tag:data.tag||'runnerpulse-foreground',
      data:{url:data.url||'/index.html?weeklyCoach=1'}
     });
     say('Messaggio Firebase ricevuto da Chrome e notifica visualizzata.');

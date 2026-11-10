@@ -77,6 +77,8 @@ $('closeDetail').onclick=()=>{$('detailOverlay').hidden=true;document.body.style
 // Deep link delle notifiche: apri l'allenamento esatto nella scheda Coach AI.
 let pendingCoachActivity=new URLSearchParams(location.search).get('coachActivity');
 function openPendingCoachActivity(){
+ const requested=new URLSearchParams(location.search).get('coachActivity');
+ if(requested && requested!==pendingCoachActivity)pendingCoachActivity=requested;
  if(!pendingCoachActivity||!key)return;
  const target=entries.find(x=>String(x.garminId||String(x.id||'').replace(/^garmin-/,''))===pendingCoachActivity);
  if(!target)return; // Attendi il caricamento automatico da Firebase.
@@ -86,6 +88,8 @@ function openPendingCoachActivity(){
  rpActivatePage('activities');showDetail(target);
  document.querySelector('#detailContent button[data-detail-tab="coach"]')?.click();
 }
+window.addEventListener('pageshow',()=>setTimeout(openPendingCoachActivity,250));
+window.addEventListener('popstate',()=>setTimeout(openPendingCoachActivity,100));
 function render(){const totalKm=entries.reduce((s,x)=>s+(Number(x.km)||0),0);const totalMin=entries.reduce((s,x)=>s+(Number(x.minutes)||0),0);$('count').textContent=entries.length;$('distance').textContent=fmt(totalKm);$('avgPace').textContent=pace(totalKm,totalMin).replace(' min/km','');$('activityList').replaceChildren();[...entries].sort(activityNewestFirst).forEach(x=>{const c=document.createElement('div');c.className='card';const open=document.createElement('button');open.className='activity-open';open.type='button';const title=document.createElement('b');title.textContent=`${x.kind||'Corsa'} · ${fmt(x.km)} km`;const sub=document.createElement('small');sub.textContent=`${activityDateIT(x.date)} · ${fmt(x.minutes)} min · ${pace(x.km,x.minutes)}`;open.append(title,sub);open.onclick=()=>showDetail(x);const del=document.createElement('button');del.className='delete';del.textContent='Elimina';del.onclick=async()=>{
   if(!window.confirm(`Vuoi eliminare definitivamente da Runner Pulse l'allenamento del ${activityDateIT(x.date)}?${x.source==='garmin'?' Sarà eliminato anche da Firebase, ma resterà su Garmin Connect.':''}`))return;
   del.disabled=true;

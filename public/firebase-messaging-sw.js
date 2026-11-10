@@ -6,7 +6,7 @@ const messaging=firebase.messaging();
 messaging.onBackgroundMessage(payload=>{
  const data=payload.data||{};
  const title=data.title||'Runner Pulse · Coach AI';
- const options={body:data.body||'Il tuo allenatore ti aspetta.',icon:'/coach-notification.png',badge:'/coach-notification.png',tag:data.tag||'runnerpulse-coach',data:{url:data.url||'/index.html?weeklyCoach=1'}};
+ const options={body:data.body||'Il tuo allenatore ti aspetta.',icon:'/runner-pulse-icon-192.png',badge:'/runner-pulse-notification-badge.png',tag:data.tag||'runnerpulse-coach',data:{url:data.url||'/index.html?weeklyCoach=1'}};
  return self.registration.showNotification(title,options);
 });
 self.addEventListener('notificationclick',event=>{
