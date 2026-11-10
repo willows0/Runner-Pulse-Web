@@ -237,8 +237,18 @@ async function processCoachJobs(){
    try{
     await activityCoachReport(job.uid,job.id);
     await notifyActivityCoachReady(job.uid,job.id);
+    await getFirestore().collection('runnerPulseCoachRetries').doc(job.uid).collection('activities').doc(job.id).delete().catch(()=>{});
     console.info('Garmin Coach: analisi completata e invio notifica elaborato');
-   }catch(error){console.warn('Garmin Coach: analisi/notifica non riuscita:',error.name||'Error');}
+   }catch(error){
+    console.warn('Garmin Coach: analisi/notifica non riuscita:',error.name||'Error',error.status||'');
+    // Conserva il lavoro fallito in Firestore, anche se Render viene riavviato.
+    try{
+     const ref=getFirestore().collection('runnerPulseCoachRetries').doc(job.uid).collection('activities').doc(job.id);
+     const previous=(await ref.get()).data()||{};
+     const attempts=Math.min(20,(Number(previous.attempts)||0)+1);
+     await ref.set({attempts,nextAttemptAt:Date.now()+Math.min(60*60*1000,5*60*1000*2**Math.min(attempts-1,4)),updatedAt:Date.now(),lastErrorStatus:error.status||null},{merge:true});
+    }catch(saveError){console.warn('Garmin Coach: salvataggio tentativo non riuscito:',saveError.message);}
+   }
    finally{queuedCoachIds.delete(job.key);}
   }
  }finally{coachWorkerRunning=false;}
@@ -273,6 +283,31 @@ async function importOfficialActivities(payload){
  return {imported,duplicates,unmatched,invalid,received:entries.length};
 }
 
+// Ritenta le analisi fallite dopo errori temporanei (es. Gemini HTTP 503).
+// Il recupero legge solo lavori realmente registrati: non crea allenamenti né giudizi fittizi.
+let coachRetryScanning=false;
+async function retryPendingCoachJobs(){
+ if(coachRetryScanning)return;
+ coachRetryScanning=true;
+ try{
+  const db=getFirestore();
+  const now=Date.now();
+  const users=await db.collection('runnerPulseCoachRetries').listDocuments();
+  for(const user of users.slice(0,20)){
+   const pending=await user.collection('activities').where('nextAttemptAt','<=',now).limit(30).get();
+   for(const doc of pending.docs){
+   const uid=user.id,id=doc.id;
+   if((Number(doc.data().attempts)||0)>=12)continue;
+   // Sposta il prossimo tentativo prima di accodare, per evitare duplicati tra scansioni.
+   await doc.ref.set({nextAttemptAt:now+5*60*1000},{merge:true});
+   scheduleActivityCoach(uid,id);
+   }
+  }
+ }catch(error){console.warn('Garmin Coach: ricerca tentativi:',error.message);}
+ finally{coachRetryScanning=false;}
+}
+setInterval(()=>{void retryPendingCoachJobs();},5*60*1000).unref?.();
+setTimeout(()=>{void retryPendingCoachJobs();},30*1000).unref?.();
 // Recupero non distruttivo degli eventi Garmin gia ricevuti: l'importazione e idempotente.
 // Il recupero non chiama Garmin, non crea dati fittizi e non cancella lo storico.
 let webhookRecoveryRunning=false;
