@@ -273,6 +273,49 @@ async function importOfficialActivities(payload){
  return {imported,duplicates,unmatched,invalid,received:entries.length};
 }
 
+// Recupero non distruttivo degli eventi Garmin gia ricevuti: l'importazione e idempotente.
+// Il recupero non chiama Garmin, non crea dati fittizi e non cancella lo storico.
+let webhookRecoveryRunning=false;
+async function recoverGarminWebhookInbox(){
+ if(webhookRecoveryRunning)return;
+ webhookRecoveryRunning=true;
+ try{
+  const db=getFirestore();
+  const inbox=db.collection('runnerPulseGarminWebhookInbox');
+  let inspected=0,recovered=0,unmatched=0,failed=0;
+  for(const status of ['pending_verification','import_failed','partial_unmatched']){
+   const snap=await inbox.where('status','==',status).limit(20).get();
+   for(const doc of snap.docs){
+    inspected++;
+    const event=doc.data();
+    if(!event?.payload||typeof event.payload!=='object')continue;
+    try{
+     const result=await importOfficialActivities(event.payload);
+     recovered+=result.imported;unmatched+=result.unmatched;
+     await doc.ref.update({status:result.unmatched||result.invalid?'partial_unmatched':'processed',...result,processedAt:Date.now()});
+    }catch(error){failed++;console.warn('Garmin recupero inbox:',error.name||'Error');}
+   }
+  }
+  console.info('Garmin recupero webhook:',JSON.stringify({inspected,recovered,unmatched,failed}));
+ }catch(error){console.warn('Garmin recupero webhook non disponibile:',error.name||'Error');}
+ finally{webhookRecoveryRunning=false;}
+}
+async function garminWebhookDiagnostics(req,res){
+ if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+ const user=await garminGoogleUser(req);if(!user)return json(res,401,{success:false,message:'Accedi con Google'});
+ try{
+  const db=getFirestore();
+  const state=(await db.collection('runnerPulseGarminOfficialSync').doc(user.uid).get()).data()||{};
+  // Stato aggregato: non esponiamo payload, token, ID Garmin o dati di altri utenti.
+  const latest=await db.collection('runnerPulseGarminWebhookInbox').orderBy('receivedAt','desc').limit(1).get();
+  const last=latest.empty?null:latest.docs[0].data();
+  return json(res,200,{success:true,connected:Boolean((await garminOAuthDoc(user.uid).get()).data()?.encryptedToken),
+   imported:state.imported||0,duplicates:state.duplicates||0,lastImportedAt:state.lastImportedAt||null,
+   lastWebhookAt:last?.receivedAt||null,lastWebhookStatus:last?.status||'none',
+   lastWebhookCounts:last?{received:last.received??null,imported:last.imported??null,unmatched:last.unmatched??null,invalid:last.invalid??null}:null,
+   note:'La diagnostica webhook e globale al servizio e non mostra dati personali.'});
+ }catch(error){console.warn('Garmin diagnostica:',error.name||'Error');return json(res,503,{success:false,message:'Diagnostica temporaneamente non disponibile'});}
+}
 // Garmin Activity API webhook intake (push). Isolato dalla Personal API.
 // IMPORTANTE: ricevere un evento non significa che sia gia stato verificato,
 // associato a un utente o importato nello storico. Non mostrare dati non verificati.
@@ -694,6 +737,7 @@ http.createServer(async(req,res)=>{
   if(req.url?.startsWith('/api/garmin/webhook/')){let webhookPath;try{webhookPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await receiveGarminWebhook(req,res,webhookPath);return;}
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+  if(pathname==='/api/garmin/webhook-diagnostics'){await garminWebhookDiagnostics(req,res);return;}
   if(pathname==='/api/garmin/official-sync-status'){await officialSyncStatus(req,res);return;}
   if(pathname==='/api/garmin/official-verify'){await officialVerifyIdentity(req,res);return;}
   if(['/api/garmin/account-status','/api/garmin/connect','/api/garmin/callback','/api/garmin/disconnect'].includes(pathname)){await garminOAuthRoutes(req,res,pathname);return;}
@@ -808,3 +852,6 @@ http.createServer(async(req,res)=>{
   try{const data=await readFile(path.join(base,'public',name));res.writeHead(200,{'Content-Type':types[path.extname(name)],'X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});res.end(req.method==='HEAD'?undefined:data);}
   catch(error){console.error('Errore file statico:',pathname,error.code);res.writeHead(error.code==='ENOENT'?404:500);res.end(error.code==='ENOENT'?'Not found':'Server error');}
 }).listen(port,'0.0.0.0',()=>console.log('Runner Pulse Web on '+port));
+
+// All’avvio tenta di recuperare notifiche gia consegnate ma non importate.
+setTimeout(()=>{void recoverGarminWebhookInbox();},15000).unref();
