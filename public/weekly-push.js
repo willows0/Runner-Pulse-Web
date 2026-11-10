@@ -11,6 +11,7 @@ const activeLabel='Disattiva notifiche Coach';
 const inactiveLabel='Attiva notifiche Coach';
 let enabled=false;
 let busy=false;
+let refreshSequence=0;
 function updateButton(active){enabled=active;if(button){button.textContent=active?activeLabel:inactiveLabel;button.setAttribute('aria-pressed',String(active));}}
 async function authenticatedUser(){
  const user=getAuth(app).currentUser;
@@ -27,28 +28,48 @@ async function currentToken(reg){
  return await getToken(getMessaging(app),{vapidKey,serviceWorkerRegistration:reg});
 }
 async function refreshPushState(){
+ const seq=++refreshSequence;
+ if(busy)return;
+ if(button){button.disabled=true;button.textContent='Verifica notifiche…';}
  try{
-  if(!('Notification' in window)||Notification.permission!=='granted'||!await isSupported()){updateButton(false);return;}
+  if(!('Notification' in window)||Notification.permission!=='granted'||!await isSupported()){
+   if(seq===refreshSequence){updateButton(false);say(Notification.permission==='denied'?'Notifiche bloccate nelle impostazioni del browser.':'');}
+   return false;
+  }
   const user=await authenticatedUser();
-  const reg=await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-  if(!reg){updateButton(false);return;}
+  // getRegistration('/') restituisce la registrazione anche quando lo scope
+  // del service worker è '/', anziché il percorso del suo file.
+  const reg=await navigator.serviceWorker.getRegistration('/');
+  if(!reg){if(seq===refreshSequence){updateButton(false);say('Notifiche non configurate su questo browser.');}return false;}
   const token=await currentToken(reg);
-  if(!token){updateButton(false);return;}
-  const response=await fetch('/api/push/status?token='+encodeURIComponent(token),{headers:{Authorization:'Bearer '+await user.getIdToken()}});
-  if(!response.ok)return false;
-  const data=await response.json();updateButton(data.enabled===true);
-  if(enabled)say('Notifiche attivate');
-  return enabled;
- }catch(error){console.warn('Stato notifiche:',error.message);return false;}
+  if(!token){if(seq===refreshSequence){updateButton(false);say('Token notifiche non disponibile.');}return false;}
+  const response=await fetch('/api/push/status?token='+encodeURIComponent(token),{headers:{Authorization:'Bearer '+await user.getIdToken()},cache:'no-store'});
+  if(!response.ok)throw new Error('Verifica notifiche non riuscita ('+response.status+').');
+  const data=await response.json();
+  if(seq===refreshSequence){updateButton(data.enabled===true);say(data.enabled===true?'Notifiche attivate':'Notifiche Coach non attive su questo dispositivo.');}
+  return data.enabled===true;
+ }catch(error){
+  console.warn('Stato notifiche:',error.message);
+  if(seq===refreshSequence)say('Impossibile verificare le notifiche: '+error.message);
+  return false;
+ }finally{if(seq===refreshSequence && button){button.disabled=false;if(button.textContent==='Verifica notifiche…')button.textContent=enabled?activeLabel:inactiveLabel;}}
 }
+// Ricontrolla la sottoscrizione effettiva dopo il login e quando si riapre il sito.
+window.addEventListener('runnerpulse:auth-user',event=>{
+ if(event.detail)refreshPushState();
+ else{++refreshSequence;updateButton(false);say('');}
+});
+window.addEventListener('pageshow',()=>{if(getAuth(app).currentUser)refreshPushState();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&getAuth(app).currentUser)refreshPushState();});
+setTimeout(()=>{if(getAuth(app).currentUser)refreshPushState();},1500);
 if(button)button.addEventListener('click',async()=>{
  if(busy)return;
- busy=true;button.disabled=true;
+ ++refreshSequence;busy=true;button.disabled=true;
  try{
   if(!('serviceWorker' in navigator)||!('Notification' in window)||!await isSupported())throw new Error('Questo browser non supporta le notifiche push. Apri Runner Pulse in Chrome su Android.');
   const user=await authenticatedUser();
   if(enabled){
-   const reg=await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+   const reg=await navigator.serviceWorker.getRegistration('/');
    if(!reg)throw new Error('Registrazione notifiche non trovata.');
    const token=await currentToken(reg);
    if(!token)throw new Error('Token notifiche non disponibile.');
@@ -123,7 +144,7 @@ if (await isSupported()) {
  onMessage(getMessaging(app), async payload => {
   try {
    const data=payload.data||{};
-   const reg=await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+   const reg=await navigator.serviceWorker.getRegistration('/');
    if(Notification.permission==='granted' && reg){
     await reg.showNotification(data.title||'Runner Pulse · Coach AI',{
      body:data.body||'Messaggio ricevuto dal Coach',icon:'/runner-pulse-icon-192.png',image:'/runner-pulse-icon-512.png',
