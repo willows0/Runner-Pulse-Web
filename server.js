@@ -191,7 +191,7 @@ async function importOfficialActivities(payload){
   const now=Date.now();const ref=db.collection('runnerPulseGarmin').doc(uid).collection('activities').doc(id);
   // Firestore transaction prevents overwriting historic Personal API entries.
   const created=await db.runTransaction(async tx=>{
-   const existing=await tx.get(ref);if(existing.exists)return false;
+   const removed=await tx.get(db.collection('runnerPulseGarmin').doc(uid).collection('deletedActivities').doc(id));if(removed.exists)return false;const existing=await tx.get(ref);if(existing.exists)return false;
    tx.create(ref,{summary:a,garminId:id,seenAt:now,source:'garmin-official-activity-api'});return true;
   });
   await db.collection('runnerPulseGarminOfficialSync').doc(uid).set({
@@ -433,7 +433,7 @@ async function syncRequest(req,res,pathname){
       const batch=db.batch();let valid=0;
       for(const a of list){const id=String(a?.activityId??a?.id??'');if(!/^\d{1,20}$/.test(id))continue;
         // Conservarne la scheda riepilogativa originale, senza inventare metriche.
-        const ref=activities.doc(id);batch.set(ref,{summary:a,garminId:id,seenAt:now},{merge:true});valid++;
+        const ref=activities.doc(id);const removed=await root.collection('deletedActivities').doc(id).get();if(removed.exists)continue;batch.set(ref,{summary:a,garminId:id,seenAt:now},{merge:true});valid++;
       }
       if(valid)await batch.commit();
       state.cursor=(state.cursor||0)+list.length;state.discovered=(state.discovered||0)+valid;
@@ -672,6 +672,26 @@ http.createServer(async(req,res)=>{
       }
       return json(res,200,{success:true,added,checked});
     }catch(error){console.warn('Controllo incrementale Garmin:',error.message);return json(res,502,{success:false,message:'Controllo nuove attività non riuscito: '+error.message});}
+  }
+  if(pathname==='/api/garmin/delete-activity'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso non autorizzato'});
+    try{
+      const body=await readJsonBody(req);
+      const id=String(body?.activityId??'');
+      if(!/^\d{1,20}$/.test(id))return json(res,400,{success:false,message:'ID attività non valido'});
+      const user=await garminGoogleUser(req);
+      if(!user)return json(res,401,{success:false,message:'Accedi con Google'});
+      const db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
+      const ref=root.collection('activities').doc(id),tombstone=root.collection('deletedActivities').doc(id);
+      await db.runTransaction(async tx=>{
+        const existing=await tx.get(ref);
+        if(!existing.exists)throw Object.assign(new Error('Attività non trovata in Firebase'),{status:404});
+        tx.set(tombstone,{deletedAt:Date.now(),deletedBy:user.uid});
+        tx.delete(ref);
+      });
+      return json(res,200,{success:true,deleted:true});
+    }catch(error){console.error('Eliminazione attività Garmin:',error.message);return json(res,error.status===404?404:500,{success:false,message:error.status===404?error.message:'Eliminazione da Firebase non riuscita'});}
   }
   if(pathname==='/api/garmin/archive'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
