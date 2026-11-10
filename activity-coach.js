@@ -21,7 +21,7 @@ export async function activityCoachReport(uid,id){
  const saved=await reportRef.get();if(saved.exists&&saved.data()?.text)return {text:saved.data().text,cached:true};
  const key=process.env.GEMINI_API_KEY;if(!key)throw new Error('GEMINI_API_KEY non configurata su Render');
  const profile=(await db.collection('runnerPulseProfiles').doc(uid).get()).data()?.profile||{};
- const snapshot=await db.collection('runnerPulseGarmin').doc(uid).collection('activities').limit(3000).get();
+ const snapshot=await db.collection('runnerPulseGarmin').doc(uid).collection('activities').orderBy('seenAt','desc').limit(180).get();
  const history=snapshot.docs.map(x=>simplify(x.data()?.summary||{})).filter(x=>x.date&&x.km>0&&x.minuti>0).sort((a,b)=>a.date.localeCompare(b.date));
  const target=simplify(doc.data()?.summary||{});
  const previous=history.filter(x=>target.date&&x.date<target.date).slice(-80);

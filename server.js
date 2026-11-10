@@ -212,9 +212,36 @@ async function notifyActivityCoachReady(uid,id){
   throw error;
  }
 }
-async function analyzeAndNotifyGarmin(uid,id){
- await activityCoachReport(uid,id);
- await notifyActivityCoachReady(uid,id);
+// Una sola analisi AI per volta: limita i picchi di memoria sul piano Render gratuito.
+// Gli eventi Garmin vengono comunque salvati prima in Firestore.
+const pendingCoachJobs=[];
+const queuedCoachIds=new Set();
+let coachWorkerRunning=false;
+function scheduleActivityCoach(uid,id){
+ const key=uid+':'+id;
+ if(queuedCoachIds.has(key))return;
+ if(pendingCoachJobs.length>=100){
+  console.warn('Garmin Coach: coda piena; allenamento salvato, analisi recuperabile dalla scheda Coach AI');
+  return;
+ }
+ queuedCoachIds.add(key);
+ pendingCoachJobs.push({uid,id,key});
+ if(!coachWorkerRunning)setImmediate(processCoachJobs);
+}
+async function processCoachJobs(){
+ if(coachWorkerRunning)return;
+ coachWorkerRunning=true;
+ try{
+  while(pendingCoachJobs.length){
+   const job=pendingCoachJobs.shift();
+   try{
+    await activityCoachReport(job.uid,job.id);
+    await notifyActivityCoachReady(job.uid,job.id);
+    console.info('Garmin Coach: analisi completata e invio notifica elaborato');
+   }catch(error){console.warn('Garmin Coach: analisi/notifica non riuscita:',error.name||'Error');}
+   finally{queuedCoachIds.delete(job.key);}
+  }
+ }finally{coachWorkerRunning=false;}
 }
 
 async function importOfficialActivities(payload){
@@ -241,7 +268,7 @@ async function importOfficialActivities(payload){
    lastReceivedAt:now,...(created?{lastImportedAt:now}:{}),status:'receiving'
   },{merge:true});
   if(created){imported++; // Analisi asincrona: non blocca la risposta al webhook Garmin.
-   setImmediate(()=>analyzeAndNotifyGarmin(uid,id).catch(e=>console.warn('Coach automatico Garmin / push:',e.message)));
+   scheduleActivityCoach(uid,id);
   }else duplicates++;
  }
  return {imported,duplicates,unmatched};
@@ -277,6 +304,7 @@ async function receiveGarminWebhook(req,res,pathname){
   try{
    const result=await importOfficialActivities(payload);
    await inbox.update({status:result.unmatched?'partial_unmatched':'processed',...result,processedAt:Date.now()});
+   console.info('Garmin webhook elaborato:',JSON.stringify({imported:result.imported,duplicates:result.duplicates,unmatched:result.unmatched}));
   }catch(error){console.error('Garmin official import:',error.name||'Error');await inbox.update({status:'import_failed',errorAt:Date.now()});}
   return json(res,202,{success:true,received:true});
  }catch(e){console.error('Garmin webhook inbox:',e.code||e.name);return json(res,503,{success:false,message:'Ricezione temporaneamente non disponibile'});}
@@ -399,12 +427,12 @@ function fitFromZip(bytes){
     const name=bytes.toString('utf8',p+46,p+46+nameLen),local=bytes.readUInt32LE(p+42);
     p+=46+nameLen+extraLen+commentLen;
     if(!name.toLowerCase().endsWith('.fit'))continue;
-    if(uncompressed>20*1024*1024||compressed>20*1024*1024)throw new Error('FIT supera il limite di 20 MB');
+    if(uncompressed>4*1024*1024||compressed>4*1024*1024)throw new Error('FIT supera il limite di 20 MB');
     if(local+30>bytes.length||bytes.readUInt32LE(local)!==0x04034b50)throw new Error('Voce ZIP non valida');
     const start=local+30+bytes.readUInt16LE(local+26)+bytes.readUInt16LE(local+28);
     if(start+compressed>bytes.length)throw new Error('ZIP incompleto');
     const raw=bytes.subarray(start,start+compressed);
-    const fit=method===0?raw:method===8?inflateRawSync(raw,{maxOutputLength:20*1024*1024}):null;
+    const fit=method===0?raw:method===8?inflateRawSync(raw,{maxOutputLength:4*1024*1024}):null;
     if(!fit)throw new Error('Compressione ZIP non supportata');
     if(fit.length!==uncompressed)throw new Error('Dimensione FIT non valida');
     return fit;
@@ -417,10 +445,10 @@ async function diagnoseFit(activityId,token){
     const response=await fetch(GARMIN_BASE+endpoint,{headers:{Authorization:`Bearer ${token}`,Accept:'application/zip, application/octet-stream, */*'},signal:AbortSignal.timeout(25000)});
     if(!response.ok)return {status:'http_error',httpStatus:response.status};
     const declared=Number(response.headers.get('content-length'));
-    if(declared>20*1024*1024)return {status:'too_large'};
+    if(declared>4*1024*1024)return {status:'too_large'};
     const reader=response.body?.getReader();if(!reader)return {status:'empty_body'};
     const chunks=[];let size=0;
-    try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>20*1024*1024){await reader.cancel();return {status:'too_large'};}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
+    try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>4*1024*1024){await reader.cancel();return {status:'too_large'};}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
     const bytes=Buffer.concat(chunks);
     let fit,format;
     if(bytes.length>=12&&bytes.toString('ascii',8,12)==='.FIT'){fit=bytes;format='fit';}
