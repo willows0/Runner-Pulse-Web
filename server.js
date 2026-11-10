@@ -9,6 +9,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { handleCoachAI, generateWeeklyCoachReport } from './coach-api.js';
+import {handleActivityCoach,activityCoachReport} from './activity-coach.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -200,7 +201,9 @@ async function importOfficialActivities(payload){
    duplicates:(await import('firebase-admin/firestore')).FieldValue.increment(created?0:1),
    lastReceivedAt:now,...(created?{lastImportedAt:now}:{}),status:'receiving'
   },{merge:true});
-  if(created)imported++;else duplicates++;
+  if(created){imported++; // Analisi asincrona: non blocca la risposta al webhook Garmin.
+   setImmediate(()=>activityCoachReport(uid,id).catch(e=>console.warn('Coach automatico Garmin:',e.message)));
+  }else duplicates++;
  }
  return {imported,duplicates,unmatched};
 }
@@ -712,6 +715,7 @@ http.createServer(async(req,res)=>{
     }catch(error){console.error('Archivio Garmin:',error.message);return json(res,502,{success:false,message:'Impossibile leggere lo storico Garmin'});}
   }
   if(['/api/garmin/sync-status','/api/garmin/sync-step'].includes(pathname)){await syncRequest(req,res,pathname);return;}
+  if(pathname==='/api/coach/activity'){await handleActivityCoach(req,res,authorized,readJsonBody,json);return;}
   if(pathname==='/api/coach/chat'){await handleCoachAI(req,res,authorized);return;}
   if(pathname==='/api/status'){if(req.method!=='GET'){json(res,405,{message:'Method not allowed'});return;}json(res,200,{garminConfigured:Boolean(GARMIN_API_KEY),garminConnected:false,message:'La connessione Garmin non è ancora verificata. Usa il test autenticato.'});return;}
   if(['/api/garmin/test','/api/garmin/activities','/api/garmin/activity-detail'].includes(pathname)){

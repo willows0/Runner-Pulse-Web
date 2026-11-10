@@ -77,7 +77,7 @@ function selectContext(all,question) {
     .sort((a,b)=>a.i-b.i).map(x=>x.m);
   return [...ranked,...recent].map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:messageText(m)}]}));
 }
-async function generateWithFallback(key,payload) {
+export async function generateWithFallback(key,payload) {
   const names=await availableModels(key);
   if(!names.length) {
     const err=new Error('Nessun modello generateContent disponibile per questa chiave.');err.status=404;throw err;
