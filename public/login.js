@@ -251,6 +251,20 @@ async function loadGarminArchive(){
     console.warn('Archivio Garmin non disponibile:',error.message);
   }finally{archiveLoading=false;}
 }
+// Rileggi lo storico ufficiale quando l'app torna in primo piano o riceve
+// una notifica Coach: il webhook puo' aver salvato l'attivita' dopo il login.
+// Non interroga la vecchia Garmin Personal API.
+let lastArchiveRefresh=0;
+function refreshOfficialArchive(force=false){
+  if(!allowedUser()||!isOwner()||archiveLoading)return;
+  const now=Date.now();
+  if(!force&&now-lastArchiveRefresh<15000)return;
+  lastArchiveRefresh=now;
+  void loadGarminArchive();
+}
+window.addEventListener('focus',()=>refreshOfficialArchive());
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshOfficialArchive();});
+window.addEventListener('runnerpulse:refresh-garmin-archive',()=>refreshOfficialArchive(true));
 // Eliminazione autenticata: la UI rimuove l'attività soltanto dopo conferma Firebase.
 window.addEventListener('runnerpulse:delete-garmin',event=>{
   const {activityId,resolve,reject}=event.detail||{};

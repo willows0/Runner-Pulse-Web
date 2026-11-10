@@ -101,9 +101,20 @@ function openPendingCoachActivity(){
   return;
  }
  coachLinkMessage(!key?'Accedi con Google: aprirò il giudizio dopo il caricamento.':'Caricamento allenamento da Firebase in corso…');
+ requestCoachArchiveRefresh();
  if(coachLinkTimer)clearTimeout(coachLinkTimer);
  if(++coachLinkAttempts<=30){coachLinkTimer=setTimeout(openPendingCoachActivity,1000);}
  else coachLinkMessage('Allenamento non ancora disponibile. Riapri la notifica più tardi o verifica che sia presente in Attività.');
+}
+// Una notifica puo' precedere il successivo aggiornamento dello storico.
+// Richiedi la rilettura autenticata di Firebase, senza chiamare la Personal API.
+let lastCoachArchiveRequest=0;
+function requestCoachArchiveRefresh(){
+ if(!pendingCoachActivity||!key)return;
+ const now=Date.now();
+ if(now-lastCoachArchiveRequest<10000)return;
+ lastCoachArchiveRequest=now;
+ window.dispatchEvent(new Event('runnerpulse:refresh-garmin-archive'));
 }
 window.addEventListener('runnerpulse:auth-user',()=>{if(pendingCoachActivity){coachLinkAttempts=0;setTimeout(openPendingCoachActivity,0);}});
 window.addEventListener('pageshow',()=>setTimeout(openPendingCoachActivity,250));
