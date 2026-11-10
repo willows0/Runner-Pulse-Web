@@ -70,8 +70,8 @@ async function refresh(){
   if(!response.ok)throw new Error(data.message||'Stato Garmin non disponibile');
   garminConnectUrl=typeof data.connectUrl==='string'&&data.connectUrl.startsWith('/')?data.connectUrl:'';
   setGarminUI(data.connected===true,data.oauthAvailable===true&&Boolean(garminConnectUrl));
-  message.textContent=data.message||'';
-  if(oldStatus)oldStatus.textContent=data.message||'';
+  message.textContent=data.connected===true?'Dispositivo collegato. Puoi gestire la connessione qui.':'Nessun dispositivo collegato. Scegli un servizio dall’elenco per iniziare.';
+  if(oldStatus)oldStatus.textContent=message.textContent;
  }catch(error){if(id===generation){message.textContent='Connessione non verificata: '+(error.message||'impossibile verificare lo stato.');publishConnection(null);}}
 }
 switches.get('garmin').addEventListener('click',()=>{
