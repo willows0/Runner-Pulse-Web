@@ -74,22 +74,46 @@ function activityNewestFirst(a,b){
 }
 function showDetail(x){const wrap=$('detailContent');wrap.replaceChildren();const card=document.createElement('div');card.className='detail-card';const h=document.createElement('h2');h.textContent=x.kind||'Allenamento';const meta=document.createElement('p');meta.className='detail-meta';meta.textContent=activityDateIT(x.date);card.append(h,meta);const grid=document.createElement('div');grid.className='detail-grid';grid.append(stat('Distanza',fmt(x.km)+' km'),stat('Durata',fmt(x.minutes)+' min'),stat('Passo medio',pace(x.km,x.minutes)));if(x.avgHR!=null)grid.append(stat('FC media',fmt(x.avgHR)+' bpm'));if(x.maxHR!=null)grid.append(stat('FC massima',fmt(x.maxHR)+' bpm'));if(x.elevation!=null)grid.append(stat('Dislivello positivo',fmt(x.elevation)+' m'));if(x.calories!=null)grid.append(stat('Calorie',fmt(x.calories)+' kcal'));if(x.avgSpeed!=null)grid.append(stat('Velocità media',fmt(x.avgSpeed)+' km/h'));card.append(grid);const header=document.createElement('header');header.className='rp-detail-header';header.innerHTML='<div class="rp-detail-avatar" aria-label="Foto Google"><img alt="Foto del profilo Google" hidden><span aria-hidden="true">●</span></div><div class="rp-coach-brand"><span class="rp-coach-brand-run" aria-hidden="true">➤</span> Runner <em>Pulse</em></div>';const sourceAvatar=document.getElementById('rp-google-avatar');const avatar=header.querySelector('.rp-detail-avatar img');const fallback=header.querySelector('.rp-detail-avatar span');const syncAvatar=()=>{const src=sourceAvatar?.getAttribute('src');if(src&&!sourceAvatar.hidden){avatar.src=src;avatar.hidden=false;fallback.hidden=true;}else{avatar.hidden=true;fallback.hidden=false;}};syncAvatar();if(sourceAvatar){const observer=new MutationObserver(syncAvatar);observer.observe(sourceAvatar,{attributes:true,attributeFilter:['src','hidden']});window.addEventListener('runnerpulse:auth-user',syncAvatar,{once:true});setTimeout(()=>observer.disconnect(),30000);}const tabs=document.createElement('div');tabs.className='rp-detail-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Sezioni allenamento');const panes={};[['overview','Panoramica'],['charts','Grafici'],['laps','Lap'],['coach','Coach AI']].forEach(([id,label])=>{const btn=document.createElement('button');btn.type='button';btn.textContent=label;btn.dataset.detailTab=id;btn.setAttribute('role','tab');btn.setAttribute('aria-selected',String(id==='overview'));btn.addEventListener('click',()=>{tabs.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected',String(b===btn)));Object.entries(panes).forEach(([k,pane])=>{pane.hidden=k!==id;});if(id==='coach')window.dispatchEvent(new CustomEvent('runnerpulse:activity-coach',{detail:{activityId:String(x.garminId||'')}}));document.getElementById('detailOverlay').scrollTo({top:0,behavior:'instant'});});tabs.append(btn);const pane=document.createElement('section');pane.id='rp-detail-'+id;pane.className='rp-detail-pane';pane.setAttribute('role','tabpanel');pane.hidden=id!=='overview';panes[id]=pane;});panes.overview.append(card);panes.coach.innerHTML='<h3>Parere del Coach AI</h3><p class="rp-hint" role="status">Apri questa scheda per leggere la valutazione basata sul tuo storico Garmin.</p>';wrap.append(header,tabs,panes.overview,panes.charts,panes.laps,panes.coach);$('detailOverlay').hidden=false;document.body.style.overflow='hidden';const detailNav=$('rp-detail-bottom-nav');const mainNav=document.querySelector('body > nav');if(detailNav&&mainNav){detailNav.replaceChildren(...Array.from(mainNav.querySelectorAll('button[data-page]'),b=>{const clone=b.cloneNode(true);clone.classList.toggle('selected',b.dataset.page==='activities');clone.addEventListener('click',()=>{$('detailOverlay').hidden=true;document.body.style.overflow='';mainNav.querySelector('button[data-page="'+b.dataset.page+'"]')?.click();});return clone;}));}}
 $('closeDetail').onclick=()=>{$('detailOverlay').hidden=true;document.body.style.overflow='';};
-// Deep link delle notifiche: apri l'allenamento esatto nella scheda Coach AI.
+// Deep link Coach: conserva l'ID fino a quando Google e lo storico Firebase sono pronti.
 let pendingCoachActivity=new URLSearchParams(location.search).get('coachActivity');
+let coachLinkTimer=null;
+let coachLinkAttempts=0;
+function coachLinkMessage(message){
+ let el=document.getElementById('rp-coach-link-message');
+ if(!el){el=document.createElement('p');el.id='rp-coach-link-message';el.setAttribute('role','status');el.style.cssText='margin:12px 20px;padding:14px;border-radius:12px;background:#203c5c;color:white';document.getElementById('activities')?.prepend(el);}
+ if(el)el.textContent=message;
+}
 function openPendingCoachActivity(){
  const requested=new URLSearchParams(location.search).get('coachActivity');
- if(requested && requested!==pendingCoachActivity)pendingCoachActivity=requested;
- if(!pendingCoachActivity||!key)return;
- const target=entries.find(x=>String(x.garminId||String(x.id||'').replace(/^garmin-/,''))===pendingCoachActivity);
- if(!target)return; // Attendi il caricamento automatico da Firebase.
- pendingCoachActivity=null;
- const url=new URL(location.href);url.searchParams.delete('coachActivity');
- history.replaceState(null,'',url.pathname+url.search+url.hash);
- rpActivatePage('activities');showDetail(target);
- document.querySelector('#detailContent button[data-detail-tab="coach"]')?.click();
+ if(requested)pendingCoachActivity=requested;
+ if(!pendingCoachActivity)return;
+ // Apri Attività subito: non lasciare il cuore in primo piano durante il caricamento.
+ rpActivatePage('activities',false);
+ const target=key&&entries.find(x=>String(x.garminId||String(x.id||'').replace(/^garmin-/,''))===pendingCoachActivity);
+ if(target){
+  pendingCoachActivity=null;coachLinkAttempts=0;
+  if(coachLinkTimer){clearTimeout(coachLinkTimer);coachLinkTimer=null;}
+  document.getElementById('rp-coach-link-message')?.remove();
+  const url=new URL(location.href);url.searchParams.delete('coachActivity');
+  history.replaceState(null,'',url.pathname+url.search+url.hash);
+  showDetail(target);
+  document.querySelector('#detailContent button[data-detail-tab="coach"]')?.click();
+  return;
+ }
+ coachLinkMessage(!key?'Accedi con Google: aprirò il giudizio dopo il caricamento.':'Caricamento allenamento da Firebase in corso…');
+ if(coachLinkTimer)clearTimeout(coachLinkTimer);
+ if(++coachLinkAttempts<=30){coachLinkTimer=setTimeout(openPendingCoachActivity,1000);}
+ else coachLinkMessage('Allenamento non ancora disponibile. Riapri la notifica più tardi o verifica che sia presente in Attività.');
 }
+window.addEventListener('runnerpulse:auth-user',()=>{if(pendingCoachActivity){coachLinkAttempts=0;setTimeout(openPendingCoachActivity,0);}});
 window.addEventListener('pageshow',()=>setTimeout(openPendingCoachActivity,250));
 window.addEventListener('popstate',()=>setTimeout(openPendingCoachActivity,100));
+navigator.serviceWorker?.addEventListener('message',event=>{
+ if(event.data?.type==='runnerpulse:open-coach'&&/^\d{1,20}$/.test(String(event.data.activityId||''))){
+  pendingCoachActivity=String(event.data.activityId);coachLinkAttempts=0;openPendingCoachActivity();
+ }
+});
+setTimeout(openPendingCoachActivity,250);
 function render(){const totalKm=entries.reduce((s,x)=>s+(Number(x.km)||0),0);const totalMin=entries.reduce((s,x)=>s+(Number(x.minutes)||0),0);$('count').textContent=entries.length;$('distance').textContent=fmt(totalKm);$('avgPace').textContent=pace(totalKm,totalMin).replace(' min/km','');$('activityList').replaceChildren();[...entries].sort(activityNewestFirst).forEach(x=>{const c=document.createElement('div');c.className='card';const open=document.createElement('button');open.className='activity-open';open.type='button';const title=document.createElement('b');title.textContent=`${x.kind||'Corsa'} · ${fmt(x.km)} km`;const sub=document.createElement('small');sub.textContent=`${activityDateIT(x.date)} · ${fmt(x.minutes)} min · ${pace(x.km,x.minutes)}`;open.append(title,sub);open.onclick=()=>showDetail(x);const del=document.createElement('button');del.className='delete';del.textContent='Elimina';del.onclick=async()=>{
   if(!window.confirm(`Vuoi eliminare definitivamente da Runner Pulse l'allenamento del ${activityDateIT(x.date)}?${x.source==='garmin'?' Sarà eliminato anche da Firebase, ma resterà su Garmin Connect.':''}`))return;
   del.disabled=true;

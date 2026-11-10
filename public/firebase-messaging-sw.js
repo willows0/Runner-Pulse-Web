@@ -6,7 +6,7 @@ const messaging=firebase.messaging();
 messaging.onBackgroundMessage(payload=>{
  const data=payload.data||{};
  const title=data.title||'Runner Pulse · Coach AI';
- const options={body:data.body||'Il tuo allenatore ti aspetta.',icon:'/runner-pulse-icon-192.png',badge:'/runner-pulse-notification-badge.png',tag:data.tag||'runnerpulse-coach',data:{url:data.url||'/index.html?weeklyCoach=1'}};
+ const options={body:data.body||'Il tuo allenatore ti aspetta.',icon:'/runner-pulse-icon-192.png',image:'/runner-pulse-icon-512.png',badge:'/runner-pulse-notification-badge.png',tag:data.tag||'runnerpulse-coach',data:{url:data.url||'/index.html?weeklyCoach=1'}};
  return self.registration.showNotification(title,options);
 });
 self.addEventListener('notificationclick',event=>{
@@ -14,7 +14,7 @@ self.addEventListener('notificationclick',event=>{
  const url=new URL(event.notification.data?.url||'/index.html?weeklyCoach=1',self.location.origin).href;
  event.waitUntil((async()=>{
   const windows=await clients.matchAll({type:'window',includeUncontrolled:true});
-  for(const client of windows){if(new URL(client.url).origin===self.location.origin){await client.navigate(url);return client.focus();}}
+  for(const client of windows){if(new URL(client.url).origin===self.location.origin){await client.navigate(url);await client.focus();const activityId=new URL(url).searchParams.get('coachActivity');if(activityId)client.postMessage({type:'runnerpulse:open-coach',activityId});return;}}
   return clients.openWindow(url);
  })());
 });
