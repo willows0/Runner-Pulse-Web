@@ -260,10 +260,12 @@ async function loadGarminArchive(){
     archiveNotice('Errore caricamento archivio Firebase: '+(error.message||String(error)),true);
   }finally{archiveLoading=false;}
 }
-document.getElementById('rp-archive-retry')?.addEventListener('click',()=>{
-  if(!allowedUser()||!isOwner()){archiveNotice('Accedi con Google con il tuo account proprietario per leggere lo storico Garmin.',true);return;}
-  void loadGarminArchive();
-});
+// Eliminazione persistente: il server controlla identità Google e proprietà dei dati.
+window.runnerPulseDeleteGarminActivity=async function(garminId){
+  if(!allowedUser()||!isOwner())throw new Error('Accedi con il tuo account Google autorizzato.');
+  if(!/^\d{1,20}$/.test(garminId))throw new Error('Identificativo Garmin non valido.');
+  return authorizedPost('/api/garmin/delete-activity',{activityId:garminId});
+};
 // Importazione automatica a blocchi: il progresso percentuale è mostrato solo
 // quando Garmin ha terminato la scoperta delle attività (totale noto).
 let syncActive=false,syncCancel=false;
