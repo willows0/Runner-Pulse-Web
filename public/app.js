@@ -147,8 +147,8 @@ function normalizeGarmin(a){
   const type=typeof kind==='object'?first(kind,['typeKey','typeName','name']):kind;
   const km=meters!=null?meters/1000:null;
   const minutes=seconds!=null?seconds/60:null;
-  // Non inventare distanza o durata: gli allenamenti incompleti sono esclusi dal riepilogo numerico.
-  if(id==null||!date||!Number.isFinite(km)||km<=0||!Number.isFinite(minutes)||minutes<=0)return null;
+  // Conserva anche le attività Garmin con distanza zero; il passo rimane non calcolabile. Non inventare dati.
+  if(id==null||!date||!Number.isFinite(km)||km<0||!Number.isFinite(minutes)||minutes<=0)return null;
   const num=keys=>safeNumber(first(a,keys));
   const speed=num(['averageSpeedInMetersPerSecond','averageSpeed','avgSpeed']);
   return {id:'garmin-'+id,garminId:String(id),date,kind:String(type||a.activityName||'Corsa'),
