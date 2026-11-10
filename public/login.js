@@ -230,18 +230,11 @@ async function refreshGarminHealth(){
 // La pagina Attività e la Home ricevono gli stessi eventi, senza richiedere
 // all'utente di premere il pulsante di importazione.
 let archiveLoading=false;
-let archiveLastResult='';
-function archiveNotice(message, error=false){
-  archiveLastResult=message;
-  const el=document.getElementById('rp-archive-status');
-  if(el){el.textContent=message;el.style.color=error?'#a52a17':'';}
-}
 async function loadGarminArchive(){
   if(archiveLoading||!allowedUser()||!isOwner())return;
   archiveLoading=true;
   const expectedUid=auth.currentUser.uid;
   let total=0;
-  archiveNotice('Caricamento degli allenamenti salvati su Firebase…');
   try{
     let after=null;
     for(let page=0;page<100;page++){
@@ -254,15 +247,16 @@ async function loadGarminArchive(){
       if(!result.next)break;
       after=result.next;
     }
-    archiveNotice(total?`Archivio Firebase letto: ${total} attività ricevute. Se non compaiono, verifica il formato dei dati.`:'Archivio Firebase vuoto: nessuna attività restituita dal server.');
   }catch(error){
     console.warn('Archivio Garmin non disponibile:',error.message);
-    archiveNotice('Errore caricamento archivio Firebase: '+(error.message||String(error)),true);
   }finally{archiveLoading=false;}
 }
-document.getElementById('rp-archive-retry')?.addEventListener('click',()=>{
-  if(!allowedUser()||!isOwner()){archiveNotice('Accedi con Google con il tuo account proprietario per leggere lo storico Garmin.',true);return;}
-  void loadGarminArchive();
+// Eliminazione autenticata: la UI rimuove l'attività soltanto dopo conferma Firebase.
+window.addEventListener('runnerpulse:delete-garmin',event=>{
+  const {activityId,resolve,reject}=event.detail||{};
+  if(typeof resolve!=='function'||typeof reject!=='function')return;
+  if(!allowedUser()||!isOwner()){reject(new Error('Accedi con l’account Google proprietario.'));return;}
+  authorizedPost('/api/garmin/delete-activity',{activityId}).then(resolve,reject);
 });
 // Importazione automatica a blocchi: il progresso percentuale è mostrato solo
 // quando Garmin ha terminato la scoperta delle attività (totale noto).
