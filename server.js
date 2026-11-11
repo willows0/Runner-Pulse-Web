@@ -328,9 +328,21 @@ async function importGarminExtraSections(payload){
 
 // Ritenta le analisi fallite dopo errori temporanei (es. Gemini HTTP 503).
 // Il recupero legge solo lavori realmente registrati: non crea allenamenti né giudizi fittizi.
+// Protezione quota: le scansioni di manutenzione non devono insistere su Firestore esaurito.
+let firestoreMaintenancePauseUntil=0;
+function isFirestoreQuotaError(error){
+ const message=String(error?.message||error||'');
+ return error?.code===8||/RESOURCE_EXHAUSTED|Quota exceeded|quota exhausted/i.test(message);
+}
+function pauseMaintenanceOnQuota(error){
+ if(!isFirestoreQuotaError(error))return false;
+ firestoreMaintenancePauseUntil=Math.max(firestoreMaintenancePauseUntil,Date.now()+60*60*1000);
+ console.warn('Firestore: manutenzione sospesa per 60 minuti (quota esaurita)');
+ return true;
+}
 let coachRetryScanning=false;
 async function retryPendingCoachJobs(){
- if(coachRetryScanning)return;
+ if(coachRetryScanning||Date.now()<firestoreMaintenancePauseUntil)return;
  coachRetryScanning=true;
  try{
   const db=getFirestore();
@@ -346,16 +358,16 @@ async function retryPendingCoachJobs(){
    scheduleActivityCoach(uid,id);
    }
   }
- }catch(error){console.warn('Garmin Coach: ricerca tentativi:',error.message);}
+ }catch(error){if(!pauseMaintenanceOnQuota(error))console.warn('Garmin Coach: ricerca tentativi:',error.message);}
  finally{coachRetryScanning=false;}
 }
-setInterval(()=>{void retryPendingCoachJobs();},5*60*1000).unref?.();
+setInterval(()=>{void retryPendingCoachJobs();},30*60*1000).unref?.();
 setTimeout(()=>{void retryPendingCoachJobs();},30*1000).unref?.();
 // Recupero non distruttivo degli eventi Garmin gia ricevuti: l'importazione e idempotente.
 // Il recupero non chiama Garmin, non crea dati fittizi e non cancella lo storico.
 let webhookRecoveryRunning=false;
 async function recoverGarminWebhookInbox(){
- if(webhookRecoveryRunning)return;
+ if(webhookRecoveryRunning||Date.now()<firestoreMaintenancePauseUntil)return;
  webhookRecoveryRunning=true;
  try{
   const db=getFirestore();
@@ -376,7 +388,7 @@ async function recoverGarminWebhookInbox(){
    }
   }
   console.info('Garmin recupero webhook:',JSON.stringify({inspected,recovered,unmatched,failed}));
- }catch(error){console.warn('Garmin recupero webhook non disponibile:',error.name||'Error');}
+ }catch(error){if(!pauseMaintenanceOnQuota(error))console.warn('Garmin recupero webhook non disponibile:',error.name||'Error');}
  finally{webhookRecoveryRunning=false;}
 }
 async function garminWebhookDiagnostics(req,res){
@@ -851,7 +863,7 @@ http.createServer(async(req,res)=>{
       }
       const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size};
       if(stepsWeekCache.size>200)stepsWeekCache.clear();
-      stepsWeekCache.set(user.uid,{expires:Date.now()+2*60*1000,payload});
+      stepsWeekCache.set(user.uid,{expires:Date.now()+15*60*1000,payload});
       return json(res,200,payload);
     }catch(error){console.error('Passi settimanali:',error.message);return json(res,503,{success:false,message:'Passi temporaneamente non disponibili'});}
   }
@@ -1044,3 +1056,4 @@ http.createServer(async(req,res)=>{
 
 // All’avvio tenta di recuperare notifiche gia consegnate ma non importate.
 setTimeout(()=>{void recoverGarminWebhookInbox();},15000).unref();
+setInterval(()=>{void recoverGarminWebhookInbox();},60*60*1000).unref();
