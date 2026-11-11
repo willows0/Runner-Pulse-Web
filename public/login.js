@@ -376,7 +376,7 @@ function descriptorName(d) {
 function extractMetrics(detail) {
   const root = detail?.activityDetail || detail?.detail || detail;
   const descriptors = root?.metricDescriptors || root?.activityDetailMetrics?.metricDescriptors || [];
-  const sampleContainer = root?.activityDetailMetrics || root?.metrics || [];
+  const sampleContainer = root?.activityDetailMetrics || root?.metrics || root?.samples || [];
   const samples = Array.isArray(sampleContainer) ? sampleContainer :
     Array.isArray(sampleContainer?.metrics) ? sampleContainer.metrics :
     Array.isArray(sampleContainer?.samples) ? sampleContainer.samples : [];
