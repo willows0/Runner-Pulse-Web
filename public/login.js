@@ -255,6 +255,8 @@ async function loadGarminArchive(){
     }
   }catch(error){
     console.warn('Archivio Garmin non disponibile:',error.message);
+    const status=document.getElementById('rp-fit-status');
+    if(status)status.textContent='Importazione salvata, ma impossibile aggiornare l’elenco attività. Riprova ad aprire la pagina.';
   }finally{archiveLoading=false;}
 }
 // Eliminazione autenticata: la UI rimuove l'attività soltanto dopo conferma Firebase.
@@ -738,7 +740,7 @@ document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
    xhr.upload.onprogress=e=>{
     if(e.lengthComputable){const value=Math.min(100,Math.round(e.loaded/e.total*100));bar.value=value;percent.textContent=value+'%';}
    };
-   xhr.upload.onload=()=>{bar.removeAttribute('value');label.textContent='Elaborazione e salvataggio su Firestore';percent.textContent='In corso';note.textContent='Il file è stato inviato. Attendi la risposta del server.';};
+   xhr.upload.onload=()=>{bar.removeAttribute('value');label.textContent='Elaborazione e salvataggio';percent.textContent='In corso';note.textContent='';};
    xhr.onerror=()=>reject(Error('Connessione interrotta durante il caricamento.'));
    xhr.onabort=()=>reject(Error('Caricamento interrotto.'));
    xhr.onload=()=>{
@@ -748,10 +750,11 @@ document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
    };
    xhr.send(file);
   });
-  bar.value=100;label.textContent='Importazione completata';percent.textContent='100%';note.textContent='Firestore aggiornato.';
-  status.textContent=`Firestore: ${result.imported} importati, ${result.duplicates} già presenti, ${result.failed} non leggibili.`+(result.errors?.length?' Dettagli: '+result.errors.join(' | '):'');
-  if(result.imported){await loadGarminArchive();}
-  if(result.failed===0 && (!result.errors||result.errors.length===0)){window.rpShowActivityTab?.('list');}
+  bar.value=100;label.textContent='Importazione completata';percent.textContent='100%';note.textContent='';
+  status.textContent=`Importazione completata: ${result.imported} importati, ${result.duplicates} già presenti.`;
+  // Rileggi Firestore anche quando tutti i file sono duplicati: la cache locale può essere vuota.
+  await loadGarminArchive();
+  window.rpShowActivityTab?.('list');
  }catch(error){bar.value=0;label.textContent='Importazione non riuscita';percent.textContent='';note.textContent='Controlla l’errore qui sotto.';status.textContent='Errore: '+(error.message||String(error));}
  finally{button.disabled=false;}
 });
