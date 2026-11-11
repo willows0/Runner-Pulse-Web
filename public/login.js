@@ -709,3 +709,22 @@ window.addEventListener('runnerpulse:activity-coach',async event=>{
   result.textContent=data.text;result.style.whiteSpace='pre-wrap';
  }catch(e){if(pane===document.getElementById('rp-detail-coach'))result.textContent='Valutazione non disponibile: '+(e.message||String(e));}
 });
+
+// Importazione FIT/ZIP autenticata, solo proprietario; nessun dato salvato in localStorage prima del successo server.
+document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
+ const input=document.getElementById('rp-fit-file'),button=document.getElementById('rp-fit-upload'),status=document.getElementById('rp-fit-status');
+ const file=input?.files?.[0];
+ if(!file){status.textContent='Seleziona prima un file FIT o ZIP.';return;}
+ if(!allowedUser()||!isOwner()){status.textContent='Accedi con l’account Google proprietario.';return;}
+ if(file.size>85*1024*1024){status.textContent='Il file supera 85 MB: dividi lo ZIP in archivi più piccoli.';return;}
+ button.disabled=true;status.textContent='Importazione in corso: non chiudere la pagina…';
+ try{
+  const token=await auth.currentUser.getIdToken();
+  const response=await fetch('/api/garmin/import-file',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/octet-stream','X-RP-Filename':encodeURIComponent(file.name)},body:file});
+  const result=await response.json();
+  if(!response.ok||!result.success)throw Error(result.message||'Importazione non riuscita');
+  status.textContent=`Firestore: ${result.imported} importati, ${result.duplicates} già presenti, ${result.failed} non leggibili.`+(result.errors?.length?' Dettagli: '+result.errors.join(' | '):'');
+  if(result.imported){await loadGarminArchive();}
+ }catch(error){status.textContent='Errore: '+(error.message||String(error));}
+ finally{button.disabled=false;}
+});

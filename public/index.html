@@ -48,6 +48,13 @@
     </section>
     <section id="activities" class="page">
       <h1>Allenamenti</h1><button type="button" id="rp-open-manual" class="rp-manual-open">＋ Inserisci allenamento</button>
+      <section class="card" style="margin:12px 0;padding:14px">
+        <strong>Importa storico Garmin (FIT / ZIP)</strong>
+        <p style="margin:7px 0;font-size:0.9em">Seleziona un file FIT oppure un archivio ZIP con attività FIT. I dati saranno salvati in Firestore. Garmin Connect non viene modificato.</p>
+        <input id="rp-fit-file" type="file" accept=".fit,.zip" aria-label="Archivio Garmin FIT o ZIP" style="max-width:100%;margin:8px 0" />
+        <button id="rp-fit-upload" type="button" class="rp-manual-open">Carica su Firestore</button>
+        <p id="rp-fit-status" role="status" style="overflow-wrap:anywhere"></p>
+      </section>
       <div hidden aria-hidden="true"><button id="importGarmin" type="button">Importa attività Garmin</button><p id="importResult" role="status"></p></div>
       <div id="rp-manual-modal" class="rp-manual-modal" hidden><div class="rp-manual-backdrop" data-manual-close></div><div class="rp-manual-dialog" role="dialog" aria-modal="true" aria-labelledby="rp-manual-title"><div class="rp-manual-head"><h2 id="rp-manual-title">Inserisci allenamento</h2><button type="button" class="rp-manual-close" id="rp-close-manual" aria-label="Chiudi">×</button></div><form id="activityForm" class="card"><label>Data<input id="date" type="date" required></label><label>Tipo<select id="kind"><option>Corsa facile</option><option>Ripetute</option><option>Tempo run</option><option>Lungo</option><option>Gara</option></select></label><label>Distanza (km)<input id="km" type="number" min=".1" step=".1" required placeholder="Es. 10.5"></label><label>Durata (minuti)<input id="minutes" type="number" min="1" step="1" required placeholder="Es. 55"></label><div class="rp-manual-actions"><button type="button" id="rp-cancel-manual" class="rp-manual-cancel">Annulla</button><button type="submit">Salva allenamento</button></div><p id="rp-manual-message" role="status" aria-live="polite"></p></form></div></div>
       <div id="activityList"></div>
