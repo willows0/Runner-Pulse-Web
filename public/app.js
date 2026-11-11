@@ -43,10 +43,20 @@ function rpActivatePage(page, remember=true){
 document.querySelectorAll('body > nav button[data-page]').forEach(btn=>btn.addEventListener('click',()=>rpActivatePage(btn.dataset.page)));
 try{rpActivatePage(sessionStorage.getItem(RP_PAGE_KEY)||'home',false);}catch{rpActivatePage('home',false);}
 
+function rpShowActivityTab(tab){
+  if(!['list','manual','import'].includes(tab))tab='list';
+  document.querySelectorAll('[data-activity-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.activityTab===tab)));
+  $('activityList').hidden=tab!=='list';
+  $('rp-import-panel').hidden=tab!=='import';
+  $('rp-manual-modal').hidden=tab!=='manual';
+  document.body.classList.remove('rp-manual-modal-open');
+}
+window.rpShowActivityTab=rpShowActivityTab;
+document.querySelectorAll('[data-activity-tab]').forEach(b=>b.addEventListener('click',()=>rpShowActivityTab(b.dataset.activityTab)));
 const manualModal=$('rp-manual-modal');
 const openManual=$('rp-open-manual');
-const closeManual=()=>{manualModal.hidden=true;document.body.classList.remove('rp-manual-modal-open');openManual.focus();};
-openManual.addEventListener('click',()=>{manualModal.hidden=false;document.body.classList.add('rp-manual-modal-open');$('rp-manual-message').textContent='';$('date').focus();});
+const closeManual=()=>{rpShowActivityTab('list');};
+openManual.addEventListener('click',()=>{rpShowActivityTab('manual');$('rp-manual-message').textContent='';$('date').focus();});
 $('rp-close-manual').addEventListener('click',closeManual);
 $('rp-cancel-manual').addEventListener('click',closeManual);
 manualModal.querySelector('[data-manual-close]').addEventListener('click',closeManual);

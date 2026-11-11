@@ -22,6 +22,14 @@
     #enterApp:disabled { opacity:.8; cursor:default; }
     #splash .splash-content { display:flex !important; flex-direction:column !important; align-items:center !important; justify-content:center !important; min-height:80dvh; }
     #splash .splash-heart { display:block !important; font-size:clamp(150px,43vw,240px) !important; line-height:1.1 !important; margin:12px auto !important; text-align:center !important; width:100%; }
+    .rp-activity-tabs {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:14px 0 18px;}
+    .rp-activity-tabs button {padding:11px 4px;border:1px solid #cad5e5;border-radius:11px;background:#eaf0f8;color:#172b47;font-size:clamp(11px,2.8vw,14px);font-weight:700;cursor:pointer;}
+    .rp-activity-tabs button[aria-selected="true"] {background:#17365c;color:#fff;border-color:#17365c;}
+    #rp-manual-modal.rp-manual-inline:not([hidden]) {position:static!important;display:block!important;inset:auto!important;background:transparent!important;z-index:auto!important;}
+    #rp-manual-modal.rp-manual-inline .rp-manual-backdrop {display:none!important;}
+    #rp-manual-modal.rp-manual-inline .rp-manual-dialog {position:static!important;transform:none!important;inset:auto!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;margin:0!important;}
+    #rp-manual-modal.rp-manual-inline .rp-manual-close,#rp-manual-modal.rp-manual-inline #rp-cancel-manual {display:none!important;}
+    #rp-import-panel[hidden],#activityList[hidden],#rp-manual-modal[hidden] {display:none!important;}
   </style>
 </head>
 <body>
@@ -47,17 +55,23 @@
       <div hidden aria-hidden="true"><p id="garminStatus"></p><p id="garminUpdated"></p></div>
     </section>
     <section id="activities" class="page">
-      <h1>Allenamenti</h1><button type="button" id="rp-open-manual" class="rp-manual-open">＋ Inserisci allenamento</button>
-      <section class="card" style="margin:12px 0;padding:14px">
-        <strong>Importa storico Garmin (FIT / ZIP)</strong>
-        <p style="margin:7px 0;font-size:0.9em">Seleziona un file FIT oppure un archivio ZIP con attività FIT. I dati saranno salvati in Firestore. Garmin Connect non viene modificato.</p>
-        <input id="rp-fit-file" type="file" accept=".fit,.zip" aria-label="Archivio Garmin FIT o ZIP" style="max-width:100%;margin:8px 0" />
+      <h1>Allenamenti</h1>
+      <div class="rp-activity-tabs" role="tablist" aria-label="Sezioni attività">
+        <button type="button" role="tab" data-activity-tab="list" aria-selected="true">Attività</button>
+        <button type="button" role="tab" data-activity-tab="manual" aria-selected="false">Inserimento manuale</button>
+        <button type="button" role="tab" data-activity-tab="import" aria-selected="false">Importa attività</button>
+      </div>
+      <button type="button" id="rp-open-manual" class="rp-manual-open" hidden>＋ Inserisci allenamento</button>
+      <section id="rp-import-panel" class="card rp-activity-panel" hidden>
+        <strong>Importa attività (FIT / ZIP / TCX)</strong>
+        <p>Seleziona un file FIT, TCX oppure un archivio ZIP con attività FIT. I dati saranno salvati in Firestore.</p>
+        <input id="rp-fit-file" type="file" accept=".fit,.zip,.tcx" aria-label="Archivio FIT, ZIP o TCX" />
         <button id="rp-fit-upload" type="button" class="rp-manual-open">Carica su Firestore</button>
-        <p id="rp-fit-status" role="status" style="overflow-wrap:anywhere"></p>
+        <p id="rp-fit-status" role="status" aria-live="polite"></p>
       </section>
       <div hidden aria-hidden="true"><button id="importGarmin" type="button">Importa attività Garmin</button><p id="importResult" role="status"></p></div>
-      <div id="rp-manual-modal" class="rp-manual-modal" hidden><div class="rp-manual-backdrop" data-manual-close></div><div class="rp-manual-dialog" role="dialog" aria-modal="true" aria-labelledby="rp-manual-title"><div class="rp-manual-head"><h2 id="rp-manual-title">Inserisci allenamento</h2><button type="button" class="rp-manual-close" id="rp-close-manual" aria-label="Chiudi">×</button></div><form id="activityForm" class="card"><label>Data<input id="date" type="date" required></label><label>Tipo<select id="kind"><option>Corsa facile</option><option>Ripetute</option><option>Tempo run</option><option>Lungo</option><option>Gara</option></select></label><label>Distanza (km)<input id="km" type="number" min=".1" step=".1" required placeholder="Es. 10.5"></label><label>Durata (minuti)<input id="minutes" type="number" min="1" step="1" required placeholder="Es. 55"></label><div class="rp-manual-actions"><button type="button" id="rp-cancel-manual" class="rp-manual-cancel">Annulla</button><button type="submit">Salva allenamento</button></div><p id="rp-manual-message" role="status" aria-live="polite"></p></form></div></div>
-      <div id="activityList"></div>
+      <div id="rp-manual-modal" class="rp-manual-modal rp-manual-inline" hidden><div class="rp-manual-backdrop" data-manual-close></div><div class="rp-manual-dialog" role="dialog" aria-modal="true" aria-labelledby="rp-manual-title"><div class="rp-manual-head"><h2 id="rp-manual-title">Inserisci allenamento</h2><button type="button" class="rp-manual-close" id="rp-close-manual" aria-label="Chiudi">×</button></div><form id="activityForm" class="card"><label>Data<input id="date" type="date" required></label><label>Tipo<select id="kind"><option>Corsa facile</option><option>Ripetute</option><option>Tempo run</option><option>Lungo</option><option>Gara</option></select></label><label>Distanza (km)<input id="km" type="number" min=".1" step=".1" required placeholder="Es. 10.5"></label><label>Durata (minuti)<input id="minutes" type="number" min="1" step="1" required placeholder="Es. 55"></label><div class="rp-manual-actions"><button type="button" id="rp-cancel-manual" class="rp-manual-cancel">Annulla</button><button type="submit">Salva allenamento</button></div><p id="rp-manual-message" role="status" aria-live="polite"></p></form></div></div>
+      <div id="activityList" class="rp-activity-panel"></div>
     </section>
     <section id="plan" class="page"><h1>Il tuo programma</h1><div class="card"><h2>Nessun programma automatico</h2><p>Il programma di allenamento viene creato soltanto su tua richiesta. Puoi chiedere all'allenatore AI un piano personalizzato usando i dati disponibili.</p><button id="rp-request-plan" type="button">Chiedi un programma al Coach</button><p class="note">Non verrà creato né inserito alcun allenamento in calendario senza una tua richiesta.</p></div></section>
     <section id="coach" class="page rp-coach-page" aria-label="Chat con l’allenatore Runner Pulse">

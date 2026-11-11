@@ -731,6 +731,7 @@ document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
   if(!response.ok||!result.success)throw Error(result.message||'Importazione non riuscita');
   status.textContent=`Firestore: ${result.imported} importati, ${result.duplicates} già presenti, ${result.failed} non leggibili.`+(result.errors?.length?' Dettagli: '+result.errors.join(' | '):'');
   if(result.imported){await loadGarminArchive();}
+  if(result.failed===0 && result.errors?.length===0){window.rpShowActivityTab?.('list');}
  }catch(error){status.textContent='Errore: '+(error.message||String(error));}
  finally{button.disabled=false;}
 });
