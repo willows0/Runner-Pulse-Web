@@ -235,17 +235,23 @@ async function loadGarminArchive(){
   archiveLoading=true;
   const expectedUid=auth.currentUser.uid;
   let total=0;
+  const archiveIds=[];
   try{
     let after=null;
+    let complete=false;
     for(let page=0;page<100;page++){
       const result=await authorizedPost('/api/garmin/archive',after?{after}:{});
       if(!allowedUser()||!isOwner()||auth.currentUser.uid!==expectedUid)return;
       if(result.activities?.length){
         total+=result.activities.length;
+        for(const activity of result.activities){const id=activity?.activityId??activity?.id??activity?.summaryId;if(id!=null)archiveIds.push(String(id));}
         window.dispatchEvent(new CustomEvent('runnerpulse:garmin-data',{detail:{activities:result.activities,fromArchive:true}}));
       }
-      if(!result.next)break;
+      if(!result.next){complete=true;break;}
       after=result.next;
+    }
+    if(complete&&allowedUser()&&isOwner()&&auth.currentUser?.uid===expectedUid){
+      window.dispatchEvent(new CustomEvent('runnerpulse:garmin-archive-complete',{detail:{uid:expectedUid,ids:archiveIds}}));
     }
   }catch(error){
     console.warn('Archivio Garmin non disponibile:',error.message);
@@ -714,7 +720,7 @@ window.addEventListener('runnerpulse:activity-coach',async event=>{
 document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
  const input=document.getElementById('rp-fit-file'),button=document.getElementById('rp-fit-upload'),status=document.getElementById('rp-fit-status');
  const file=input?.files?.[0];
- if(!file){status.textContent='Seleziona prima un file FIT o ZIP.';return;}
+ if(!file){status.textContent='Seleziona prima un file FIT, ZIP o TCX.';return;}
  if(!allowedUser()||!isOwner()){status.textContent='Accedi con l’account Google proprietario.';return;}
  if(file.size>85*1024*1024){status.textContent='Il file supera 85 MB: dividi lo ZIP in archivi più piccoli.';return;}
  button.disabled=true;status.textContent='Importazione in corso: non chiudere la pagina…';

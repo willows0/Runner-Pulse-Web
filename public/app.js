@@ -161,6 +161,17 @@ function normalizeGarmin(a){
     avgSpeed:speed!=null?Math.round(speed*3.6*100)/100:null};
 }
 window.addEventListener('runnerpulse:garmin-data',e=>{if(!key)return;const data=e.detail;const list=Array.isArray(data?.activities)?data.activities:[];let added=0,updated=0,skipped=0;const existing=new Map(entries.map((x,i)=>[String(x.id),i]));for(const raw of list){const item=normalizeGarmin(raw);if(!item||deletedGarminIds.has(item.garminId)){skipped++;continue;}const i=existing.get(item.id);if(i!==undefined){entries[i]={...entries[i],...item};updated++;}else{entries.unshift(item);added++;existing.set(item.id,0);}}if(Array.isArray(data?.activities)){if(!data.fromArchive)localStorage.setItem('runnerPulseGarminLastSync',new Date().toISOString());save();if(!data.fromArchive)$('importResult').textContent=`Importazione completata: ${added} nuove, ${updated} aggiornate, ${skipped} non utilizzabili. ${list.length} attività ricevute dal server.`;if(!list.length&&!data.fromArchive)$('importResult').textContent='Il servizio non ha restituito attività in questa richiesta.';}});
+// Firestore e' autorevole per lo storico Garmin dopo una lettura completa e riuscita.
+// Non eliminare attivita' manuali o dati locali in caso di errore di rete.
+window.addEventListener('runnerpulse:garmin-archive-complete',event=>{
+  if(!key||event.detail?.uid!==key.slice('runnerPulseActivitiesV1:uid:'.length))return;
+  const ids=event.detail?.ids;
+  if(!Array.isArray(ids))return;
+  const authoritative=new Set(ids.map(String));
+  const before=entries.length;
+  entries=entries.filter(item=>item.source!=='garmin'||authoritative.has(String(item.garminId||String(item.id||'').replace(/^garmin-/,''))));
+  if(entries.length!==before)save();
+});
 function download(name,body,type){const url=URL.createObjectURL(new Blob([body],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 $('export').onclick=()=>download('runner-pulse-allenamenti.json',JSON.stringify(entries,null,2),'application/json');
 if($('calendar')) $('calendar').onclick=()=>{const now=new Date(),monday=new Date(now);monday.setDate(now.getDate()+(8-now.getDay())%7);monday.setHours(0,0,0,0);const sessions=[{day:1,hour:18,title:'Runner Pulse - Qualità'},{day:3,hour:18,title:'Runner Pulse - Ritmo'},{day:6,hour:9,title:'Runner Pulse - Lungo'}];const fmtDate=d=>`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}00`;const out=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Runner Pulse//IT'];sessions.forEach((s,i)=>{const d=new Date(monday);d.setDate(d.getDate()+s.day);d.setHours(s.hour);const end=new Date(d.getTime()+3600000);out.push('BEGIN:VEVENT',`UID:runnerpulse-${Date.now()}-${i}@local`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'')}`,`DTSTART:${fmtDate(d)}`,`DTEND:${fmtDate(end)}`,`SUMMARY:${s.title}`,'DESCRIPTION:Bozza di allenamento. Modificare orario e carico in base al calendario e al recupero.','END:VEVENT');});out.push('END:VCALENDAR');download('runner-pulse-settimana.ics',out.join('\r\n'),'text/calendar');};
