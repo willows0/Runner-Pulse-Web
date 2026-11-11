@@ -721,19 +721,37 @@ window.addEventListener('runnerpulse:activity-coach',async event=>{
 // Importazione FIT/ZIP autenticata, solo proprietario; nessun dato salvato in localStorage prima del successo server.
 document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
  const input=document.getElementById('rp-fit-file'),button=document.getElementById('rp-fit-upload'),status=document.getElementById('rp-fit-status');
+ const wrap=document.getElementById('rp-fit-progress-wrap'),bar=document.getElementById('rp-fit-progress'),label=document.getElementById('rp-fit-progress-label'),percent=document.getElementById('rp-fit-progress-percent'),note=document.getElementById('rp-fit-progress-note');
  const file=input?.files?.[0];
  if(!file){status.textContent='Seleziona prima un file FIT, ZIP o TCX.';return;}
  if(!allowedUser()||!isOwner()){status.textContent='Accedi con l’account Google proprietario.';return;}
  if(file.size>85*1024*1024){status.textContent='Il file supera 85 MB: dividi lo ZIP in archivi più piccoli.';return;}
- button.disabled=true;status.textContent='Importazione in corso: non chiudere la pagina…';
+ button.disabled=true;wrap.hidden=false;bar.value=0;percent.textContent='0%';label.textContent='Caricamento file';note.textContent='Non chiudere la pagina.';status.textContent='';
  try{
   const token=await auth.currentUser.getIdToken();
-  const response=await fetch('/api/garmin/import-file',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/octet-stream','X-RP-Filename':encodeURIComponent(file.name)},body:file});
-  const result=await response.json();
-  if(!response.ok||!result.success)throw Error(result.message||'Importazione non riuscita');
+  const result=await new Promise((resolve,reject)=>{
+   const xhr=new XMLHttpRequest();
+   xhr.open('POST','/api/garmin/import-file');
+   xhr.setRequestHeader('Authorization','Bearer '+token);
+   xhr.setRequestHeader('Content-Type','application/octet-stream');
+   xhr.setRequestHeader('X-RP-Filename',encodeURIComponent(file.name));
+   xhr.upload.onprogress=e=>{
+    if(e.lengthComputable){const value=Math.min(100,Math.round(e.loaded/e.total*100));bar.value=value;percent.textContent=value+'%';}
+   };
+   xhr.upload.onload=()=>{bar.removeAttribute('value');label.textContent='Elaborazione e salvataggio su Firestore';percent.textContent='In corso';note.textContent='Il file è stato inviato. Attendi la risposta del server.';};
+   xhr.onerror=()=>reject(Error('Connessione interrotta durante il caricamento.'));
+   xhr.onabort=()=>reject(Error('Caricamento interrotto.'));
+   xhr.onload=()=>{
+    let data;try{data=JSON.parse(xhr.responseText);}catch{reject(Error('Risposta non valida dal server (HTTP '+xhr.status+').'));return;}
+    if(xhr.status<200||xhr.status>=300||!data.success){reject(Error(data.message||'Importazione non riuscita (HTTP '+xhr.status+').'));return;}
+    resolve(data);
+   };
+   xhr.send(file);
+  });
+  bar.value=100;label.textContent='Importazione completata';percent.textContent='100%';note.textContent='Firestore aggiornato.';
   status.textContent=`Firestore: ${result.imported} importati, ${result.duplicates} già presenti, ${result.failed} non leggibili.`+(result.errors?.length?' Dettagli: '+result.errors.join(' | '):'');
   if(result.imported){await loadGarminArchive();}
-  if(result.failed===0 && result.errors?.length===0){window.rpShowActivityTab?.('list');}
- }catch(error){status.textContent='Errore: '+(error.message||String(error));}
+  if(result.failed===0 && (!result.errors||result.errors.length===0)){window.rpShowActivityTab?.('list');}
+ }catch(error){bar.value=0;label.textContent='Importazione non riuscita';percent.textContent='';note.textContent='Controlla l’errore qui sotto.';status.textContent='Errore: '+(error.message||String(error));}
  finally{button.disabled=false;}
 });

@@ -68,6 +68,11 @@
         <p>Seleziona un file FIT, TCX oppure un archivio ZIP con attività FIT. I dati saranno salvati in Firestore.</p>
         <input id="rp-fit-file" type="file" accept=".fit,.zip,.tcx" aria-label="Archivio FIT, ZIP o TCX" />
         <button id="rp-fit-upload" type="button" class="rp-manual-open">Carica su Firestore</button>
+        <div id="rp-fit-progress-wrap" hidden role="group" aria-label="Avanzamento importazione" style="margin:16px 0">
+          <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;color:#fff;font-weight:700"><span id="rp-fit-progress-label">Caricamento file…</span><span id="rp-fit-progress-percent">0%</span></div>
+          <progress id="rp-fit-progress" max="100" value="0" style="display:block;width:100%;height:20px;accent-color:#ff7900"></progress>
+          <p id="rp-fit-progress-note" style="color:#dbe7f5;font-size:13px">Non chiudere la pagina durante l'importazione.</p>
+        </div>
         <p id="rp-fit-status" role="status" aria-live="polite"></p>
       </section>
       <div hidden aria-hidden="true"><button id="importGarmin" type="button">Importa attività Garmin</button><p id="importResult" role="status"></p></div>
