@@ -16,12 +16,12 @@ function unzip(buffer){
   const name=buffer.subarray(p+46,p+46+nl).toString('utf8');p+=46+nl+ex+comment;
   if(!/\.(fit|zip)$/i.test(name)||name.endsWith('/'))continue;
   if(flags&1)throw Error('ZIP cifrato non supportato');
-  if(uncompressed>8*1024*1024||compressed>8*1024*1024||total+uncompressed>80*1024*1024)throw Error('Archivio FIT troppo grande');
+  if(uncompressed>16*1024*1024||compressed>32*1024*1024||total+uncompressed>256*1024*1024)throw Error('Archivio FIT troppo grande');
   if(offset+30>buffer.length||buffer.readUInt32LE(offset)!==0x04034b50)throw Error('File ZIP danneggiato');
   const dataStart=offset+30+buffer.readUInt16LE(offset+26)+buffer.readUInt16LE(offset+28);
   if(dataStart+compressed>buffer.length)throw Error('Contenuto ZIP incompleto');
   const raw=buffer.subarray(dataStart,dataStart+compressed);
-  const data=method===0?raw:method===8?inflateRawSync(raw,{maxOutputLength:8*1024*1024}):null;
+  const data=method===0?raw:method===8?inflateRawSync(raw,{maxOutputLength:16*1024*1024}):null;
   if(!data||data.length!==uncompressed)throw Error('Compressione ZIP non supportata o file danneggiato');
   total+=uncompressed;out.push({name,data});
  }
@@ -30,7 +30,7 @@ function unzip(buffer){
 function parseFit(buffer){
  if(buffer.length<14||buffer.subarray(8,12).toString()!=='.FIT')throw Error('File FIT non valido');
  const header=buffer[0],length=buffer.readUInt32LE(4),end=header+length;
- if(header<12||end>buffer.length||length>8*1024*1024)throw Error('Dimensione FIT non valida');
+ if(header<12||end>buffer.length||length>16*1024*1024)throw Error('Dimensione FIT non valida');
  let p=header;const definitions=new Map(),records=[],laps=[];let session=null,fileId=null;
  const read=(size,type,le)=>{
   const base=type&31;const dv=new DataView(buffer.buffer,buffer.byteOffset+p,size);
