@@ -440,3 +440,11 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 
 /* Nascondi sempre indicatori non validi, anche quando lo stile precedente forza display */
 #home .rp-watch-sync-status[hidden],#home .rp-watch-percent[hidden],#home .rp-watch-caption:empty{display:none!important}
+
+/* Menu Attività come il menu Panoramica/Grafici/Lap/Coach AI. */
+#activities .rp-activity-tabs{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important;padding:5px!important;background:#142840!important;border-radius:19px!important;overflow:hidden!important}
+#activities .rp-activity-tabs button{background:transparent!important;color:#d0deed!important;border:0!important;box-shadow:none!important;border-radius:14px!important;font-weight:750!important;min-height:52px!important;padding:10px 3px!important}
+#activities .rp-activity-tabs button[aria-selected="true"]{background:#ff7900!important;color:#fff!important;box-shadow:0 2px 10px #0002!important}
+/* Connessione verificata verde, non connessa grigia. */
+#settings .rp-devices .rp-device-switch[aria-checked="true"]{background:#19c953!important;opacity:1!important}
+#settings .rp-devices .rp-device-switch[aria-checked="false"]{background:#8998a9!important;opacity:1!important}
