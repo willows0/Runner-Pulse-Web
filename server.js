@@ -1,3 +1,4 @@
+import {parseTcx} from './garmin-tcx-import.js';
 import {parseGarminArchive} from './garmin-fit-import.js';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -874,10 +875,11 @@ http.createServer(async(req,res)=>{
     if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso riservato al proprietario'});
     try{
       const filename=decodeURIComponent(String(req.headers['x-rp-filename']||''));
-      if(!/\.(fit|zip)$/i.test(filename))return json(res,400,{success:false,message:'Carica un file FIT o ZIP'});
+      if(!/\.(fit|zip|tcx)$/i.test(filename))return json(res,400,{success:false,message:'Carica un file FIT, ZIP o TCX'});
       const max=85*1024*1024;let size=0;const chunks=[];
       for await(const chunk of req){size+=chunk.length;if(size>max)throw Object.assign(new Error('File troppo grande (limite 85 MB). Dividi lo ZIP in archivi più piccoli.'),{status:413});chunks.push(chunk);}
-      const parsed=parseGarminArchive(Buffer.concat(chunks),filename);
+      const buffer=Buffer.concat(chunks);
+      const parsed=/\.tcx$/i.test(filename)?parseTcx(buffer).map((activity,i)=>({name:filename+(i?' #'+(i+1):''),activity})):parseGarminArchive(buffer,filename);
       const user=await garminGoogleUser(req),db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
       let imported=0,duplicates=0,failed=0;const errors=[];
       for(const {name,activity,error} of parsed){
@@ -892,7 +894,7 @@ http.createServer(async(req,res)=>{
           const same=near.docs.some(d=>{const old=d.data()?.summary||{};return Math.abs(Number(old.distanceInMeters)-Number(summary.distanceInMeters))<2&&Math.abs(Number(old.durationInSeconds)-Number(summary.durationInSeconds))<3;});
           if(same){duplicates++;continue;}
           const batch=db.batch();
-          batch.set(ref,{summary,garminId:id,source:'manual-fit',seenAt:Date.now(),officialActivityDetails:{activityId:id,laps:detail.laps},fitSampleChunks:Math.ceil(detail.samples.length/300)});
+          batch.set(ref,{summary,garminId:id,source:/\.tcx$/i.test(filename)?'manual-tcx':'manual-fit',seenAt:Date.now(),officialActivityDetails:{activityId:id,laps:detail.laps},fitSampleChunks:Math.ceil(detail.samples.length/300)});
           for(let j=0;j<detail.samples.length;j+=300)batch.set(ref.collection('fitSamples').doc(String(j/300).padStart(5,'0')),{samples:detail.samples.slice(j,j+300)});
           // Firestore batch limit: 500 writes. Avoid partial imports.
           if(detail.samples.length>120000)throw Error('Attività troppo grande per importazione singola');
