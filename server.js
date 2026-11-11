@@ -891,13 +891,17 @@ http.createServer(async(req,res)=>{
         try{
           const {id,summary,detail}=activity;
           const ref=root.collection('activities').doc(id);
-          if((await root.collection('deletedActivities').doc(id).get()).exists){duplicates++;continue;}
+          // L'importazione manuale esplicita può ripristinare attività eliminate.
+          // Il tombstone resta attivo per i webhook automatici.
+          const tombstone=root.collection('deletedActivities').doc(id);
           if((await ref.get()).exists){duplicates++;continue;}
           // Evita duplicati con lo storico importato da Garmin via webhook.
           const near=await root.collection('activities').where('summary.startTimeInSeconds','==',summary.startTimeInSeconds).limit(15).get();
           const same=near.docs.some(d=>{const old=d.data()?.summary||{};return Math.abs(Number(old.distanceInMeters)-Number(summary.distanceInMeters))<2&&Math.abs(Number(old.durationInSeconds)-Number(summary.durationInSeconds))<3;});
           if(same){duplicates++;continue;}
           const batch=db.batch();
+          // Ripristino atomico: cancellare il tombstone solo se il nuovo record viene scritto.
+          batch.delete(tombstone);
           batch.set(ref,{summary,garminId:id,source:/\.tcx$/i.test(filename)?'manual-tcx':'manual-fit',seenAt:Date.now(),officialActivityDetails:{activityId:id,laps:detail.laps},fitSampleChunks:Math.ceil(detail.samples.length/300)});
           for(let j=0;j<detail.samples.length;j+=300)batch.set(ref.collection('fitSamples').doc(String(j/300).padStart(5,'0')),{samples:detail.samples.slice(j,j+300)});
           // Firestore batch limit: 500 writes. Avoid partial imports.
