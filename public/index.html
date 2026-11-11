@@ -22,9 +22,10 @@
     #enterApp:disabled { opacity:.8; cursor:default; }
     #splash .splash-content { display:flex !important; flex-direction:column !important; align-items:center !important; justify-content:center !important; min-height:80dvh; }
     #splash .splash-heart { display:block !important; font-size:clamp(150px,43vw,240px) !important; line-height:1.1 !important; margin:12px auto !important; text-align:center !important; width:100%; }
-    #activities .rp-activity-tabs {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0 24px;}
-    #activities .rp-activity-tabs button {min-width:0;min-height:100px;padding:12px 5px!important;border:1px solid #4c6885!important;border-radius:22px!important;background:linear-gradient(145deg,#10243c,#213f60)!important;color:#fff!important;font-size:clamp(11px,2.7vw,15px)!important;font-weight:750!important;cursor:pointer;box-shadow:0 5px 14px #10243c22!important;white-space:normal;}
-    #activities .rp-activity-tabs button[aria-selected="true"] {background:linear-gradient(145deg,#1b3e63,#315b83)!important;color:#fff!important;border:2px solid #ff7900!important;box-shadow:0 5px 14px #10243c33!important;}
+    /* Menu Attività: stessa barra compatta dei dettagli allenamento. */
+    #activities .rp-activity-tabs {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:18px 0 24px;padding:5px;background:#142840;border-radius:22px;align-items:stretch;}
+    #activities .rp-activity-tabs button {min-width:0;min-height:56px;padding:10px 3px!important;border:0!important;border-radius:14px!important;background:transparent!important;color:#d0deed!important;font-size:clamp(11px,2.8vw,14px)!important;font-weight:750!important;cursor:pointer;box-shadow:none!important;white-space:normal;line-height:1.2;}
+    #activities .rp-activity-tabs button[aria-selected="true"] {background:#ff7900!important;color:#fff!important;border:0!important;box-shadow:0 2px 10px #0002!important;}
     #rp-manual-modal.rp-manual-inline:not([hidden]) {position:static!important;display:block!important;inset:auto!important;background:transparent!important;z-index:auto!important;}
     #rp-manual-modal.rp-manual-inline .rp-manual-backdrop {display:none!important;}
     #rp-manual-modal.rp-manual-inline .rp-manual-dialog {position:static!important;transform:none!important;inset:auto!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;margin:0!important;}
