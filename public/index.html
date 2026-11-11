@@ -31,6 +31,9 @@
     #rp-manual-modal.rp-manual-inline .rp-manual-close,#rp-manual-modal.rp-manual-inline #rp-cancel-manual {display:none!important;}
     #rp-import-panel[hidden],#activityList[hidden],#rp-manual-modal[hidden] {display:none!important;}
     #activities #rp-open-manual {display:none!important;}
+    #home .rp-watch-connection-dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:#e84c4c;border:2px solid #fff;box-shadow:0 0 0 2px #ffffff22;vertical-align:middle;margin-left:8px;flex-shrink:0}
+    #home .rp-watch-connection-dot[data-connected="true"]{background:#21c55d}
+    #home .rp-watch-connection-dot[data-checking="true"]{background:#aab1bc}
   </style>
 </head>
 <body>
@@ -43,7 +46,7 @@
       <div class="rp-welcome-message">Benvenuto, <strong id="rp-welcome-name">runner</strong>!</div>
       <section class="rp-elite-hero" aria-label="Panoramica sportiva">
         <div class="rp-elite-top"><span class="rp-elite-kicker">RUNNER PULSE <span class="rp-elite-dot">●</span> PERFORMANCE</span><span class="rp-elite-live">IL TUO SPORT</span></div>
-        <div class="rp-elite-main"><div class="rp-elite-copy"><h1>Corri forte.<br><em>Vai oltre.</em></h1><p>Ogni corsa racconta i tuoi progressi.</p></div><div class="rp-elite-watch"><span class="rp-watch-caption"></span><button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Gestisci collegamento orologio" title="Apri dispositivi nel Profilo">
+        <div class="rp-elite-main"><div class="rp-elite-copy"><h1>Corri forte.<br><em>Vai oltre.</em></h1><p>Ogni corsa racconta i tuoi progressi.</p></div><div class="rp-elite-watch"><span class="rp-watch-caption"></span><span id="rp-watch-connection-dot" class="rp-watch-connection-dot" role="status" aria-label="Stato connessione orologio: non collegato" title="Orologio non collegato"></span><button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Gestisci collegamento orologio" title="Apri dispositivi nel Profilo">
       <svg class="rp-watch" viewBox="0 0 58 82" aria-hidden="true"><defs><linearGradient id="watchframe" x1="0" x2="1"><stop stop-color="#242b31"/><stop offset=".5" stop-color="#53595e"/><stop offset="1" stop-color="#11151b"/></linearGradient></defs><path d="M17 2h24l4 16H13zM13 64h32l-4 16H17z" fill="#171b20"/><rect x="4" y="15" width="50" height="52" rx="13" fill="url(#watchframe)"/><rect x="9" y="20" width="40" height="42" rx="9" fill="#10151a"/><rect x="54" y="33" width="3" height="13" rx="1.5" fill="#252b30"/><circle cx="33" cy="29" r="4" fill="#ff6b16"/><path d="m28 36-8 8-10 3m19-11 10 6 7-2m-18-4-3 12-9 10m9-10 12 6 7 7" stroke="#ff6b16" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <svg class="rp-ring-svg" viewBox="0 0 48 48" aria-hidden="true"><circle class="rp-sync-track" cx="24" cy="24" r="19"/><circle id="rp-sync-ring" class="rp-sync-ring" cx="24" cy="24" r="19"/></svg>
     </button><strong id="rp-sync-percent" class="rp-watch-percent" aria-live="polite" hidden></strong><span id="rp-sync-text" class="rp-watch-sync-status" role="status" hidden></span><span class="rp-watch-hint">Tocca per gestire</span></div></div>
@@ -52,7 +55,7 @@
       <div class="rp-section-head"><div><span class="rp-overline">PERFORMANCE</span><h2>Ultimi 7 giorni</h2></div><span class="rp-section-tag">Le tue corse</span></div>
       <div class="rp-performance-grid"><article class="rp-performance-card rp-performance-primary"><span>CHILOMETRI PERCORSI</span><strong id="rp-week-km">—</strong><small>Negli ultimi 7 giorni</small></article><article class="rp-performance-card"><span>USCITE</span><strong id="rp-week-runs">—</strong><small>Corse registrate</small></article><article class="rp-performance-card"><span>PASSO MEDIO</span><strong id="avgPace">—</strong><small>Min/km</small></article></div>
       <span id="distance" hidden aria-hidden="true">0</span>
-      <div class="rp-watch-actions"><button type="button" id="rp-check-new-activities" class="rp-refresh-button">↻ Controlla nuove attività</button><p id="rp-new-activities-result" role="status" class="rp-watch-result">Controllo disponibile quando il servizio è collegato.</p></div>
+      
       <div hidden aria-hidden="true"><p id="garminStatus"></p><p id="garminUpdated"></p></div>
     </section>
     <section id="activities" class="page">
@@ -65,9 +68,9 @@
       
       <section id="rp-import-panel" class="card rp-activity-panel" hidden>
         <strong>Importa attività (FIT / ZIP / TCX)</strong>
-        <p>Seleziona un file FIT, TCX oppure un archivio ZIP con attività FIT. Gli allenamenti saranno aggiunti al tuo archivio.</p>
+        <p>Seleziona un file FIT, TCX oppure un archivio ZIP con attività FIT. I dati saranno salvati in Firestore.</p>
         <input id="rp-fit-file" type="file" accept=".fit,.zip,.tcx" aria-label="Archivio FIT, ZIP o TCX" />
-        <button id="rp-fit-upload" type="button" class="rp-manual-open">Carica</button>
+        <button id="rp-fit-upload" type="button" class="rp-manual-open">Carica su Firestore</button>
         <div id="rp-fit-progress-wrap" hidden role="group" aria-label="Avanzamento importazione" style="margin:16px 0">
           <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;color:#fff;font-weight:700"><span id="rp-fit-progress-label">Caricamento file…</span><span id="rp-fit-progress-percent">0%</span></div>
           <progress id="rp-fit-progress" max="100" value="0" style="display:block;width:100%;height:20px;accent-color:#ff7900"></progress>

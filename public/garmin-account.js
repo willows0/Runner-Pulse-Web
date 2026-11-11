@@ -24,13 +24,15 @@ const watchPercent=document.getElementById('rp-sync-percent');
 const watchHint=document.querySelector('.rp-watch-hint');
 const watchButton=document.getElementById('rp-sync-clock');
 const watchActions=document.querySelector('.rp-watch-actions');
+const connectionDot=document.getElementById('rp-watch-connection-dot');
 function publishConnection(service){
  const name=service==='garmin'?'Garmin Connect':service==='polar'?'Polar Flow':service==='suunto'?'Suunto App':service==='samsung'?'Samsung Health':'';
  window.runnerPulseConnectedService=service||null;
  if(caption)caption.textContent=name||'';
  if(watchHint)watchHint.textContent='Tocca per gestire';
  if(watchButton){watchButton.title='Gestisci dispositivi nel Profilo';watchButton.setAttribute('aria-label','Apri dispositivi nel Profilo');}
- if(watchActions)watchActions.hidden=service!=='garmin';
+ if(watchActions)watchActions.hidden=true;
+ if(connectionDot){const connected=Boolean(service);connectionDot.dataset.connected=String(connected);connectionDot.dataset.checking='false';connectionDot.title=connected?'Orologio collegato':'Orologio non collegato';connectionDot.setAttribute('aria-label','Stato connessione orologio: '+(connected?'collegato':'non collegato'));}
  if(!service){if(watchText){watchText.textContent='';watchText.hidden=true;}if(watchPercent){watchPercent.textContent='';watchPercent.hidden=true;}}
  else {if(watchText)watchText.hidden=false;if(watchPercent)watchPercent.hidden=service!=='garmin';if(service!=='garmin'&&watchText)watchText.textContent='Orologio collegato';}
  window.dispatchEvent(new CustomEvent('runnerpulse:device-status',{detail:{service:service||null}}));
@@ -61,6 +63,7 @@ async function refresh(){
  const id=++generation;
  const user=auth.currentUser;
  setGarminUI(false,false);
+ if(connectionDot)connectionDot.dataset.checking='true';
  if(!user){message.textContent='Accedi con Google per collegare i dispositivi.';publishConnection(null);return;}
  message.textContent='Verifica connessione del servizio…';
  try{
@@ -86,7 +89,7 @@ async function refresh(){
    }catch(verifyError){if(id===generation)message.textContent='Garmin collegato, ma sincronizzazione non verificata: '+(verifyError.message||'riprova più tardi');}
   }
   if(oldStatus)oldStatus.textContent=message.textContent;
- }catch(error){if(id===generation){message.textContent='Connessione non verificata: '+(error.message||'impossibile verificare lo stato.');publishConnection(null);}}
+ }catch(error){if(id===generation){message.textContent='Connessione non verificata: '+(error.message||'impossibile verificare lo stato.');publishConnection(null);if(connectionDot)connectionDot.dataset.checking='false';}}
 }
 switches.get('garmin').addEventListener('click',()=>{
  if(garminConnected){if(!window.confirm('Vuoi scollegare il tuo account Garmin da Runner Pulse?'))return;void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch('/api/garmin/disconnect',{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok)throw new Error(data.message||'Scollegamento non riuscito');await refresh();}catch(error){message.textContent=error.message||'Scollegamento non riuscito';}})();return;}
