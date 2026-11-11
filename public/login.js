@@ -106,7 +106,7 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('rp-garmin-test')?.toggleAttribute('disabled',!isOwner());
     window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:{uid:user.uid,owner:isOwner()}}));
-    if(isOwner()){void loadGarminArchive();void startAutoSync();}else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
+    if(isOwner()){void loadGarminArchive(); // Non avviare automaticamente la Personal API: un token 401 richiede nuove credenziali.}else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
   }else{healthRequest++;resetHealth();window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
   if (user && !allowed) {
     showError('Accedi con un account Google verificato per utilizzare Runner Pulse.');
@@ -305,7 +305,7 @@ async function startAutoSync(force=false){
       if(state.phase==='done'||state.phase==='partial'){await loadGarminArchive();break;}
       await new Promise(resolve=>setTimeout(resolve,250));
     }
-  }catch(e){if(!syncCancel)syncUI(null,'Sincronizzazione interrotta: '+(e.message||String(e)));}
+  }catch(e){if(!syncCancel)syncUI(null,/Garmin token HTTP 401/.test(e.message||'')?'Connessione Garmin non autorizzata (401). Verifica la chiave Personal API su Render o ricollega Garmin dal Profilo. Gli allenamenti salvati restano disponibili.':'Sincronizzazione interrotta: '+(e.message||String(e)));}
   finally{syncActive=false;syncClock?.classList.remove('rp-sync-running');}
 }
 syncClock?.addEventListener('click',()=>{
@@ -731,7 +731,6 @@ document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
   if(!response.ok||!result.success)throw Error(result.message||'Importazione non riuscita');
   status.textContent=`Firestore: ${result.imported} importati, ${result.duplicates} già presenti, ${result.failed} non leggibili.`+(result.errors?.length?' Dettagli: '+result.errors.join(' | '):'');
   if(result.imported){await loadGarminArchive();}
-  if(result.failed===0 && result.errors?.length===0){window.rpShowActivityTab?.('list');}
  }catch(error){status.textContent='Errore: '+(error.message||String(error));}
  finally{button.disabled=false;}
 });
