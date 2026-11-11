@@ -1,3 +1,4 @@
+import {parseGarminArchive} from './garmin-fit-import.js';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -868,6 +869,40 @@ http.createServer(async(req,res)=>{
       return json(res,200,{success:true,added,checked});
     }catch(error){console.warn('Controllo incrementale Garmin:',error.message);return json(res,502,{success:false,message:'Controllo nuove attività non riuscito: '+error.message});}
   }
+  if(pathname==='/api/garmin/import-file'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso riservato al proprietario'});
+    try{
+      const filename=decodeURIComponent(String(req.headers['x-rp-filename']||''));
+      if(!/\.(fit|zip)$/i.test(filename))return json(res,400,{success:false,message:'Carica un file FIT o ZIP'});
+      const max=85*1024*1024;let size=0;const chunks=[];
+      for await(const chunk of req){size+=chunk.length;if(size>max)throw Object.assign(new Error('File troppo grande (limite 85 MB). Dividi lo ZIP in archivi più piccoli.'),{status:413});chunks.push(chunk);}
+      const parsed=parseGarminArchive(Buffer.concat(chunks),filename);
+      const user=await garminGoogleUser(req),db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
+      let imported=0,duplicates=0,failed=0;const errors=[];
+      for(const {name,activity,error} of parsed){
+        if(error){failed++;if(errors.length<8)errors.push(name+': '+error);continue;}
+        try{
+          const {id,summary,detail}=activity;
+          const ref=root.collection('activities').doc(id);
+          if((await root.collection('deletedActivities').doc(id).get()).exists){duplicates++;continue;}
+          if((await ref.get()).exists){duplicates++;continue;}
+          // Evita duplicati con lo storico importato da Garmin via webhook.
+          const near=await root.collection('activities').where('summary.startTimeInSeconds','==',summary.startTimeInSeconds).limit(15).get();
+          const same=near.docs.some(d=>{const old=d.data()?.summary||{};return Math.abs(Number(old.distanceInMeters)-Number(summary.distanceInMeters))<2&&Math.abs(Number(old.durationInSeconds)-Number(summary.durationInSeconds))<3;});
+          if(same){duplicates++;continue;}
+          const batch=db.batch();
+          batch.set(ref,{summary,garminId:id,source:'manual-fit',seenAt:Date.now(),officialActivityDetails:{activityId:id,laps:detail.laps},fitSampleChunks:Math.ceil(detail.samples.length/300)});
+          for(let j=0;j<detail.samples.length;j+=300)batch.set(ref.collection('fitSamples').doc(String(j/300).padStart(5,'0')),{samples:detail.samples.slice(j,j+300)});
+          // Firestore batch limit: 500 writes. Avoid partial imports.
+          if(detail.samples.length>120000)throw Error('Attività troppo grande per importazione singola');
+          if(Math.ceil(detail.samples.length/300)>450)throw Error('Troppi campioni FIT');
+          await batch.commit();imported++;
+        }catch(err){failed++;if(errors.length<8)errors.push(name+': '+err.message);}
+      }
+      return json(res,200,{success:true,imported,duplicates,failed,total:parsed.length,errors});
+    }catch(error){console.error('Importazione FIT:',error.message);return json(res,error.status||400,{success:false,message:error.message});}
+  }
   if(pathname==='/api/garmin/delete-activity'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
     if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso non autorizzato'});
@@ -885,6 +920,7 @@ http.createServer(async(req,res)=>{
         tx.set(tombstone,{deletedAt:Date.now(),deletedBy:user.uid});
         tx.delete(ref);
       });
+      await db.recursiveDelete(ref);
       return json(res,200,{success:true,deleted:true});
     }catch(error){console.error('Eliminazione attività Garmin:',error.message);return json(res,error.status===404?404:500,{success:false,message:error.status===404?error.message:'Eliminazione da Firebase non riuscita'});}
   }
@@ -910,7 +946,12 @@ http.createServer(async(req,res)=>{
       let laps=candidates.find(v=>Array.isArray(v)&&v.length&&v.every(validLap)&&(!Number.isInteger(expected)||expected<=0||v.length===expected))||[];
       // Nessuna approssimazione: se sono dichiarati 18 giri, non mostrare 3 riepiloghi.
 
-      const detail=(officialDetail && Array.isArray(officialDetail.samples) && officialDetail.samples.length ? officialDetail : null)||record.detail||record.activityDetail||null;
+      let fitDetail=null;
+      if(record.fitSampleChunks){
+        const parts=await snap.ref.collection('fitSamples').orderBy('__name__').get();
+        fitDetail={activityId:id,laps:officialDetail?.laps||[],samples:parts.docs.flatMap(d=>d.data()?.samples||[])};
+      }
+      const detail=fitDetail||(officialDetail && Array.isArray(officialDetail.samples) && officialDetail.samples.length ? officialDetail : null)||record.detail||record.activityDetail||null;
       return json(res,200,{success:true,detail, splits:{laps},hasLaps:laps.length>0,hasDetail:Boolean(detail)});
     }catch(error){console.error('Lettura dettagli Firestore:',error.message);return json(res,500,{success:false,message:'Lettura dettagli salvati non riuscita'});}
   }
