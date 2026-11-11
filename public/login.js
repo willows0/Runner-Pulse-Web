@@ -602,33 +602,38 @@ async function loadDetailForActivity(activity) {
     // Prima il dettaglio salvato: più rapido e funziona anche con la vecchia API disabilitata.
     // Per attività senza cache si tenta il recupero una sola volta per sessione.
     const cached = rpReadDetailCache(activity);
-    const failedKey = 'rp-detail-unavailable:' + rpDetailCacheKey(activity);
-    if (!cached && sessionStorage.getItem(failedKey) === '1') {
-      throw new Error('Dettagli non salvati per questo allenamento storico.');
-    }
     let data = cached;
-    if (!data) {
-      // Attività importate in precedenza: nessuna richiesta alla Personal API disabilitata.
-      // Soltanto attività marcate esplicitamente come importate dalla connessione ufficiale
-      // possono richiedere dettagli nuovi. Non dedurre l'origine dal solo campo 'garmin'.
-      const official = activity.detailProvider === 'official' || activity.importMethod === 'official';
-      if (!official) return;
+    // Lo storico Firestore viene interrogato prima di qualsiasi servizio esterno.
+    // E' una lettura autenticata, senza bisogno della Personal API.
+    if (!data || !rpAvailableSplits(data.splits)) {
       try {
-        data = await authorizedPost('/api/garmin/activity-detail', { activityId: activity.garminId });
-        rpSaveDetailCache(activity, data);
-      } catch (error) {
-        sessionStorage.setItem(failedKey, '1');
-        return;
+        const stored = await authorizedPost('/api/activities/stored-detail', {activityId:activity.garminId});
+        if (stored.hasLaps || stored.hasDetail) {
+          data = {detail:stored.detail || data?.detail || null,
+                  splits:stored.hasLaps ? stored.splits : data?.splits || null};
+          if(data.detail)rpSaveDetailCache(activity,data);
+        }
+      } catch (_) { /* Un archivio non disponibile non cancella la cache locale. */ }
+    }
+    if (!data) {
+      // Solo importazioni ufficiali esplicite possono chiedere nuovi dettagli.
+      const official = activity.detailProvider === 'official' || activity.importMethod === 'official';
+      if (official) {
+        try {
+          data = await authorizedPost('/api/garmin/activity-detail', {activityId:activity.garminId});
+          rpSaveDetailCache(activity,data);
+        } catch (_) { /* Mostriamo solo dati verificati. */ }
       }
     }
-    const hasCharts = rpAvailableCharts(data.detail);
+    if (!data) {rpSetDetailTabVisibility(false,false);return;}
+    const hasCharts = Boolean(data.detail) && rpAvailableCharts(data.detail);
     const hasLaps = rpAvailableSplits(data.splits);
     rpSetDetailTabVisibility(hasCharts, hasLaps);
     if (!hasCharts && !hasLaps) return;
     if (request !== detailRequest || document.getElementById('detailOverlay')?.hidden) return;
     panel.replaceChildren();
     const title = document.createElement('h3'); title.textContent = 'Grafici'; panel.append(title);
-    const rows = extractMetrics(data.detail);
+    const rows = data.detail ? extractMetrics(data.detail) : [];
     const heart = findSeries(rows, ['heartrate', 'heartratebpm', 'directheartrate', 'hr']);
     const speed = findSeries(rows, ['speed', 'enhancedspeed', 'velocity', 'directspeed']);
     const altitude = findSeries(rows, ['elevation', 'altitude', 'enhancedaltitude', 'directelevation']);
@@ -641,7 +646,8 @@ async function loadDetailForActivity(activity) {
     drawSeries(panel, '📈 Passo', speed, v => v > 0 ? 1000 / v / 60 : NaN, ' min/km');
     drawSeries(panel, '🏔️ Altitudine', altitude, v => v, ' m');
     drawSeries(panel, '👟 Cadenza', cadence, v => v, ' spm');
-    renderSplits(lapContent, data.splits);
+    if(hasLaps)renderSplits(lapContent, data.splits);
+    if(!hasCharts)return;
     // Recupera il profilo salvato, anche se non sono disponibili tutti i campi.
     let profile = null;
     let profileError = false;
