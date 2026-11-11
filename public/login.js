@@ -485,7 +485,7 @@ function renderSplits(container, splits) {
     Array.isArray(splits?.lapSummaries) ? splits.lapSummaries : [];
   const section = document.createElement('div'); section.className = 'rp-chart';
   const h = document.createElement('h4'); h.textContent = 'Lap / intermedi'; section.append(h);
-  if (!raw.length) { section.append('Lap non disponibili nella risposta del servizio Garmin.'); container.append(section); return; }
+  if (!raw.length) { section.append('Lap non disponibili nei dati salvati dell\'allenamento.'); container.append(section); return; }
   const scroll = document.createElement('div'); scroll.className = 'rp-chart-scroll';
   const table = document.createElement('table'); const head = document.createElement('tr');
   ['Lap', 'Distanza', 'Durata', 'Passo'].forEach(s => { const th = document.createElement('th'); th.textContent = s; head.append(th); });
@@ -543,6 +543,24 @@ function rpZoneCard(parent,heart,rows,profile){const section=document.createElem
  const names=['Riscaldamento','Facile','Aerobico','Soglia','Massima'];for(let i=4;i>=0;i--){const pct=counts[i]/total*100;const row=document.createElement('div');row.className='rp-hr-zone';const label=document.createElement('div');label.className='rp-hr-zone-label';const title=document.createElement('strong');title.textContent=`Zona ${i+1} · ${names[i]}`;const range=document.createElement('span');range.textContent=rpZoneLabel(i,z);label.append(title,range);const line=document.createElement('div');line.className='rp-hr-zone-line';const track=document.createElement('div');track.className='rp-hr-zone-track';const fill=document.createElement('div');fill.className='rp-hr-zone-fill';fill.style.width=pct.toFixed(2)+'%';fill.style.background=rpZoneColors[i];track.append(fill);const val=document.createElement('span');val.className='rp-hr-zone-value';const secs=Math.round(counts[i]);val.textContent=(weighted?`${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}`:`${Math.round(counts[i])} camp.`)+` · ${Math.round(pct)}%`;line.append(track,val);row.append(label,line);section.append(row);}
  parent.append(section);
 }
+// Cache dei dettagli per account e attività: nessun dato sintetico.
+// Le risposte valide sono conservate sul dispositivo; un errore 401 non le cancella.
+const rpDetailCachePrefix = 'runnerPulseDetailCacheV1:';
+function rpDetailCacheKey(activity) {
+  const account = (window.auth?.currentUser?.uid || window.firebaseAuth?.currentUser?.uid || 'local');
+  return rpDetailCachePrefix + account + ':' + String(activity.garminId);
+}
+function rpReadDetailCache(activity) {
+  try {
+    const data = JSON.parse(localStorage.getItem(rpDetailCacheKey(activity)) || 'null');
+    return data && data.detail ? data : null;
+  } catch (_) { return null; }
+}
+function rpSaveDetailCache(activity, data) {
+  if (!data || !data.detail) return;
+  try { localStorage.setItem(rpDetailCacheKey(activity), JSON.stringify({detail:data.detail,splits:data.splits||null})); }
+  catch (_) { /* memoria del dispositivo piena: l'allenamento resta intatto */ }
+}
 let detailRequest = 0;
 async function loadDetailForActivity(activity) {
   const content = document.getElementById('rp-detail-charts');
@@ -556,7 +574,23 @@ async function loadDetailForActivity(activity) {
   panel.innerHTML = '<h3>Grafici</h3><p class="rp-hint" role="status">Caricamento dei dati dettagliati…</p>';
   content.append(panel);
   try {
-    const data = await authorizedPost('/api/garmin/activity-detail', { activityId: activity.garminId });
+    // Prima il dettaglio salvato: più rapido e funziona anche con la vecchia API disabilitata.
+    // Per attività senza cache si tenta il recupero una sola volta per sessione.
+    const cached = rpReadDetailCache(activity);
+    const failedKey = 'rp-detail-unavailable:' + rpDetailCacheKey(activity);
+    if (!cached && sessionStorage.getItem(failedKey) === '1') {
+      throw new Error('Dettagli non salvati per questo allenamento storico.');
+    }
+    let data = cached;
+    if (!data) {
+      try {
+        data = await authorizedPost('/api/garmin/activity-detail', { activityId: activity.garminId });
+        rpSaveDetailCache(activity, data);
+      } catch (error) {
+        sessionStorage.setItem(failedKey, '1');
+        throw error;
+      }
+    }
     if (request !== detailRequest || document.getElementById('detailOverlay')?.hidden) return;
     panel.replaceChildren();
     const title = document.createElement('h3'); title.textContent = 'Grafici'; panel.append(title);
@@ -605,7 +639,7 @@ async function loadDetailForActivity(activity) {
     const p = document.createElement('p'); p.className = 'rp-hint';
     p.textContent = 'Dati dettagliati non disponibili: ' + (err.message || String(err));
     panel.append(h, p);
-    const lapMessage=document.createElement('p');lapMessage.className='rp-hint';lapMessage.textContent='Lap non disponibili: impossibile caricare i dettagli Garmin.';lapContent.replaceChildren(lapMessage);
+    const lapMessage=document.createElement('p');lapMessage.className='rp-hint';lapMessage.textContent='Lap non disponibili: i dettagli non sono salvati per questo allenamento.';lapContent.replaceChildren(lapMessage);
   }
 }
 // I pulsanti vengono ricreati da app.js. Leggiamo la lista nell'ordine corrente del DOM.
