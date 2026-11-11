@@ -819,6 +819,34 @@ http.createServer(async(req,res)=>{
   if (['/api/garmin/health-daily','/api/garmin/check-new','/api/garmin/sync-status','/api/garmin/sync-step','/api/garmin/test','/api/garmin/activities','/api/garmin/activity-detail'].includes(pathname)) {
     return json(res,410,{success:false,message:'La vecchia Garmin Personal API e stata rimossa. Usa Garmin OAuth ufficiale o importa FIT/TCX/ZIP.'});
   }
+  if(pathname==='/api/steps/week'){
+    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
+    try{
+      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('dailies').orderBy('receivedAt','desc').limit(250).get();
+      const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
+      const parts=date=>{const v=Object.fromEntries(formatter.formatToParts(date).map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`;};
+      const today=parts(new Date());const dates=[];
+      for(let i=6;i>=0;i--){const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);dates.push(d.toISOString().slice(0,10));}
+      const byDate=new Map();
+      for(const doc of snapshot.docs){
+        const record=doc.data()?.data;if(!record||typeof record!=='object')continue;
+        let date=typeof record.calendarDate==='string'?record.calendarDate.slice(0,10):null;
+        if(!date&&Number.isFinite(Number(record.startTimeInSeconds)))date=parts(new Date(Number(record.startTimeInSeconds)*1000));
+        if(!dates.includes(date))continue;
+        // Garmin dailies: steps is the daily step count. Never infer steps from distance or activities.
+        const raw=record.steps??record.totalSteps;
+        if(raw===null||raw===undefined||raw==='')continue;
+        const count=Number(raw);
+        if(!Number.isSafeInteger(count)||count<0||count>200000)continue;
+        const existing=byDate.get(date);
+        const timestamp=Number(record.startTimeInSeconds)||0;
+        if(!existing||timestamp>existing.timestamp)byDate.set(date,{count,timestamp});
+      }
+      return json(res,200,{success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push'});
+    }catch(error){console.error('Passi settimanali:',error.message);return json(res,503,{success:false,message:'Passi temporaneamente non disponibili'});}
+  }
   if(pathname==='/api/garmin/webhook-diagnostics'){await garminWebhookDiagnostics(req,res);return;}
   if(pathname==='/api/garmin/official-sync-status'){await officialSyncStatus(req,res);return;}
   if(pathname==='/api/garmin/official-verify'){await officialVerifyIdentity(req,res);return;}
