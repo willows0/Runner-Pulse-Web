@@ -288,6 +288,8 @@ async function importOfficialActivities(payload){
 // Garmin Connect push: dettagli e dati Health. Conserva solo eventi associati a utenti OAuth verificati.
 // Activity Files: conserva il riferimento al file, NON lo interpreta come FIT scaricato.
 const GARMIN_EXTRA_SECTIONS={activityDetails:'activity-details',activityFiles:'activity-files',dailies:'dailies',sleeps:'sleeps'};
+// Cache solo in memoria: nessun dato sanitario nei log e nessuna scrittura aggiuntiva.
+const stepsWeekCache=new Map();
 async function importGarminExtraSections(payload){
  const db=getFirestore();const counts={stored:0,unmatched:0,invalid:0,bySection:{}};
  for(const [section,kind] of Object.entries(GARMIN_EXTRA_SECTIONS)){
@@ -315,7 +317,7 @@ async function importGarminExtraSections(payload){
     await ref.set({[key]:entry,[key+'ReceivedAt']:now},{merge:true});
    }else{
     const start=String(entry.calendarDate??entry.startTimeInSeconds??entry.startTimeGMT??entry.startTimeLocal??'');
-    const id=createHash('sha256').update(section+'|'+entry.userId+'|'+start+'|'+serialized).digest('hex');
+    const id=createHash('sha256').update(section+'|'+entry.userId+'|'+(section==='dailies'&&start?start: start+'|'+serialized)).digest('hex');
     await db.collection('runnerPulseGarminHealth').doc(uid).collection(kind).doc(id).set({data:entry,receivedAt:now,source:'garmin-official-push'},{merge:true});
    }
    counts.stored++;
@@ -824,7 +826,10 @@ http.createServer(async(req,res)=>{
     const user=await garminGoogleUser(req);
     if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
     try{
-      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('dailies').orderBy('receivedAt','desc').limit(250).get();
+      // Cache breve per utente: evita riletture di 250 documenti ad ogni ritorno nella Home.
+      const cached=stepsWeekCache.get(user.uid);
+      if(cached&&cached.expires>Date.now())return json(res,200,cached.payload);
+      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('dailies').orderBy('receivedAt','desc').limit(60).get();
       const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
       const parts=date=>{const v=Object.fromEntries(formatter.formatToParts(date).map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`;};
       const today=parts(new Date());const dates=[];
@@ -844,7 +849,10 @@ http.createServer(async(req,res)=>{
         const timestamp=Number(record.startTimeInSeconds)||0;
         if(!existing||timestamp>existing.timestamp)byDate.set(date,{count,timestamp});
       }
-      return json(res,200,{success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push'});
+      const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size};
+      if(stepsWeekCache.size>200)stepsWeekCache.clear();
+      stepsWeekCache.set(user.uid,{expires:Date.now()+2*60*1000,payload});
+      return json(res,200,payload);
     }catch(error){console.error('Passi settimanali:',error.message);return json(res,503,{success:false,message:'Passi temporaneamente non disponibili'});}
   }
   if(pathname==='/api/garmin/webhook-diagnostics'){await garminWebhookDiagnostics(req,res);return;}
