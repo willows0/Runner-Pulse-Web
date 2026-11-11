@@ -847,6 +847,25 @@ http.createServer(async(req,res)=>{
       return json(res,200,{success:true,deleted:true});
     }catch(error){console.error('Eliminazione attività Garmin:',error.message);return json(res,error.status===404?404:500,{success:false,message:error.status===404?error.message:'Eliminazione da Firebase non riuscita'});}
   }
+  // Dettagli gia presenti nello storico Firestore: sola lettura, nessuna chiamata Garmin.
+  if(pathname==='/api/activities/stored-detail'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    if(!await authorized(req))return json(res,401,{success:false,message:'Accesso richiesto'});
+    try{
+      const body=await readJsonBody(req);
+      const id=String(body?.activityId||'');
+      if(!/^\d{1,20}$/.test(id))return json(res,400,{success:false,message:'Identificativo non valido'});
+      const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+      const user=await getAuth().verifyIdToken(match[1],true);
+      const snap=await getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('activities').doc(id).get();
+      if(!snap.exists)return json(res,404,{success:false,message:'Attivita non presente nello storico'});
+      const record=snap.data()||{},summary=record.summary||{};
+      const candidates=[record.splits,record.laps,record.lapDTOs,record.lapSummaries,record.splitSummaries,summary.splits,summary.laps,summary.lapDTOs,summary.lapSummaries,summary.splitSummaries];
+      let laps=candidates.find(v=>Array.isArray(v)&&v.length&&v.some(x=>x&&typeof x==='object'))||[];
+      const detail=record.detail||record.activityDetail||null;
+      return json(res,200,{success:true,detail, splits:{laps},hasLaps:laps.length>0,hasDetail:Boolean(detail)});
+    }catch(error){console.error('Lettura dettagli Firestore:',error.message);return json(res,500,{success:false,message:'Lettura dettagli salvati non riuscita'});}
+  }
   if(pathname==='/api/garmin/archive'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
     if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Garmin disponibile soltanto per il proprietario.'});
