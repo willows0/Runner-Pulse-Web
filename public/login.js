@@ -605,15 +605,16 @@ async function loadDetailForActivity(activity) {
     let data = cached;
     // Lo storico Firestore viene interrogato prima di qualsiasi servizio esterno.
     // E' una lettura autenticata, senza bisogno della Personal API.
-    if (!data || !rpAvailableSplits(data.splits)) {
-      try {
-        const stored = await authorizedPost('/api/activities/stored-detail', {activityId:activity.garminId});
-        if (stored.hasLaps || stored.hasDetail) {
-          data = {detail:stored.detail || data?.detail || null,
-                  splits:stored.hasLaps ? stored.splits : data?.splits || null};
-          if(data.detail)rpSaveDetailCache(activity,data);
-        }
-      } catch (_) { /* Un archivio non disponibile non cancella la cache locale. */ }
+    // Verifica sempre lo storico sul server: una cache precedente può contenere
+    // splitSummaries scambiati erroneamente per Lap (es. 3 segmenti su 18 giri).
+    try {
+      const stored = await authorizedPost('/api/activities/stored-detail', {activityId:activity.garminId});
+      data = {detail:stored.detail || data?.detail || null,
+              splits:stored.hasLaps ? stored.splits : null};
+      if(data.detail)rpSaveDetailCache(activity,data);
+    } catch (_) {
+      // Non mostrare giri non verificati dalla cache in caso di errore server.
+      data = data ? {detail:data.detail || null,splits:null} : null;
     }
     if (!data) {
       // Solo importazioni ufficiali esplicite possono chiedere nuovi dettagli.
