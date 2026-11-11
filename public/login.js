@@ -561,6 +561,30 @@ function rpSaveDetailCache(activity, data) {
   try { localStorage.setItem(rpDetailCacheKey(activity), JSON.stringify({detail:data.detail,splits:data.splits||null})); }
   catch (_) { /* memoria del dispositivo piena: l'allenamento resta intatto */ }
 }
+function rpAvailableSplits(splits) {
+  const value = Array.isArray(splits) ? splits :
+    splits?.lapDTOs || splits?.splits || splits?.laps || splits?.lapSummaries || [];
+  return Array.isArray(value) && value.length > 0;
+}
+function rpAvailableCharts(detail) {
+  const rows = extractMetrics(detail);
+  return [
+    ['heartrate', 'heartratebpm', 'directheartrate', 'hr'],
+    ['speed', 'enhancedspeed', 'velocity', 'directspeed'],
+    ['elevation', 'altitude', 'enhancedaltitude', 'directelevation'],
+    ['directruncadence', 'runcadence', 'cadence', 'runningcadence', 'directcadence']
+  ].some(names => { const series = findSeries(rows, names); return Array.isArray(series) && series.length >= 2; });
+}
+function rpSetDetailTabVisibility(charts, laps) {
+  const overlay = document.getElementById('detailOverlay');
+  if (!overlay || overlay.hidden) return;
+  const chartTab = overlay.querySelector('button[data-detail-tab="charts"]');
+  const lapTab = overlay.querySelector('button[data-detail-tab="laps"]');
+  if (chartTab) chartTab.hidden = !charts;
+  if (lapTab) lapTab.hidden = !laps;
+  const selected = overlay.querySelector('button[data-detail-tab][aria-selected="true"]');
+  if (selected?.hidden) overlay.querySelector('button[data-detail-tab="overview"]')?.click();
+}
 let detailRequest = 0;
 async function loadDetailForActivity(activity) {
   const content = document.getElementById('rp-detail-charts');
@@ -568,6 +592,7 @@ async function loadDetailForActivity(activity) {
   if (!content || !lapContent) return;
   content.replaceChildren();
   lapContent.replaceChildren();
+  rpSetDetailTabVisibility(false, false);
   if (activity?.source !== 'garmin' || !/^\d{1,20}$/.test(String(activity.garminId || ''))) { content.textContent='Grafici non disponibili per questo allenamento.';lapContent.textContent='Lap non disponibili per questo allenamento.';return; }
   const request = ++detailRequest;
   const panel = document.createElement('div'); panel.className = 'rp-detail-charts';
@@ -583,14 +608,23 @@ async function loadDetailForActivity(activity) {
     }
     let data = cached;
     if (!data) {
+      // Attività importate in precedenza: nessuna richiesta alla Personal API disabilitata.
+      // Soltanto attività marcate esplicitamente come importate dalla connessione ufficiale
+      // possono richiedere dettagli nuovi. Non dedurre l'origine dal solo campo 'garmin'.
+      const official = activity.detailProvider === 'official' || activity.importMethod === 'official';
+      if (!official) return;
       try {
         data = await authorizedPost('/api/garmin/activity-detail', { activityId: activity.garminId });
         rpSaveDetailCache(activity, data);
       } catch (error) {
         sessionStorage.setItem(failedKey, '1');
-        throw error;
+        return;
       }
     }
+    const hasCharts = rpAvailableCharts(data.detail);
+    const hasLaps = rpAvailableSplits(data.splits);
+    rpSetDetailTabVisibility(hasCharts, hasLaps);
+    if (!hasCharts && !hasLaps) return;
     if (request !== detailRequest || document.getElementById('detailOverlay')?.hidden) return;
     panel.replaceChildren();
     const title = document.createElement('h3'); title.textContent = 'Grafici'; panel.append(title);
@@ -634,6 +668,7 @@ async function loadDetailForActivity(activity) {
     }
   } catch (err) {
     if (request !== detailRequest) return;
+    rpSetDetailTabVisibility(false, false);
     panel.replaceChildren();
     const h = document.createElement('h3'); h.textContent = 'Grafici';
     const p = document.createElement('p'); p.className = 'rp-hint';
@@ -642,17 +677,9 @@ async function loadDetailForActivity(activity) {
     const lapMessage=document.createElement('p');lapMessage.className='rp-hint';lapMessage.textContent='Lap non disponibili: i dettagli non sono salvati per questo allenamento.';lapContent.replaceChildren(lapMessage);
   }
 }
-// I pulsanti vengono ricreati da app.js. Leggiamo la lista nell'ordine corrente del DOM.
-document.getElementById('activityList')?.addEventListener('click', event => {
-  const target = event.target.closest('button.activity-open');
-  if (!target) return;
-  const buttons = [...document.querySelectorAll('#activityList button.activity-open')];
-  const index = buttons.indexOf(target);
-  if (index < 0) return;
-  try {
-    const activities = JSON.parse(localStorage.getItem(window.runnerPulseStorageKey || 'runnerPulseActivitiesV1') || '[]');
-    if (Array.isArray(activities)) {const sorted=activities.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.startTime||b.startTimeLocal||b.id||'').localeCompare(String(a.startTime||a.startTimeLocal||a.id||'')));void loadDetailForActivity(sorted[index]);}
-  } catch (e) { console.warn('Impossibile leggere attività salvate:', e); }
+// Il dettaglio è aperto da app.js: usiamo l'attività esatta senza indici fragili.
+window.addEventListener('runnerpulse:detail-open', event => {
+  void loadDetailForActivity(event.detail?.activity);
 });
 document.getElementById('closeDetail')?.addEventListener('click', () => { detailRequest++; });
 
