@@ -65,7 +65,7 @@
       
       <section id="rp-import-panel" class="card rp-activity-panel" hidden>
         <strong>Importa attività (FIT / ZIP / TCX)</strong>
-        <p>Seleziona un file FIT, TCX oppure un archivio ZIP con attività FIT. Gli allenamenti saranno salvati nel tuo archivio.</p>
+        <p>Seleziona un file FIT, TCX oppure un archivio ZIP con attività FIT. Gli allenamenti saranno aggiunti al tuo archivio.</p>
         <input id="rp-fit-file" type="file" accept=".fit,.zip,.tcx" aria-label="Archivio FIT, ZIP o TCX" />
         <button id="rp-fit-upload" type="button" class="rp-manual-open">Carica</button>
         <div id="rp-fit-progress-wrap" hidden role="group" aria-label="Avanzamento importazione" style="margin:16px 0">
@@ -91,7 +91,7 @@
   <nav aria-label="Navigazione"><button data-page="home" class="selected"><span>⌂</span>Home</button><button data-page="activities"><span>◷</span>Attività</button><button data-page="plan"><span>▦</span>Piano</button><button data-page="coach"><span>♡</span>Coach</button><button data-page="settings"><span>⚙</span>Profilo</button></nav>
   <div id="detailOverlay" hidden><div class="detail-panel"><button id="closeDetail" type="button" aria-label="Chiudi dettagli" hidden>✕</button><div id="detailContent"></div></div><nav id="rp-detail-bottom-nav" aria-label="Menu principale nel dettaglio"></nav></div>
   <div id="splash" hidden><div class="splash-content"><h1>RUNNER PULSE</h1><div class="splash-heart" aria-hidden="true">♥</div><p>Il tuo cuore. Il tuo ritmo.</p><button id="enterApp" type="button">Entra in Runner Pulse</button></div></div>
-  <script src="/app.js?v=archive-fix-20261111"></script>
+  <script src="/app.js?v=activity-coach-20261110"></script>
   <script type="module" src="/garmin-account.js?v=devices-20261110"></script>
   <script src="/dashboard.js" defer></script>
   <script>
@@ -152,7 +152,7 @@
   })();
   </script>
   <script type="module">
-  try { await import('/login.js?v=archive-fix-20261111'); }
+  try { await import('/login.js?v=activity-coach-20261110'); }
   catch(error) {
     console.error('Runner Pulse: errore avvio Google Login',error);
     document.body.classList.remove('rp-authenticated');
