@@ -70,7 +70,21 @@ async function refresh(){
   if(!response.ok)throw new Error(data.message||'Stato Garmin non disponibile');
   garminConnectUrl=typeof data.connectUrl==='string'&&data.connectUrl.startsWith('/')?data.connectUrl:'';
   setGarminUI(data.connected===true,data.oauthAvailable===true&&Boolean(garminConnectUrl));
-  message.textContent=data.connected===true?'Dispositivo collegato. Puoi gestire la connessione qui.':'Nessun dispositivo collegato. Scegli un servizio dall’elenco per iniziare.';
+  message.textContent=data.connected===true?'Dispositivo collegato. Verifica sincronizzazione ufficiale…':'Nessun dispositivo collegato. Scegli un servizio dall’elenco per iniziare.';
+  if(data.connected===true){
+   try{
+    const statusResponse=await fetch('/api/garmin/official-sync-status',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+    if(!statusResponse.ok)throw new Error('Stato sincronizzazione non disponibile');
+    const status=await statusResponse.json();
+    if(id!==generation)return;
+    if(status.status!=='identity_verified'&&status.status!=='receiving'){
+     const verifyResponse=await fetch('/api/garmin/official-verify',{method:'POST',headers:{Authorization:`Bearer ${token}`}});
+     const verified=await verifyResponse.json();
+     if(!verifyResponse.ok)throw new Error(verified.message||'Verifica Garmin non riuscita');
+    }
+    if(id===generation)message.textContent='Garmin collegato. Sincronizzazione ufficiale in attesa delle nuove attività.';
+   }catch(verifyError){if(id===generation)message.textContent='Garmin collegato, ma sincronizzazione non verificata: '+(verifyError.message||'riprova più tardi');}
+  }
   if(oldStatus)oldStatus.textContent=message.textContent;
  }catch(error){if(id===generation){message.textContent='Connessione non verificata: '+(error.message||'impossibile verificare lo stato.');publishConnection(null);}}
 }
