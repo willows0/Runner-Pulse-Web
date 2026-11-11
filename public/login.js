@@ -106,7 +106,7 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('rp-garmin-test')?.toggleAttribute('disabled',!isOwner());
     window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:{uid:user.uid,owner:isOwner()}}));
-    if(isOwner()){void loadGarminArchive();void startAutoSync();}else{stopAutoSync();syncUI(null,'Garmin non collegato a questo profilo.');}
+    if(isOwner()){void loadGarminArchive();}else{stopAutoSync();}
   }else{healthRequest++;resetHealth();window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
   if (user && !allowed) {
     showError('Accedi con un account Google verificato per utilizzare Runner Pulse.');
@@ -267,6 +267,8 @@ window.addEventListener('runnerpulse:delete-garmin',event=>{
 // Importazione automatica a blocchi: il progresso percentuale è mostrato solo
 // quando Garmin ha terminato la scoperta delle attività (totale noto).
 let syncActive=false,syncCancel=false;
+// Nasconde esclusivamente i controlli della Personal API, non l'account Garmin OAuth.
+for(const id of ['rp-sync-clock','rp-sync-text','rp-sync-percent','rp-check-new-activities','importGarmin','homeImport','rp-garmin-test']){const el=document.getElementById(id);if(el)el.hidden=true;}
 const syncClock=document.getElementById('rp-sync-clock');
 const syncRing=document.getElementById('rp-sync-ring');
 const syncText=document.getElementById('rp-sync-text');
@@ -311,7 +313,7 @@ async function startAutoSync(force=false){
 syncClock?.addEventListener('click',()=>{
   if(!allowedUser()||!isOwner()){syncUI(null,'Garmin disponibile soltanto per il proprietario.');return;}
   if(syncActive){syncText.textContent='Sincronizzazione Garmin già in corso…';return;}
-  void checkNewGarminActivities();
+  // Personal API rimossa: nessuna sincronizzazione legacy.
 });
 
 // Aggiornamento incrementale solo su richiesta: conserva lo storico esistente.
@@ -627,7 +629,7 @@ async function loadDetailForActivity(activity) {
       const official = activity.detailProvider === 'official' || activity.importMethod === 'official';
       if (official) {
         try {
-          data = await authorizedPost('/api/garmin/activity-detail', {activityId:activity.garminId});
+          data = null; // Nessuna chiamata Personal API: solo dettagli gia archiviati
           rpSaveDetailCache(activity,data);
         } catch (_) { /* Mostriamo solo dati verificati. */ }
       }
