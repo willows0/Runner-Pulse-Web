@@ -902,13 +902,15 @@ http.createServer(async(req,res)=>{
       if(!snap.exists)return json(res,404,{success:false,message:'Attivita non presente nello storico'});
       const record=snap.data()||{},summary=record.summary||{};
       // splitSummaries sono riepiloghi di segmenti, NON giri: non usarli come Lap.
-      const candidates=[record.laps,record.lapDTOs,record.lapSummaries,summary.laps,summary.lapDTOs,summary.lapSummaries];
+      const official=record.officialActivityDetails||null;
+      const officialDetail=Array.isArray(official)?official.find(x=>String(x?.activityId)===id):official;
+      const candidates=[officialDetail?.laps,record.laps,record.lapDTOs,record.lapSummaries,summary.laps,summary.lapDTOs,summary.lapSummaries];
       const expected=Number(summary.lapCount ?? record.lapCount);
       const validLap=x=>x && typeof x==='object' && Number(x.distance ?? x.distanceMeters)>0 && Number(x.duration ?? x.elapsedDuration ?? x.movingDuration)>0;
       let laps=candidates.find(v=>Array.isArray(v)&&v.length&&v.every(validLap)&&(!Number.isInteger(expected)||expected<=0||v.length===expected))||[];
       // Nessuna approssimazione: se sono dichiarati 18 giri, non mostrare 3 riepiloghi.
 
-      const detail=record.detail||record.activityDetail||null;
+      const detail=(officialDetail && Array.isArray(officialDetail.samples) && officialDetail.samples.length ? officialDetail : null)||record.detail||record.activityDetail||null;
       return json(res,200,{success:true,detail, splits:{laps},hasLaps:laps.length>0,hasDetail:Boolean(detail)});
     }catch(error){console.error('Lettura dettagli Firestore:',error.message);return json(res,500,{success:false,message:'Lettura dettagli salvati non riuscita'});}
   }
