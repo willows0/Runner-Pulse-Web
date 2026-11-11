@@ -54,9 +54,7 @@ function rpShowActivityTab(tab){
 window.rpShowActivityTab=rpShowActivityTab;
 document.querySelectorAll('[data-activity-tab]').forEach(b=>b.addEventListener('click',()=>rpShowActivityTab(b.dataset.activityTab)));
 const manualModal=$('rp-manual-modal');
-const openManual=$('rp-open-manual');
 const closeManual=()=>{rpShowActivityTab('list');};
-openManual.addEventListener('click',()=>{rpShowActivityTab('manual');$('rp-manual-message').textContent='';$('date').focus();});
 $('rp-close-manual').addEventListener('click',closeManual);
 $('rp-cancel-manual').addEventListener('click',closeManual);
 manualModal.querySelector('[data-manual-close]').addEventListener('click',closeManual);

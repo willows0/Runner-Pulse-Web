@@ -22,9 +22,9 @@
     #enterApp:disabled { opacity:.8; cursor:default; }
     #splash .splash-content { display:flex !important; flex-direction:column !important; align-items:center !important; justify-content:center !important; min-height:80dvh; }
     #splash .splash-heart { display:block !important; font-size:clamp(150px,43vw,240px) !important; line-height:1.1 !important; margin:12px auto !important; text-align:center !important; width:100%; }
-    .rp-activity-tabs {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:14px 0 18px;}
-    .rp-activity-tabs button {padding:11px 4px;border:1px solid #3678bd;border-radius:11px;background:#174a85;color:#fff;font-size:clamp(11px,2.8vw,14px);font-weight:700;cursor:pointer;}
-    .rp-activity-tabs button[aria-selected="true"] {background:#0879d9;color:#fff;border-color:#65b5ff;box-shadow:0 2px 9px rgba(0,93,195,.28);}
+    .rp-activity-tabs {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0 22px;}
+    .rp-activity-tabs button {min-height:74px;padding:14px 7px;border:1px solid #388be2;border-radius:16px;background:linear-gradient(145deg,#1475cc,#063d83);color:#fff;font-size:clamp(11px,2.8vw,14px);font-weight:800;line-height:1.35;box-shadow:0 5px 13px rgba(9,67,139,.20);cursor:pointer;white-space:normal;}
+    .rp-activity-tabs button[aria-selected="true"] {background:linear-gradient(145deg,#2698fa,#0762ba);color:#fff;border:2px solid #8bc9ff;box-shadow:0 5px 16px rgba(0,93,195,.32);}
     #rp-manual-modal.rp-manual-inline:not([hidden]) {position:static!important;display:block!important;inset:auto!important;background:transparent!important;z-index:auto!important;}
     #rp-manual-modal.rp-manual-inline .rp-manual-backdrop {display:none!important;}
     #rp-manual-modal.rp-manual-inline .rp-manual-dialog {position:static!important;transform:none!important;inset:auto!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;margin:0!important;}
@@ -61,7 +61,6 @@
         <button type="button" role="tab" data-activity-tab="manual" aria-selected="false">Inserimento manuale</button>
         <button type="button" role="tab" data-activity-tab="import" aria-selected="false">Importa attività</button>
       </div>
-      <button type="button" id="rp-open-manual" class="rp-manual-open" hidden>＋ Inserisci allenamento</button>
       <section id="rp-import-panel" class="card rp-activity-panel" hidden>
         <strong>Importa attività (FIT / ZIP / TCX)</strong>
         <p>Seleziona un file FIT, TCX oppure un archivio ZIP con attività FIT. I dati saranno salvati in Firestore.</p>
