@@ -453,3 +453,9 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 #activities .rp-activity-tabs > button[aria-selected="false"]{background:transparent!important;background-image:none!important;color:#fff!important;box-shadow:none!important}
 #activities .rp-activity-tabs > button[aria-selected="true"]{background:#ff7900!important;background-image:none!important;color:#fff!important}
 #home .rp-elite-watch .rp-ring-svg{display:none!important}
+
+/* Runner Pulse: passi reali */
+.rp-steps-card{margin:20px 0 24px;padding:20px;border-radius:22px;background:#142840;color:#fff;box-shadow:0 8px 25px #0c234025}
+.rp-steps-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}.rp-steps-heading h2{margin:4px 0 0;color:#fff;font-size:1.3rem}.rp-steps-heading .rp-section-tag{white-space:nowrap}
+.rp-steps-today{margin:20px 0 16px;display:flex;flex-direction:column;gap:5px}.rp-steps-today>span{font-size:.72rem;letter-spacing:.09em;color:#b8c7d8}.rp-steps-today strong{font-size:2.3rem;line-height:1.1;font-variant-numeric:tabular-nums}.rp-steps-today small,.rp-steps-note{color:#b8c7d8;font-size:.8rem}
+.rp-steps-bars{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:end;height:145px;padding-top:12px;border-bottom:1px solid #54708a}.rp-steps-day{display:flex;flex-direction:column;align-items:center;justify-content:end;height:100%;gap:7px;min-width:0}.rp-steps-bar{width:min(100%,29px);min-height:3px;border-radius:7px 7px 0 0;background:#ff781f}.rp-steps-bar.missing{height:3px!important;background:#66788b}.rp-steps-day span{font-size:.7rem;color:#d3deea}.rp-steps-note{margin:12px 0 0}
