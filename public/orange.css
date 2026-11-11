@@ -448,3 +448,8 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 /* Connessione verificata verde, non connessa grigia. */
 #settings .rp-devices .rp-device-switch[aria-checked="true"]{background:#19c953!important;opacity:1!important}
 #settings .rp-devices .rp-device-switch[aria-checked="false"]{background:#8998a9!important;opacity:1!important}
+
+/* Correzione definitiva 11/11: solo tab attiva arancione */
+#activities .rp-activity-tabs > button[aria-selected="false"]{background:transparent!important;background-image:none!important;color:#fff!important;box-shadow:none!important}
+#activities .rp-activity-tabs > button[aria-selected="true"]{background:#ff7900!important;background-image:none!important;color:#fff!important}
+#home .rp-elite-watch .rp-ring-svg{display:none!important}
