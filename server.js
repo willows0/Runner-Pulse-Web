@@ -15,7 +15,7 @@ import {handleActivityCoach,activityCoachReport} from './activity-coach.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
-const GARMIN_API_KEY = process.env.GARMIN_API_KEY;
+const GARMIN_API_KEY = null; // Personal API disabilitata definitivamente
 const OWNER_EMAIL = 'utrefiletti@gmail.com';
 const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-service-account.json', 'utf8'));
 if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
@@ -815,6 +815,10 @@ http.createServer(async(req,res)=>{
   if(req.url?.startsWith('/api/garmin/webhook/')){let webhookPath;try{webhookPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await receiveGarminWebhook(req,res,webhookPath);return;}
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+  // Personal API ritirata: non effettuare piu richieste verso i vecchi endpoint.
+  if (['/api/garmin/health-daily','/api/garmin/check-new','/api/garmin/sync-status','/api/garmin/sync-step','/api/garmin/test','/api/garmin/activities','/api/garmin/activity-detail'].includes(pathname)) {
+    return json(res,410,{success:false,message:'La vecchia Garmin Personal API e stata rimossa. Usa Garmin OAuth ufficiale o importa FIT/TCX/ZIP.'});
+  }
   if(pathname==='/api/garmin/webhook-diagnostics'){await garminWebhookDiagnostics(req,res);return;}
   if(pathname==='/api/garmin/official-sync-status'){await officialSyncStatus(req,res);return;}
   if(pathname==='/api/garmin/official-verify'){await officialVerifyIdentity(req,res);return;}
@@ -978,7 +982,7 @@ http.createServer(async(req,res)=>{
   if(['/api/garmin/sync-status','/api/garmin/sync-step'].includes(pathname)){await syncRequest(req,res,pathname);return;}
   if(pathname==='/api/coach/activity'){await handleActivityCoach(req,res,authorized,readJsonBody,json);return;}
   if(pathname==='/api/coach/chat'){await handleCoachAI(req,res,authorized);return;}
-  if(pathname==='/api/status'){if(req.method!=='GET'){json(res,405,{message:'Method not allowed'});return;}json(res,200,{garminConfigured:Boolean(GARMIN_API_KEY),garminConnected:false,message:'La connessione Garmin non è ancora verificata. Usa il test autenticato.'});return;}
+  if(pathname==='/api/status'){if(req.method!=='GET'){json(res,405,{message:'Method not allowed'});return;}json(res,200,{garminConfigured:false,garminConnected:false,message:'Personal API rimossa. Connessione Garmin ufficiale gestita separatamente.'});return;}
   if(['/api/garmin/test','/api/garmin/activities','/api/garmin/activity-detail'].includes(pathname)){
     if(req.method!=='POST'){json(res,405,{message:'Method not allowed'});return;}
     if(!await ownerAuthorized(req)){json(res,403,{success:false,message:'Garmin disponibile soltanto per il proprietario.'});return;}
