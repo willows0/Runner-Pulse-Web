@@ -5,7 +5,7 @@ const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(
 const el=id=>document.getElementById(id);
 let generation=0;
 const duration=seconds=>`${Math.floor(seconds/3600)}h ${String(Math.floor((seconds%3600)/60)).padStart(2,'0')}m`;
-function reset(message){el('rp-sleep-duration').textContent='—';el('rp-sleep-date').textContent='Dati non disponibili';el('rp-sleep-score').textContent='—';el('rp-sleep-judgement').textContent='Non disponibile';el('rp-sleep-ring').style.setProperty('--score',0);el('rp-sleep-bars').replaceChildren();el('rp-sleep-note').textContent=message;}
+function reset(message){el('rp-sleep-duration').textContent='—';el('rp-sleep-date').textContent='Dati non disponibili';el('rp-sleep-score').textContent='—';el('rp-sleep-coach-comment').textContent='';el('rp-sleep-ring').style.setProperty('--ring-color','#64748b');el('rp-sleep-bars').replaceChildren();el('rp-sleep-note').textContent=message;}
 async function load(){
  const current=++generation,user=auth.currentUser;
  if(!user){reset('Accedi per visualizzare il sonno.');return;}
@@ -17,10 +17,11 @@ async function load(){
   const days=Array.isArray(payload.days)?payload.days:[],available=days.filter(d=>Number.isFinite(d.seconds)&&d.seconds>=0),latest=available.at(-1);
   el('rp-sleep-duration').textContent=latest?duration(latest.seconds):'—';
   el('rp-sleep-date').textContent=latest?new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(latest.date+'T12:00:00Z')):'Dati non disponibili';
-  const score=latest?.score;
-  el('rp-sleep-score').textContent=Number.isInteger(score)?String(score):'—';
-  el('rp-sleep-ring').style.setProperty('--score',Number.isInteger(score)?score:0);
-  el('rp-sleep-judgement').textContent=!Number.isInteger(score)?'Non disponibile':score>=90?'Ottimo':score>=80?'Buono':score>=60?'Discreto':'Scarso';
+  const judgement=latest?.coachJudgement||'Non disponibile';
+  const colors={'Ottimo':'#22c55e','Buono':'#38bdf8','Discreto':'#f59e0b','Scarso':'#ef4444','Da migliorare':'#ef4444'};
+  el('rp-sleep-score').textContent=judgement;
+  el('rp-sleep-ring').style.setProperty('--ring-color',colors[judgement]||'#64748b');
+  el('rp-sleep-coach-comment').textContent=latest?.coachComment||'La valutazione richiede durata, fasi del sonno e periodi di veglia disponibili.';
   const bars=el('rp-sleep-bars');bars.replaceChildren();
   const max=Math.max(1,...days.map(d=>Number.isFinite(d.seconds)?d.seconds:0));
   for(const day of days){
