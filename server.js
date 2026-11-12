@@ -21,7 +21,7 @@ const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-
 if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
 initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpulse' });
 
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js'};
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.gif':'image/gif','.ico':'image/x-icon'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 function verifiedGoogleIdentity(user){return user.email_verified===true || (user.firebase?.sign_in_provider==='google.com' && user.firebase?.identities?.['google.com']?.length>0);}
@@ -287,7 +287,7 @@ async function importOfficialActivities(payload){
 
 // Garmin Connect push: dettagli e dati Health. Conserva solo eventi associati a utenti OAuth verificati.
 // Activity Files: conserva il riferimento al file, NON lo interpreta come FIT scaricato.
-const GARMIN_EXTRA_SECTIONS={activityDetails:'activity-details',activityFiles:'activity-files',dailies:'dailies',sleeps:'sleeps'};
+const GARMIN_EXTRA_SECTIONS={activityDetails:'activity-details',activityFiles:'activity-files',dailies:'dailies',sleeps:'sleeps',userMetrics:'userMetrics',readiness:'readiness',readlines:'readlines'};
 // Cache solo in memoria: nessun dato sanitario nei log e nessuna scrittura aggiuntiva.
 const stepsWeekCache=new Map();
 async function importGarminExtraSections(payload){
@@ -945,6 +945,27 @@ http.createServer(async(req,res)=>{
   if(pathname==='/api/garmin/official-sync-status'){await officialSyncStatus(req,res);return;}
   if(pathname==='/api/garmin/official-verify'){await officialVerifyIdentity(req,res);return;}
   if(['/api/garmin/account-status','/api/garmin/connect','/api/garmin/callback','/api/garmin/disconnect'].includes(pathname)){await garminOAuthRoutes(req,res,pathname);return;}
+
+  // Ultimo VO2 max esplicito ricevuto da Garmin; non usare stime dalle corse.
+  if(pathname==='/api/garmin/vo2-latest'){
+    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
+    try{
+      const root=getFirestore().collection('runnerPulseGarminHealth').doc(user.uid);
+      let best=null;
+      for(const section of ['userMetrics','readiness','readlines']){
+        const snap=await root.collection(section).orderBy('receivedAt','desc').limit(25).get();
+        for(const doc of snap.docs){
+          const stored=doc.data(), value=findExplicitGarminVo2(stored.data);
+          if(value===null)continue;
+          const receivedAt=Number(stored.receivedAt)||0;
+          if(!best||receivedAt>best.receivedAt)best={value,receivedAt,section};
+        }
+      }
+      return json(res,200,{success:true,value:best?.value??null,receivedAt:best?.receivedAt??null,source:best?'garmin-official-push':null});
+    }catch(error){console.error('VO2 Garmin:',error.message);return json(res,503,{success:false,message:'VO2 max temporaneamente non disponibile'});}
+  }
   if(pathname==='/api/garmin/vo2-check'){await garminVo2Check(req,res);return;}
   // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
   // Accesso limitato al proprietario e paginazione per evitare risposte troppo grandi.
