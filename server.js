@@ -861,7 +861,7 @@ http.createServer(async(req,res)=>{
         const start=Number(data.startTimeInSeconds??data.sleepStartTimestampGMT);
         const date=(typeof data.calendarDate==='string'&&/^\d{4}-\d{2}-\d{2}/.test(data.calendarDate))?data.calendarDate.slice(0,10):(Number.isFinite(start)&&start>0?localDate(new Date(start*(start>1e11?1:1000))):null);
         if(!dates.includes(date))continue;
-        const raw=data.sleepTimeSeconds??data.sleepDurationInSeconds??data.totalSleepSeconds;
+        const raw=data.durationInSeconds??data.sleepTimeSeconds??data.sleepDurationInSeconds??data.totalSleepSeconds;
         const seconds=Number(raw);
         if(raw===undefined||raw===null||!Number.isFinite(seconds)||seconds<0||seconds>86400)continue;
         const scoreRaw=data.sleepScores?.overall?.value??data.sleepScores?.overallScore??data.sleepScore??data.overallSleepScore;
