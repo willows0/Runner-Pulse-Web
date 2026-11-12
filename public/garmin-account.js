@@ -15,7 +15,7 @@ section.innerHTML=`<h2>Dispositivi connessi</h2><p>Collega i tuoi servizi sporti
 (oldSection||document.querySelector('#settings .rp-weekly-notification'))?.insertAdjacentElement('beforebegin',section);
 const list=section.querySelector('#rp-device-list');
 const message=section.querySelector('#rp-devices-message');
-const services=[['garmin','Garmin','Garmin Connect'],['polar','Polar','Polar Flow'],['suunto','Suunto','Suunto App'],['samsung','Samsung','Samsung Health']];
+const services=[['garmin','Garmin','Garmin Connect'],['polar','Polar','Polar Flow'],['suunto','Suunto','Suunto App'],['samsung','Samsung','Samsung Health'],['healthconnect','Google','Health Connect']];
 const switches=new Map();
 const labels=new Map();
 const caption=document.querySelector('.rp-watch-caption');
@@ -51,6 +51,32 @@ for(const [id,name,subtitle] of services){
  const button=document.createElement('button');button.type='button';button.className='rp-device-switch';button.setAttribute('role','switch');button.setAttribute('aria-label',`Collegamento ${name}`);button.setAttribute('aria-checked','false');button.disabled=true;
  right.append(state,button);row.append(left,right);list.append(row);switches.set(id,button);labels.set(id,state);
 }
+// Health Connect e' una fonte Android locale, non un account OAuth web.
+// Il controllo rimane disconnesso finche' non esiste un bridge Android autorizzato.
+const healthButton=switches.get('healthconnect');
+const healthLabel=labels.get('healthconnect');
+if(healthButton&&healthLabel){
+ healthButton.disabled=false;
+ healthButton.title='Informazioni sul collegamento Health Connect';
+ healthButton.setAttribute('aria-label','Informazioni sul collegamento Google Health Connect');
+ healthLabel.textContent='Da configurare';
+ healthButton.addEventListener('click',()=>{
+  const existing=document.getElementById('rp-health-connect-info');
+  if(existing){existing.hidden=false;existing.querySelector('button')?.focus();return;}
+  const overlay=document.createElement('div');overlay.id='rp-health-connect-info';
+  overlay.className='rp-hc-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','Collegamento Health Connect');
+  const card=document.createElement('div');card.className='rp-hc-dialog';
+  const heading=document.createElement('h2');heading.textContent='Google Health Connect';
+  const info=document.createElement('p');info.textContent='Per leggere passi, sonno e altri dati di Health Connect serve un collegamento Android autorizzato. Il sito web Runner Pulse da solo non puo accedere a Health Connect. Nessun dato e stato collegato o importato.';
+  const close=document.createElement('button');close.type='button';close.textContent='Chiudi';
+  close.addEventListener('click',()=>{overlay.hidden=true;healthButton.focus();});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close.click();});
+  card.append(heading,info,close);overlay.append(card);document.body.append(overlay);close.focus();
+ });
+}
+const healthStyle=document.createElement('style');
+healthStyle.textContent='.rp-hc-overlay{position:fixed;inset:0;z-index:10000;background:#07101dd9;display:flex;align-items:center;justify-content:center;padding:20px}.rp-hc-overlay[hidden]{display:none}.rp-hc-dialog{max-width:420px;width:100%;background:#142b49;color:white;border:1px solid #416387;border-radius:18px;padding:22px;box-shadow:0 20px 60px #0009}.rp-hc-dialog h2{margin:0 0 14px}.rp-hc-dialog p{line-height:1.55}.rp-hc-dialog button{background:#2878d5;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-weight:700}';
+document.head.append(healthStyle);
 let generation=0;
 let garminConnected=false;
 let garminOAuthAvailable=false;
