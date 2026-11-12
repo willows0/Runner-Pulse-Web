@@ -62,6 +62,10 @@
       </section>
       <div class="rp-section-head"><div><span class="rp-overline">PERFORMANCE</span><h2>Ultimi 7 giorni</h2></div><span class="rp-section-tag">Le tue corse</span></div>
       <div class="rp-performance-grid"><article class="rp-performance-card rp-performance-primary"><span>CHILOMETRI PERCORSI</span><strong id="rp-week-km">—</strong><small>Negli ultimi 7 giorni</small></article><article class="rp-performance-card"><span>USCITE</span><strong id="rp-week-runs">—</strong><small>Corse registrate</small></article><article class="rp-performance-card"><span>PASSO MEDIO</span><strong id="avgPace">—</strong><small>Min/km</small></article></div>
+      <section class="rp-vo2-panel rp-vo2-official" aria-label="VO₂ max Garmin">
+        <div><span class="rp-overline">CAPACITÀ AEROBICA</span><h2>VO₂ max</h2><p id="rp-vo2-official-note">In attesa dei dati ufficiali Garmin</p></div>
+        <div class="rp-vo2-official-value"><strong id="rp-vo2-official-value">—</strong><small>ml/kg/min</small></div>
+      </section>
       <section class="rp-steps-card rp-sleep-card" aria-label="Sonno e valutazione degli ultimi sette giorni">
         <div class="rp-steps-heading"><div><span class="rp-overline">RECUPERO</span><h2>☾ Il tuo sonno</h2></div><span class="rp-section-tag">Ultimi 7 giorni</span></div>
         <div class="rp-sleep-summary"><div class="rp-steps-today"><span>ULTIMA NOTTE DISPONIBILE</span><strong id="rp-sleep-duration">—</strong><small id="rp-sleep-date">Dati non disponibili</small></div>
@@ -118,7 +122,7 @@
   <div id="splash" hidden><div class="splash-content"><h1>RUNNER PULSE</h1><div class="splash-heart" aria-hidden="true">♥</div></div></div>
   <script src="/app.js?v=activity-coach-20261110"></script>
   <script type="module" src="/garmin-account.js?v=devices-20261110"></script>
-  <script src="/dashboard.js" defer></script>
+  <script src="/dashboard.js" defer></script>\n  <script type="module" src="/vo2.js?v=20261112"></script>
   <script>
   (() => {
     const splash = document.getElementById('splash');

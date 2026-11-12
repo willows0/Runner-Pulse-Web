@@ -482,3 +482,8 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 /* Punteggio stimato Runner Pulse nel cerchio, giudizio qualitativo sotto. */
 .rp-sleep-ring strong{font-size:1.9rem;line-height:1.1}
 .rp-sleep-judgement{font-size:1.04rem;color:#fff;line-height:1.2;margin-top:3px}
+
+#home .rp-vo2-official{margin:20px 0;min-height:118px}
+#home .rp-vo2-official-value{display:flex;flex-direction:column;align-items:flex-end}
+#home .rp-vo2-official-value strong{line-height:1.1}
+#home .rp-vo2-official-value small{font-size:11px;color:#cad6e5}
