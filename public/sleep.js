@@ -5,7 +5,7 @@ const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(
 const el=id=>document.getElementById(id);
 let generation=0;
 const duration=seconds=>`${Math.floor(seconds/3600)}h ${String(Math.floor((seconds%3600)/60)).padStart(2,'0')}m`;
-function reset(message){el('rp-sleep-duration').textContent='—';el('rp-sleep-date').textContent='Dati non disponibili';el('rp-sleep-score').textContent='—';el('rp-sleep-coach-comment').textContent='';el('rp-sleep-ring').style.setProperty('--ring-color','#64748b');el('rp-sleep-bars').replaceChildren();el('rp-sleep-note').textContent=message;}
+function reset(message){el('rp-sleep-duration').textContent='—';el('rp-sleep-date').textContent='Dati non disponibili';el('rp-sleep-score').textContent='—';el('rp-sleep-judgement').textContent='Non disponibile';el('rp-sleep-coach-comment').textContent='';el('rp-sleep-ring').style.setProperty('--ring-color','#64748b');el('rp-sleep-bars').replaceChildren();el('rp-sleep-note').textContent=message;}
 async function load(){
  const current=++generation,user=auth.currentUser;
  if(!user){reset('Accedi per visualizzare il sonno.');return;}
@@ -19,7 +19,8 @@ async function load(){
   el('rp-sleep-date').textContent=latest?new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(latest.date+'T12:00:00Z')):'Dati non disponibili';
   const judgement=latest?.coachJudgement||'Non disponibile';
   const colors={'Ottimo':'#22c55e','Buono':'#38bdf8','Discreto':'#f59e0b','Scarso':'#ef4444','Da migliorare':'#ef4444'};
-  el('rp-sleep-score').textContent=judgement;
+  el('rp-sleep-score').textContent=Number.isInteger(latest?.coachScore)?String(latest.coachScore):'—';
+  el('rp-sleep-judgement').textContent=judgement;
   el('rp-sleep-ring').style.setProperty('--ring-color',colors[judgement]||'#64748b');
   el('rp-sleep-coach-comment').textContent=latest?.coachComment||'La valutazione richiede durata, fasi del sonno e periodi di veglia disponibili.';
   const bars=el('rp-sleep-bars');bars.replaceChildren();
