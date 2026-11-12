@@ -448,7 +448,7 @@ async function receiveGarminWebhook(req,res,pathname){
   const extra=await importGarminExtraSections(payload);
   const pending=Boolean(result.unmatched||result.invalid||extra.unmatched||extra.invalid);
   await inbox.update({status:pending?'partial_unmatched':'processed',...result,extra,processedAt:Date.now(),nextRetryAt:pending?Date.now()+6*60*60*1000:null});
-  console.info('Garmin webhook elaborato:',JSON.stringify(result));
+  console.info('Garmin webhook elaborato:',JSON.stringify({...result,extra:{stored:extra.stored,unmatched:extra.unmatched,invalid:extra.invalid,bySection:extra.bySection}}));
   // Non dichiarare l'importazione riuscita se nessuna attività è stata riconosciuta.
   return json(res,202,{success:true,received:true,...result});
  }catch(e){
@@ -857,21 +857,27 @@ http.createServer(async(req,res)=>{
       const today=parts(new Date());const dates=[];
       for(let i=6;i>=0;i--){const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);dates.push(d.toISOString().slice(0,10));}
       const byDate=new Map();
+      let dailyRecordsWithStepField=0;
+      let dailyRecordsWithValidStepCount=0;
+      let newestStoredDate=null;
       for(const doc of snapshot.docs){
         const record=doc.data()?.data;if(!record||typeof record!=='object')continue;
         let date=typeof record.calendarDate==='string'?record.calendarDate.slice(0,10):null;
         if(!date&&Number.isFinite(Number(record.startTimeInSeconds)))date=parts(new Date(Number(record.startTimeInSeconds)*1000));
+        if(date&&(!newestStoredDate||date>newestStoredDate))newestStoredDate=date;
         if(!dates.includes(date))continue;
         // Garmin dailies: steps is the daily step count. Never infer steps from distance or activities.
         const raw=record.steps??record.totalSteps;
+        if(raw!==null&&raw!==undefined&&raw!=='')dailyRecordsWithStepField++;
         if(raw===null||raw===undefined||raw==='')continue;
         const count=Number(raw);
         if(!Number.isSafeInteger(count)||count<0||count>200000)continue;
+        dailyRecordsWithValidStepCount++;
         const existing=byDate.get(date);
         const timestamp=Number(record.startTimeInSeconds)||0;
         if(!existing||timestamp>existing.timestamp)byDate.set(date,{count,timestamp});
       }
-      const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size,recordsWithSteps:byDate.size};
+      const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size,recordsWithSteps:byDate.size,diagnostics:{dailyRecordsWithStepField,dailyRecordsWithValidStepCount,newestStoredDate,requestedToday:today}};
       if(stepsWeekCache.size>200)stepsWeekCache.clear();
       stepsWeekCache.set(user.uid,{expires:Date.now()+15*60*1000,payload});
       return json(res,200,payload);
