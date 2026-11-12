@@ -59,7 +59,33 @@ if(healthButton&&healthLabel){
  healthButton.disabled=false;
  healthButton.title='Apri Runner Pulse Connect per autorizzare Health Connect';
  healthButton.setAttribute('aria-label','Autorizza Google Health Connect tramite app Android');
- healthLabel.textContent='Da collegare';
+ const hcStateKey='runnerpulse-healthconnect-last-permission-check';
+ function renderHealthState(){
+  const state=sessionStorage.getItem(hcStateKey);
+  const granted=state==='authorized';
+  healthButton.setAttribute('aria-checked',String(granted));
+  healthButton.dataset.status=granted?'connected':'disconnected';
+  healthLabel.textContent=granted?'Permessi autorizzati sul telefono':state==='partial'?'Permessi parziali':state==='denied'?'Permessi non concessi':state==='error'?'Verifica non riuscita':'Da autorizzare';
+  healthLabel.title=granted?'Ultima verifica effettuata dall’app Android. Sincronizzazione con il sito non ancora attiva.':'';
+ }
+ renderHealthState();
+ const hcReturn=new URLSearchParams(window.location.search).get('healthconnect');
+ if(['authorized','partial','denied','error','unavailable'].includes(hcReturn)){
+  if(hcReturn==='authorized'||hcReturn==='partial'||hcReturn==='denied')sessionStorage.setItem(hcStateKey,hcReturn);
+  else sessionStorage.removeItem(hcStateKey);
+  renderHealthState();
+  // Rimuove il parametro dalla barra senza perdere la navigazione del sito.
+  const clean=new URL(window.location.href);clean.searchParams.delete('healthconnect');
+  history.replaceState(null,'',clean.pathname+clean.search+clean.hash);
+  // L'interfaccia e' una SPA: apri il Profilo con la navigazione esistente.
+  const goProfile=()=>{
+   const tab=document.querySelector('nav button[data-page="settings"]');
+   if(tab){tab.click();section.scrollIntoView({behavior:'smooth',block:'start'});return true;}
+   return false;
+  };
+  if(!goProfile())window.addEventListener('load',goProfile,{once:true});
+ }
+
  healthButton.addEventListener('click',()=>{
   const existing=document.getElementById('rp-health-connect-info');
   if(existing){existing.remove();}
@@ -67,7 +93,7 @@ if(healthButton&&healthLabel){
   overlay.className='rp-hc-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','Collegamento Health Connect');
   const card=document.createElement('div');card.className='rp-hc-dialog';
   const heading=document.createElement('h2');heading.textContent='Google Health Connect';
-  const info=document.createElement('p');info.textContent='Per autorizzare Health Connect, apri Runner Pulse Connect sul telefono. I dati restano sul dispositivo: la sincronizzazione con il sito non è ancora attiva.';
+  const info=document.createElement('p');info.textContent='Verifica o autorizza Health Connect tramite Runner Pulse Connect. Al termine tornerai al Profilo. I permessi sono locali al telefono: la sincronizzazione con il sito non è ancora attiva.';
   const launch=document.createElement('button');launch.type='button';launch.textContent='Apri app e autorizza';
   launch.addEventListener('click',()=>{
    // Android Chrome intent: a real user click opens the installed native app.
