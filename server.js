@@ -325,6 +325,8 @@ async function importGarminExtraSections(payload){
     const start=String(entry.calendarDate??entry.startTimeInSeconds??entry.startTimeGMT??entry.startTimeLocal??'');
     const id=createHash('sha256').update(section+'|'+entry.userId+'|'+(section==='dailies'&&start?start: start+'|'+serialized)).digest('hex');
     await db.collection('runnerPulseGarminHealth').doc(uid).collection(kind).doc(id).set({data:entry,receivedAt:now,source:'garmin-official-push'},{merge:true});
+    // Un nuovo riepilogo giornaliero deve essere visibile subito nella Home.
+    if(section==='dailies')stepsWeekCache.delete(uid);
    }
    counts.stored++;
   }
