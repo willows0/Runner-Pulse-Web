@@ -21,7 +21,7 @@ const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-
 if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
 initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpulse' });
 
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js'};
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.gif':'image/gif','.ico':'image/x-icon'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 function verifiedGoogleIdentity(user){return user.email_verified===true || (user.firebase?.sign_in_provider==='google.com' && user.firebase?.identities?.['google.com']?.length>0);}
@@ -844,6 +844,33 @@ http.createServer(async(req,res)=>{
   // Personal API ritirata: non effettuare piu richieste verso i vecchi endpoint.
   if (['/api/garmin/health-daily','/api/garmin/check-new','/api/garmin/sync-status','/api/garmin/sync-step','/api/garmin/test','/api/garmin/activities','/api/garmin/activity-detail'].includes(pathname)) {
     return json(res,410,{success:false,message:'La vecchia Garmin Personal API e stata rimossa. Usa Garmin OAuth ufficiale o importa FIT/TCX/ZIP.'});
+  }
+  if(pathname==='/api/sleep/week'){
+    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
+    try{
+      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('sleeps').orderBy('receivedAt','desc').limit(100).get();
+      const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
+      const localDate=value=>{const x=Object.fromEntries(formatter.formatToParts(value).map(p=>[p.type,p.value]));return `${x.year}-${x.month}-${x.day}`;};
+      const today=localDate(new Date()),dates=[];
+      for(let i=6;i>=0;i--){const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);dates.push(d.toISOString().slice(0,10));}
+      const byDate=new Map();
+      for(const doc of snapshot.docs){
+        const data=doc.data()?.data;if(!data||typeof data!=='object')continue;
+        const start=Number(data.startTimeInSeconds??data.sleepStartTimestampGMT);
+        const date=(typeof data.calendarDate==='string'&&/^\d{4}-\d{2}-\d{2}/.test(data.calendarDate))?data.calendarDate.slice(0,10):(Number.isFinite(start)&&start>0?localDate(new Date(start*(start>1e11?1:1000))):null);
+        if(!dates.includes(date))continue;
+        const raw=data.sleepTimeSeconds??data.sleepDurationInSeconds??data.totalSleepSeconds;
+        const seconds=Number(raw);
+        if(raw===undefined||raw===null||!Number.isFinite(seconds)||seconds<0||seconds>86400)continue;
+        const scoreRaw=data.sleepScores?.overall?.value??data.sleepScores?.overallScore??data.sleepScore??data.overallSleepScore;
+        const score=scoreRaw!==undefined&&scoreRaw!==null&&Number.isInteger(Number(scoreRaw))&&Number(scoreRaw)>=0&&Number(scoreRaw)<=100?Number(scoreRaw):null;
+        const received=Number(doc.data().receivedAt)||0;
+        if(!byDate.has(date)||received>byDate.get(date).received)byDate.set(date,{seconds,score,received});
+      }
+      return json(res,200,{success:true,days:dates.map(date=>({date,seconds:byDate.get(date)?.seconds??null,score:byDate.get(date)?.score??null})),source:'garmin-official-push'});
+    }catch(error){console.error('Sonno settimanale:',error.message);return json(res,503,{success:false,message:'Sonno temporaneamente non disponibile'});}
   }
   if(pathname==='/api/steps/week'){
     if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
