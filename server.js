@@ -292,15 +292,21 @@ const GARMIN_EXTRA_SECTIONS={activityDetails:'activity-details',activityFiles:'a
 const stepsWeekCache=new Map();
 async function importGarminExtraSections(payload){
  const db=getFirestore();const counts={stored:0,unmatched:0,invalid:0,bySection:{}};
+ const userCache=new Map(); // One mapping/token lookup per Garmin user per webhook
  for(const [section,kind] of Object.entries(GARMIN_EXTRA_SECTIONS)){
   const entries=Array.isArray(payload?.[section])?payload[section]:[];
   counts.bySection[section]=entries.length;
   for(const entry of entries.slice(0,100)){
    if(!entry||typeof entry!=='object'||Array.isArray(entry)||typeof entry.userId!=='string'||!entry.userId||entry.userId.length>150){counts.invalid++;continue;}
-   const mapping=await db.collection('runnerPulseGarminOfficialUsers').doc(createHash('sha256').update(entry.userId).digest('hex')).get();
-   if(!mapping.exists||mapping.data()?.garminUserId!==entry.userId){counts.unmatched++;continue;}
-   const uid=mapping.data().uid;
-   if(!(await garminOAuthDoc(uid).get()).data()?.encryptedToken){counts.unmatched++;continue;}
+   let verified=userCache.get(entry.userId);
+   if(verified===undefined){
+    const mapping=await db.collection('runnerPulseGarminOfficialUsers').doc(createHash('sha256').update(entry.userId).digest('hex')).get();
+    const uid=mapping.exists&&mapping.data()?.garminUserId===entry.userId?mapping.data()?.uid:null;
+    verified=uid&&(await garminOAuthDoc(uid).get()).data()?.encryptedToken?uid:null;
+    userCache.set(entry.userId,verified);
+   }
+   if(!verified){counts.unmatched++;continue;}
+   const uid=verified;
    const activityId=String(entry.activityId??'');
    const isActivity=section==='activityDetails'||section==='activityFiles';
    if(isActivity&&!/^\d{1,20}$/.test(activityId)){counts.invalid++;continue;}
@@ -378,13 +384,15 @@ async function recoverGarminWebhookInbox(){
    for(const doc of snap.docs){
     inspected++;
     const event=doc.data();
+    if(Number(event?.nextRetryAt)>Date.now())continue;
     if(!event?.payload||typeof event.payload!=='object')continue;
     try{
      const result=await importOfficialActivities(event.payload);
      const extra=await importGarminExtraSections(event.payload);
      recovered+=result.imported+extra.stored;unmatched+=result.unmatched+extra.unmatched;
-     await doc.ref.update({status:result.unmatched||result.invalid?'partial_unmatched':'processed',...result,processedAt:Date.now()});
-    }catch(error){failed++;console.warn('Garmin recupero inbox:',error.name||'Error');}
+     const pending=Boolean(result.unmatched||result.invalid||extra.unmatched||extra.invalid);
+     await doc.ref.update({status:pending?'partial_unmatched':'processed',...result,extra,processedAt:Date.now(),nextRetryAt:pending?Date.now()+6*60*60*1000:null});
+    }catch(error){failed++;if(pauseMaintenanceOnQuota(error))return;await doc.ref.update({nextRetryAt:Date.now()+60*60*1000}).catch(()=>{});console.warn('Garmin recupero inbox:',error.name||'Error');}
    }
   }
   console.info('Garmin recupero webhook:',JSON.stringify({inspected,recovered,unmatched,failed}));
@@ -438,13 +446,15 @@ async function receiveGarminWebhook(req,res,pathname){
  try{
   const result=await importOfficialActivities(payload);
   const extra=await importGarminExtraSections(payload);
-  await inbox.update({status:result.unmatched||result.invalid||extra.unmatched||extra.invalid?'partial_unmatched':'processed',...result,extra,processedAt:Date.now()});
+  const pending=Boolean(result.unmatched||result.invalid||extra.unmatched||extra.invalid);
+  await inbox.update({status:pending?'partial_unmatched':'processed',...result,extra,processedAt:Date.now(),nextRetryAt:pending?Date.now()+6*60*60*1000:null});
   console.info('Garmin webhook elaborato:',JSON.stringify(result));
   // Non dichiarare l'importazione riuscita se nessuna attività è stata riconosciuta.
   return json(res,202,{success:true,received:true,...result});
  }catch(e){
   console.error('Garmin webhook importazione:',e.name||'Error');
-  await inbox.update({status:'import_failed',errorAt:Date.now()}).catch(()=>{});
+  pauseMaintenanceOnQuota(e);
+  await inbox.update({status:'import_failed',errorAt:Date.now(),nextRetryAt:Date.now()+60*60*1000}).catch(()=>{});
   // Garmin può ritentare su 503; l'archivio inbox conserva la richiesta per diagnosi.
   return json(res,503,{success:false,message:'Importazione temporaneamente non disponibile'});
  }
@@ -861,7 +871,7 @@ http.createServer(async(req,res)=>{
         const timestamp=Number(record.startTimeInSeconds)||0;
         if(!existing||timestamp>existing.timestamp)byDate.set(date,{count,timestamp});
       }
-      const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size};
+      const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size,recordsWithSteps:byDate.size};
       if(stepsWeekCache.size>200)stepsWeekCache.clear();
       stepsWeekCache.set(user.uid,{expires:Date.now()+15*60*1000,payload});
       return json(res,200,payload);
