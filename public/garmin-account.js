@@ -25,6 +25,7 @@ const watchHint=document.querySelector('.rp-watch-hint');
 const watchButton=document.getElementById('rp-sync-clock');
 const watchActions=document.querySelector('.rp-watch-actions');
 const connectionDot=document.getElementById('rp-watch-connection-dot');
+let connectionState='unknown';
 function publishConnection(service){
  const name=service==='garmin'?'Garmin Connect':service==='polar'?'Polar Flow':service==='suunto'?'Suunto App':service==='samsung'?'Samsung Health':'';
  window.runnerPulseConnectedService=service||null;
@@ -32,7 +33,7 @@ function publishConnection(service){
  if(watchHint)watchHint.textContent='Tocca per gestire';
  if(watchButton){watchButton.title='Gestisci dispositivi nel Profilo';watchButton.setAttribute('aria-label','Apri dispositivi nel Profilo');}
  if(watchActions)watchActions.hidden=true;
- if(connectionDot){const connected=Boolean(service);connectionDot.dataset.connected=String(connected);connectionDot.dataset.checking='false';connectionDot.title=connected?'Orologio collegato':'Orologio non collegato';connectionDot.setAttribute('aria-label','Stato connessione orologio: '+(connected?'collegato':'non collegato'));}
+ if(connectionDot){const connected=Boolean(service);connectionDot.dataset.connected=String(connected);connectionDot.dataset.checking=String(connectionState==='unknown');connectionDot.dataset.status=connectionState;connectionDot.title=connectionState==='unknown'?'Connessione temporaneamente non verificabile':connected?'Orologio collegato':'Orologio non collegato';connectionDot.setAttribute('aria-label','Stato connessione orologio: '+(connectionState==='unknown'?'non verificabile':connected?'collegato':'non collegato'));}
  if(!service){if(watchText){watchText.textContent='';watchText.hidden=true;}if(watchPercent){watchPercent.textContent='';watchPercent.hidden=true;}}
  else {if(watchText)watchText.hidden=false;if(watchPercent)watchPercent.hidden=service!=='garmin';if(service!=='garmin'&&watchText)watchText.textContent='Orologio collegato';}
  window.dispatchEvent(new CustomEvent('runnerpulse:device-status',{detail:{service:service||null}}));
@@ -40,7 +41,7 @@ function publishConnection(service){
 watchButton?.addEventListener('click',event=>{event.stopImmediatePropagation();document.querySelector('nav button[data-page="settings"]')?.click();requestAnimationFrame(()=>section.scrollIntoView({behavior:'smooth',block:'start'}));},true);
 publishConnection(null);
 const style=document.createElement('style');
-style.textContent=`.rp-device-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 2px;border-bottom:1px solid #ffffff30}.rp-device-name{font-weight:750}.rp-device-sub{font-size:12px;opacity:.72;margin-top:3px}.rp-device-right{display:flex;align-items:center;gap:10px}.rp-device-state{font-size:12px;opacity:.8;text-align:right}.rp-device-switch{position:relative;width:48px;height:28px;border-radius:30px;border:0;background:#aeb5bd;flex-shrink:0;cursor:pointer;transition:background .2s}.rp-device-switch::after{content:'';position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:white;transition:transform .2s;box-shadow:0 1px 4px #0003}.rp-device-switch[aria-checked="true"]{background:#19c953}.rp-device-switch[aria-checked="true"]::after{transform:translateX(20px)}.rp-device-switch:disabled{cursor:not-allowed;opacity:1}`;
+style.textContent=`.rp-device-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 2px;border-bottom:1px solid #ffffff30}.rp-device-name{font-weight:750}.rp-device-sub{font-size:12px;opacity:.72;margin-top:3px}.rp-device-right{display:flex;align-items:center;gap:10px}.rp-device-state{font-size:12px;opacity:.8;text-align:right}.rp-device-switch{position:relative;width:48px;height:28px;border-radius:30px;border:0;background:#aeb5bd;flex-shrink:0;cursor:pointer;transition:background .2s}.rp-device-switch::after{content:'';position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:white;transition:transform .2s;box-shadow:0 1px 4px #0003}.rp-device-switch[aria-checked="true"]{background:#19c953}.rp-device-switch[aria-checked="true"]::after{transform:translateX(20px)}.rp-device-switch:disabled{cursor:not-allowed;opacity:1}.rp-device-switch[data-status=unknown]{background:#f59e0b!important}.rp-device-state[data-status=unknown]{color:#ffbd69;opacity:1}`;
 document.head.append(style);
 for(const [id,name,subtitle] of services){
  const row=document.createElement('div');row.className='rp-device-row';
@@ -55,16 +56,24 @@ let garminConnected=false;
 let garminOAuthAvailable=false;
 let garminConnectUrl='';
 function setGarminUI(connected,available){
+ connectionState=connected?'connected':'disconnected';
  garminConnected=connected;garminOAuthAvailable=available;publishConnection(connected?'garmin':null);
- const btn=switches.get('garmin');btn.setAttribute('aria-checked',String(connected));btn.disabled=!auth.currentUser||(!available&&!connected);
- labels.get('garmin').textContent=connected?'Collegato':available?'Non collegato':'In preparazione';
+ const btn=switches.get('garmin');btn.dataset.status=connectionState;btn.setAttribute('aria-checked',String(connected));btn.disabled=!auth.currentUser||(!available&&!connected);
+ labels.get('garmin').dataset.status=connectionState;labels.get('garmin').textContent=connected?'Collegato':available?'Non collegato':'In preparazione';
+}
+function showUnknown(reason){
+ connectionState='unknown';
+ const btn=switches.get('garmin');btn.dataset.status='unknown';btn.disabled=true;btn.setAttribute('aria-checked','false');
+ labels.get('garmin').dataset.status='unknown';labels.get('garmin').textContent='Non verificabile';
+ if(connectionDot){connectionDot.dataset.status='unknown';connectionDot.dataset.checking='true';connectionDot.title='Connessione temporaneamente non verificabile';connectionDot.setAttribute('aria-label','Stato connessione orologio: non verificabile');}
+ message.textContent='Connessione temporaneamente non verificabile'+(reason?': '+reason:'. Riprova più tardi.')+' Non scollegare il dispositivo.';
+ if(oldStatus)oldStatus.textContent=message.textContent;
 }
 async function refresh(){
  const id=++generation;
  const user=auth.currentUser;
- setGarminUI(false,false);
- if(connectionDot)connectionDot.dataset.checking='true';
- if(!user){message.textContent='Accedi con Google per collegare i dispositivi.';publishConnection(null);return;}
+ if(!user){connectionState='disconnected';setGarminUI(false,false);message.textContent='Accedi con Google per collegare i dispositivi.';return;}
+ showUnknown('verifica in corso');
  message.textContent='Verifica connessione del servizio…';
  try{
   const token=await user.getIdToken();
@@ -89,7 +98,7 @@ async function refresh(){
    }catch(verifyError){if(id===generation)message.textContent='Garmin collegato, ma sincronizzazione non verificata: '+(verifyError.message||'riprova più tardi');}
   }
   if(oldStatus)oldStatus.textContent=message.textContent;
- }catch(error){if(id===generation){message.textContent='Connessione non verificata: '+(error.message||'impossibile verificare lo stato.');publishConnection(null);if(connectionDot)connectionDot.dataset.checking='false';}}
+ }catch(error){if(id===generation)showUnknown(error.message||'impossibile verificare lo stato');}
 }
 switches.get('garmin').addEventListener('click',()=>{
  if(garminConnected){if(!window.confirm('Vuoi scollegare il tuo account Garmin da Runner Pulse?'))return;void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch('/api/garmin/disconnect',{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok)throw new Error(data.message||'Scollegamento non riuscito');await refresh();}catch(error){message.textContent=error.message||'Scollegamento non riuscito';}})();return;}
