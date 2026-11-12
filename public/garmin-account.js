@@ -57,21 +57,27 @@ const healthButton=switches.get('healthconnect');
 const healthLabel=labels.get('healthconnect');
 if(healthButton&&healthLabel){
  healthButton.disabled=false;
- healthButton.title='Informazioni sul collegamento Health Connect';
- healthButton.setAttribute('aria-label','Informazioni sul collegamento Google Health Connect');
- healthLabel.textContent='Da configurare';
+ healthButton.title='Apri Runner Pulse Connect per autorizzare Health Connect';
+ healthButton.setAttribute('aria-label','Autorizza Google Health Connect tramite app Android');
+ healthLabel.textContent='Da collegare';
  healthButton.addEventListener('click',()=>{
   const existing=document.getElementById('rp-health-connect-info');
-  if(existing){existing.hidden=false;existing.querySelector('button')?.focus();return;}
+  if(existing){existing.remove();}
   const overlay=document.createElement('div');overlay.id='rp-health-connect-info';
   overlay.className='rp-hc-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','Collegamento Health Connect');
   const card=document.createElement('div');card.className='rp-hc-dialog';
   const heading=document.createElement('h2');heading.textContent='Google Health Connect';
-  const info=document.createElement('p');info.textContent='Per leggere passi, sonno e altri dati di Health Connect serve un collegamento Android autorizzato. Il sito web Runner Pulse da solo non puo accedere a Health Connect. Nessun dato e stato collegato o importato.';
+  const info=document.createElement('p');info.textContent='Per autorizzare Health Connect, apri Runner Pulse Connect sul telefono. I dati restano sul dispositivo: la sincronizzazione con il sito non è ancora attiva.';
+  const launch=document.createElement('button');launch.type='button';launch.textContent='Apri app e autorizza';
+  launch.addEventListener('click',()=>{
+   // Android Chrome intent: a real user click opens the installed native app.
+   // No false connected status is set; permissions are managed by Android.
+   window.location.href='intent://authorize#Intent;scheme=runnerpulseconnect;package=com.runnerpulse.connect;end';
+  });
   const close=document.createElement('button');close.type='button';close.textContent='Chiudi';
-  close.addEventListener('click',()=>{overlay.hidden=true;healthButton.focus();});
+  close.addEventListener('click',()=>{overlay.remove();healthButton.focus();});
   overlay.addEventListener('click',e=>{if(e.target===overlay)close.click();});
-  card.append(heading,info,close);overlay.append(card);document.body.append(overlay);close.focus();
+  card.append(heading,info,launch,close);overlay.append(card);document.body.append(overlay);launch.focus();
  });
 }
 const healthStyle=document.createElement('style');
