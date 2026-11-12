@@ -850,8 +850,8 @@ http.createServer(async(req,res)=>{
     try{
       // Cache breve per utente: evita riletture di 250 documenti ad ogni ritorno nella Home.
       const cached=stepsWeekCache.get(user.uid);
-      if(cached&&cached.expires>Date.now())return json(res,200,cached.payload);
-      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('dailies').orderBy('receivedAt','desc').limit(60).get();
+      if(cached&&cached.expires>Date.now()&&cached.payload.recordsWithSteps>0)return json(res,200,cached.payload);
+      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('dailies').orderBy('receivedAt','desc').limit(200).get();
       const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
       const parts=date=>{const v=Object.fromEntries(formatter.formatToParts(date).map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`;};
       const today=parts(new Date());const dates=[];
@@ -877,9 +877,10 @@ http.createServer(async(req,res)=>{
         const timestamp=Number(record.startTimeInSeconds)||0;
         if(!existing||timestamp>existing.timestamp)byDate.set(date,{count,timestamp});
       }
+      console.info('Passi settimanali diagnostica:',JSON.stringify({uidSuffix:user.uid.slice(-4),documents:snapshot.size,validDays:byDate.size,newestStoredDate,requestedToday:today}));
       const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size,recordsWithSteps:byDate.size,diagnostics:{dailyRecordsWithStepField,dailyRecordsWithValidStepCount,newestStoredDate,requestedToday:today}};
       if(stepsWeekCache.size>200)stepsWeekCache.clear();
-      stepsWeekCache.set(user.uid,{expires:Date.now()+15*60*1000,payload});
+      stepsWeekCache.set(user.uid,{expires:Date.now()+(byDate.size?5*60*1000:30*1000),payload});
       return json(res,200,payload);
     }catch(error){console.error('Passi settimanali:',error.message);return json(res,503,{success:false,message:'Passi temporaneamente non disponibili'});}
   }
