@@ -866,10 +866,38 @@ http.createServer(async(req,res)=>{
         if(raw===undefined||raw===null||!Number.isFinite(seconds)||seconds<0||seconds>86400)continue;
         const scoreRaw=data.sleepScores?.overall?.value??data.sleepScores?.overallScore??data.sleepScore??data.overallSleepScore;
         const score=scoreRaw!==undefined&&scoreRaw!==null&&Number.isInteger(Number(scoreRaw))&&Number(scoreRaw)>=0&&Number(scoreRaw)<=100?Number(scoreRaw):null;
+        // Stima trasparente Runner Pulse: nessun punteggio Garmin inventato.
+        const numeric=key=>{const v=data[key];return v===null||v===undefined?null:(Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=86400?Number(v):null);};
+        const deep=numeric('deepSleepDurationInSeconds');
+        const rem=numeric('remSleepInSeconds');
+        const awake=numeric('awakeDurationInSeconds');
+        const light=numeric('lightSleepDurationInSeconds');
+        let coachScore=null,coachJudgement=null,coachComment=null;
+        // Richiediamo le tre fasi e la veglia: se mancanti, nessuna valutazione fittizia.
+        if(seconds>0&&deep!==null&&rem!==null&&awake!==null&&light!==null){
+          const asleep=deep+rem+light;
+          if(asleep>0&&asleep<=86400&&Math.abs(asleep-seconds)<=5400){
+            const hours=asleep/3600,deepPct=deep/asleep,remPct=rem/asleep;
+            const efficiency=asleep/(asleep+awake||1);
+            const durationScore=Math.max(0,100-Math.abs(hours-8)*16);
+            const deepScore=Math.max(0,100-Math.abs(deepPct-0.18)*240);
+            const remScore=Math.max(0,100-Math.abs(remPct-0.22)*200);
+            const efficiencyScore=Math.min(100,Math.max(0,(efficiency-0.6)/0.35*100));
+            coachScore=Math.round(Math.max(0,Math.min(100,durationScore*.50+deepScore*.20+remScore*.15+efficiencyScore*.15)));
+            coachJudgement=coachScore>=85?'Ottimo':coachScore>=70?'Buono':coachScore>=55?'Discreto':'Scarso';
+            const details=[];
+            if(hours<7)details.push('La durata del sonno è sotto le 7 ore');
+            else if(hours>=7&&hours<=9)details.push('La durata del sonno è in un intervallo favorevole al recupero');
+            else details.push('La durata del sonno è superiore alle 9 ore');
+            if(efficiency<0.85)details.push('sono presenti periodi di veglia significativi');
+            else details.push('i periodi di veglia risultano contenuti');
+            coachComment=details.join('; ')+'. È una stima basata sulle fasi del sonno, non una diagnosi né un punteggio Garmin.';
+          }
+        }
         const received=Number(doc.data().receivedAt)||0;
-        if(!byDate.has(date)||received>byDate.get(date).received)byDate.set(date,{seconds,score,received});
+        if(!byDate.has(date)||received>byDate.get(date).received)byDate.set(date,{seconds,score,coachScore,coachJudgement,coachComment,received});
       }
-      return json(res,200,{success:true,days:dates.map(date=>({date,seconds:byDate.get(date)?.seconds??null,score:byDate.get(date)?.score??null})),source:'garmin-official-push'});
+      return json(res,200,{success:true,days:dates.map(date=>({date,seconds:byDate.get(date)?.seconds??null,score:byDate.get(date)?.score??null,coachScore:byDate.get(date)?.coachScore??null,coachJudgement:byDate.get(date)?.coachJudgement??null,coachComment:byDate.get(date)?.coachComment??null})),source:'garmin-official-push'});
     }catch(error){console.error('Sonno settimanale:',error.message);return json(res,503,{success:false,message:'Sonno temporaneamente non disponibile'});}
   }
   if(pathname==='/api/steps/week'){
