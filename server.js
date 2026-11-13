@@ -1141,6 +1141,20 @@ http.createServer(async(req,res)=>{
     }catch(error){console.error('Errore Garmin:',error.message);json(res,502,{success:false,message:'Richiesta Garmin non riuscita. Controlla i log di Render per il codice di errore.'});}
     return;
   }
+  // Digital Asset Links: verifica crittografica tra il sito e l'APK Android.
+  // Non pubblicare un'impronta fittizia: compilare il JSON con SHA-256 reale.
+  if(pathname==='/.well-known/assetlinks.json'){
+    if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);res.end('Method not allowed');return;}
+    try{
+      const raw=await readFile(path.join(base,'public','.well-known','assetlinks.json'),'utf8');
+      const links=JSON.parse(raw);
+      const valid=Array.isArray(links)&&links.some(x=>x?.relation?.includes('delegate_permission/common.handle_all_urls')&&x?.target?.namespace==='android_app'&&x?.target?.package_name==='com.runnerpulse.connect'&&Array.isArray(x?.target?.sha256_cert_fingerprints)&&x.target.sha256_cert_fingerprints.some(s=>/^(?:[A-Fa-f0-9]{2}:){31}[A-Fa-f0-9]{2}$/.test(s)));
+      if(!valid){res.writeHead(503,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});res.end('Android certificate fingerprint not configured');return;}
+      res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+      res.end(req.method==='HEAD'?undefined:JSON.stringify(links));
+    }catch(e){console.error('Digital Asset Links:',e.message);res.writeHead(503);res.end('Digital Asset Links unavailable');}
+    return;
+  }
   if(req.method!=='GET'&&req.method!=='HEAD'){json(res,405,{message:'Method not allowed'});return;}
   // Consenti i loghi e le altre immagini presenti in public/, senza esporre file arbitrari.
   const imageName = /^\/[a-zA-Z0-9][a-zA-Z0-9_.-]*\.(?:png|jpg|jpeg|webp|svg|gif|ico)$/i.test(pathname) ? pathname.slice(1) : null;
