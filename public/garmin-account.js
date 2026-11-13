@@ -57,8 +57,8 @@ const healthButton=switches.get('healthconnect');
 const healthLabel=labels.get('healthconnect');
 if(healthButton&&healthLabel){
  healthButton.disabled=false;
- healthButton.title='Apri Runner Pulse Connect per autorizzare Health Connect';
- healthButton.setAttribute('aria-label','Autorizza Google Health Connect tramite app Android');
+ healthButton.title='Gestisci autorizzazioni Health Connect';
+ healthButton.setAttribute('aria-label','Gestisci Google Health Connect tramite app Android');
  const hcStateKey='runnerpulse-healthconnect-last-permission-check';
  function renderHealthState(){
   const state=sessionStorage.getItem(hcStateKey);
@@ -93,12 +93,18 @@ if(healthButton&&healthLabel){
   overlay.className='rp-hc-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','Collegamento Health Connect');
   const card=document.createElement('div');card.className='rp-hc-dialog';
   const heading=document.createElement('h2');heading.textContent='Google Health Connect';
-  const info=document.createElement('p');info.textContent='Verifica o autorizza Health Connect tramite Runner Pulse Connect. Al termine tornerai al Profilo. I permessi sono locali al telefono: la sincronizzazione con il sito non è ancora attiva.';
-  const launch=document.createElement('button');launch.type='button';launch.textContent='Apri app e autorizza';
+  const info=document.createElement('p');info.textContent='Le autorizzazioni sono gestite sul telefono. La sincronizzazione con il sito non è ancora attiva.';
+  const launch=document.createElement('button');launch.type='button';
+  const isGranted=['authorized','partial'].includes(sessionStorage.getItem(hcStateKey));
+  launch.textContent=isGranted?'Gestisci / Revoca autorizzazioni':'Apri app e autorizza';
   launch.addEventListener('click',()=>{
    // Android Chrome intent: a real user click opens the installed native app.
    // No false connected status is set; permissions are managed by Android.
-   window.location.href='intent://authorize#Intent;scheme=runnerpulseconnect;package=com.runnerpulse.connect;end';
+   if(isGranted){
+    const confirmRevoke=window.confirm('Vuoi revocare tutte le autorizzazioni Health Connect concesse a Runner Pulse Connect?');
+    if(!confirmRevoke)return;
+   }
+   window.location.href=isGranted?'runnerpulseconnect://revoke':'runnerpulseconnect://authorize';
   });
   const close=document.createElement('button');close.type='button';close.textContent='Chiudi';
   close.addEventListener('click',()=>{overlay.remove();healthButton.focus();});
