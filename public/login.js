@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
 // Runner Pulse: autenticazione Google e grafici basati solo su dati ricevuti.
 const firebaseConfig = {
@@ -84,10 +84,31 @@ document.body.prepend(gate);
 const loginButton = document.getElementById('rp-login-button');
 const errorEl = document.getElementById('rp-login-error');
 const showError = e => { errorEl.textContent = e?.message || String(e); };
+const isAndroidShell = /RunnerPulseAndroidWebView\/1/.test(navigator.userAgent);
+const mobileRandom = () => {const bytes=new Uint8Array(32);crypto.getRandomValues(bytes);return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');};
+const mobileSha256 = async value => {const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');};
+async function beginAndroidLogin(){
+ const state=mobileRandom(),verifier=mobileRandom(),challenge=await mobileSha256(verifier);
+ const response=await fetch('/api/mobile-auth/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state,challenge})});
+ if(!response.ok)throw new Error('Impossibile avviare l’accesso Google. Riprova.');
+ sessionStorage.setItem('runnerPulseMobileLogin',JSON.stringify({state,verifier}));
+ window.location.href='runnerpulseauth://start?state='+encodeURIComponent(state);
+}
+window.runnerPulseCompleteNativeLogin=async (state,code)=>{
+ try{
+  const pending=JSON.parse(sessionStorage.getItem('runnerPulseMobileLogin')||'null');
+  if(!pending||pending.state!==state)throw new Error('Sessione di accesso non valida. Riprova.');
+  sessionStorage.removeItem('runnerPulseMobileLogin');
+  const response=await fetch('/api/mobile-auth/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state,code,verifier:pending.verifier})});
+  const data=await response.json();
+  if(!response.ok||!data.success)throw new Error(data.message||'Accesso non riuscito');
+  await signInWithCustomToken(auth,data.token);
+ }catch(e){showError(e);}
+};
 loginButton.addEventListener('click', async () => {
   loginButton.disabled = true;
   errorEl.textContent = '';
-  try { await signInWithPopup(auth, provider); }
+  try { if(isAndroidShell){await beginAndroidLogin();return;} await signInWithPopup(auth, provider); }
   catch (e) {
     if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
       try { await signInWithRedirect(auth, provider); } catch (err) { showError(err); }
