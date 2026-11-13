@@ -21,7 +21,53 @@ const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-
 if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
 initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpulse' });
 
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js'};
+// Android WebView -> system browser -> single-use Firebase session handoff.
+const MOBILE_AUTH_TTL = 5 * 60 * 1000;
+const mobileAuthCollection = () => getFirestore().collection('runnerPulseMobileAuth');
+const mobileHash = value => createHash('sha256').update(value).digest('hex');
+const mobilePattern = /^[A-Za-z0-9_-]{32,128}$/;
+async function mobileAuthRoute(req,res,pathname){
+ try {
+  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+  const body=await readJsonBody(req,10000);
+  if(pathname==='/api/mobile-auth/start'){
+   const {state,challenge}=body;
+   if(!mobilePattern.test(state||'')||!mobilePattern.test(challenge||''))return json(res,400,{success:false,message:'Parametri non validi'});
+   await mobileAuthCollection().doc(mobileHash(state)).create({challenge,expiresAt:Date.now()+MOBILE_AUTH_TTL,createdAt:Date.now(),status:'pending'});
+   return json(res,200,{success:true});
+  }
+  if(pathname==='/api/mobile-auth/approve'){
+   const {state,idToken}=body;
+   if(!mobilePattern.test(state||'')||typeof idToken!=='string'||idToken.length>10000)return json(res,400,{success:false,message:'Parametri non validi'});
+   const decoded=await getAuth().verifyIdToken(idToken,true);
+   if(!verifiedGoogleIdentity(decoded))return json(res,403,{success:false,message:'Accesso Google non verificato'});
+   const code=randomBytes(32).toString('base64url');
+   const ref=mobileAuthCollection().doc(mobileHash(state));
+   const ok=await getFirestore().runTransaction(async tx=>{
+    const snap=await tx.get(ref);const data=snap.data();
+    if(!data||data.status!=='pending'||data.expiresAt<Date.now())return false;
+    tx.update(ref,{status:'approved',uid:decoded.uid,codeHash:mobileHash(code)});return true;
+   });
+   return ok?json(res,200,{success:true,code}):json(res,410,{success:false,message:'Richiesta scaduta o già utilizzata'});
+  }
+  if(pathname==='/api/mobile-auth/redeem'){
+   const {state,code,verifier}=body;
+   if(!mobilePattern.test(state||'')||!mobilePattern.test(code||'')||!mobilePattern.test(verifier||''))return json(res,400,{success:false,message:'Parametri non validi'});
+   const ref=mobileAuthCollection().doc(mobileHash(state));
+   const uid=await getFirestore().runTransaction(async tx=>{
+    const snap=await tx.get(ref);const data=snap.data();
+    if(!data||data.status!=='approved'||data.expiresAt<Date.now()||data.codeHash!==mobileHash(code)||data.challenge!==createHash('sha256').update(verifier).digest('base64url'))return null;
+    tx.delete(ref);return data.uid;
+   });
+   if(!uid)return json(res,403,{success:false,message:'Codice scaduto o non valido'});
+   const token=await getAuth().createCustomToken(uid);
+   return json(res,200,{success:true,token});
+  }
+  return json(res,404,{success:false});
+ }catch(e){console.warn('Mobile auth:',e.code||e.message);return json(res,e.status||400,{success:false,message:'Autenticazione non riuscita. Riprova.'});}
+}
+
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/mobile-login.html':'mobile-login.html','/mobile-login.js':'mobile-login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.gif':'image/gif','.ico':'image/x-icon'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 function verifiedGoogleIdentity(user){return user.email_verified===true || (user.firebase?.sign_in_provider==='google.com' && user.firebase?.identities?.['google.com']?.length>0);}
@@ -838,6 +884,7 @@ async function weeklyPushRoute(req,res,pathname){
 }
 
 http.createServer(async(req,res)=>{
+  if(req.url?.startsWith('/api/mobile-auth/')){const pathname=new URL(req.url,'http://localhost').pathname;await mobileAuthRoute(req,res,pathname);return;}
   if(req.url?.startsWith('/api/garmin/webhook/')){let webhookPath;try{webhookPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await receiveGarminWebhook(req,res,webhookPath);return;}
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
