@@ -60,6 +60,14 @@ if(healthButton&&healthLabel){
  healthButton.title='Gestisci autorizzazioni Health Connect';
  healthButton.setAttribute('aria-label','Gestisci Google Health Connect tramite app Android');
  const hcStateKey='runnerpulse-healthconnect-last-permission-check';
+ // Non fidarsi di uno stato precedente: solo Android puo' confermare i permessi.
+ sessionStorage.removeItem(hcStateKey);
+ window.addEventListener('runnerpulse:health-permission-status',event=>{
+  const state=event.detail?.status;
+  if(['authorized','partial','denied'].includes(state))sessionStorage.setItem(hcStateKey,state);
+  else sessionStorage.removeItem(hcStateKey);
+  renderHealthState();
+ });
  function renderHealthState(){
   const state=sessionStorage.getItem(hcStateKey);
   const granted=state==='authorized';
@@ -69,6 +77,9 @@ if(healthButton&&healthLabel){
   healthLabel.title=granted?'Ultima verifica effettuata dall’app Android. Sincronizzazione con il sito non ancora attiva.':'';
  }
  renderHealthState();
+ if(window.RunnerPulseHealthNative?.requestPermissionStatus){
+  try{window.RunnerPulseHealthNative.requestPermissionStatus();}catch(e){console.warn('Health Connect status',e);}
+ }
  // Importazione manuale e autenticata. Solo l'app Android può fornire i record reali.
  const syncButton=document.createElement('button');
  syncButton.type='button';syncButton.textContent='Importa allenamenti Health Connect';
@@ -130,6 +141,7 @@ if(healthButton&&healthLabel){
     const confirmRevoke=window.confirm('Vuoi revocare tutte le autorizzazioni Health Connect concesse a Runner Pulse Connect?');
     if(!confirmRevoke)return;
    }
+   overlay.remove();
    window.location.href=isGranted?'runnerpulseconnect://revoke':'runnerpulseconnect://authorize';
   });
   const close=document.createElement('button');close.type='button';close.textContent='Chiudi';
