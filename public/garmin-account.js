@@ -69,6 +69,32 @@ if(healthButton&&healthLabel){
   healthLabel.title=granted?'Ultima verifica effettuata dall’app Android. Sincronizzazione con il sito non ancora attiva.':'';
  }
  renderHealthState();
+ // Importazione manuale e autenticata. Solo l'app Android può fornire i record reali.
+ const syncButton=document.createElement('button');
+ syncButton.type='button';syncButton.textContent='Importa allenamenti Health Connect';
+ syncButton.style.marginTop='12px';
+ healthButton.closest('div')?.parentElement?.appendChild(syncButton);
+ syncButton.addEventListener('click',()=>{
+  if(!auth.currentUser){message.textContent='Accedi prima con Google';return;}
+  if(!window.RunnerPulseHealthNative){message.textContent='Apri Runner Pulse Connect su Android per importare';return;}
+  syncButton.disabled=true;syncButton.textContent='Lettura Health Connect in corso…';
+  try{window.RunnerPulseHealthNative.requestExerciseSync();}
+  catch(e){syncButton.disabled=false;syncButton.textContent='Importa allenamenti Health Connect';message.textContent='Lettura non disponibile';}
+ });
+ window.addEventListener('runnerpulse:health-sync',async event=>{
+  syncButton.disabled=true;syncButton.textContent='Salvataggio allenamenti…';
+  try{
+   const data=event.detail||{};
+   if(data.error)throw Error(data.error);
+   if(!auth.currentUser)throw Error('Accesso Google non disponibile');
+   const token=await auth.currentUser.getIdToken();
+   const response=await fetch('/api/health-connect/import',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({records:data.records||[]})});
+   const result=await response.json();
+   if(!response.ok)throw Error(result.message||'Importazione non riuscita');
+   message.textContent=`Health Connect: ${result.imported} nuove sessioni, ${result.duplicates} duplicate, ${result.skipped} ignorate.`;
+  }catch(e){message.textContent=e.message||'Errore importazione Health Connect';}
+  finally{syncButton.disabled=false;syncButton.textContent='Importa allenamenti Health Connect';}
+ });
  const hcReturn=new URLSearchParams(window.location.search).get('healthconnect');
  if(['authorized','partial','denied','error','unavailable'].includes(hcReturn)){
   if(hcReturn==='authorized'||hcReturn==='partial'||hcReturn==='denied')sessionStorage.setItem(hcStateKey,hcReturn);
