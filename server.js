@@ -302,24 +302,6 @@ async function processCoachJobs(){
  }finally{coachWorkerRunning=false;}
 }
 
-// Confronto prudente fra attività già registrate, indipendente dal servizio che le invia.
-// Non sommare mai distanze o durate di record riconosciuti come la stessa attività.
-function sameRecordedWorkout(a,b){
- if(!a||!b)return false;
- const num=(x)=>x===null||x===undefined||x===''?NaN:Number(x);
- const t1=num(a.startTimeInSeconds),t2=num(b.startTimeInSeconds);
- const d1=num(a.durationInSeconds),d2=num(b.durationInSeconds);
- const m1=num(a.distanceInMeters),m2=num(b.distanceInMeters);
- if(![t1,t2,d1,d2,m1,m2].every(Number.isFinite))return false;
- if(t1<=0||t2<=0||d1<=0||d2<=0||m1<0||m2<0)return false;
- if(Math.abs(t1-t2)>90)return false;
- if(Math.abs(d1-d2)>Math.max(30,Math.min(d1,d2)*0.05))return false;
- if(Math.abs(m1-m2)>Math.max(100,Math.min(m1,m2)*0.02))return false;
- const type=x=>String(x.activityType?.typeKey??x.activityType??x.type??'').toLowerCase();
- const aType=type(a),bType=type(b);
- return !aType||!bType||aType===bType;
-}
-
 async function importOfficialActivities(payload){
  // Garmin invia le notifiche come array activities; non attribuire mai dati senza userId verificato.
  const entries=Array.isArray(payload?.activities)?payload.activities:[];
@@ -902,6 +884,33 @@ async function weeklyPushRoute(req,res,pathname){
 }
 
 http.createServer(async(req,res)=>{
+  if(req.url?.startsWith('/api/health-connect/import')) {
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
+    try {
+      const body=await readJsonBody(req,180000);
+      if(!Array.isArray(body.records)||body.records.length>300)return json(res,400,{success:false,message:'Elenco attività non valido'});
+      const db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
+      const health=root.collection('healthConnectActivities');
+      let imported=0,duplicates=0,skipped=0;
+      for(const r of body.records){
+        if(typeof r?.id!=='string'||r.id.length<5||r.id.length>200||typeof r.sourcePackage!=='string'||r.sourcePackage.length>150) {skipped++;continue;}
+        const start=Number(r.start),end=Number(r.end),kind=Number(r.exerciseType);
+        if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||end<=start||end-start>86400000||start>Date.now()+3600000||start<Date.now()-35*86400000||!Number.isInteger(kind)){skipped++;continue;}
+        const key=createHash('sha256').update(r.sourcePackage+'\0'+r.id).digest('hex');
+        const ref=health.doc(key);
+        if((await ref.get()).exists){duplicates++;continue;}
+        // Compare Garmin activity timestamps; never overwrite Garmin records.
+        const sec=Math.floor(start/1000),duration=(end-start)/1000;
+        const near=await root.collection('activities').where('summary.startTimeInSeconds','>=',sec-90).where('summary.startTimeInSeconds','<=',sec+90).limit(30).get();
+        const match=near.docs.find(d=>{const a=d.data()?.summary||{};return Math.abs(Number(a.durationInSeconds)-duration)<Math.max(30,duration*.03);});
+        await ref.create({source:'health-connect',sourcePackage:r.sourcePackage,recordId:r.id,startTimeInSeconds:sec,durationInSeconds:duration,exerciseType:kind,title:String(r.title||'').slice(0,120),duplicateOfGarminId:match?.id||null,createdAt:Date.now()});
+        if(match)duplicates++;else imported++;
+      }
+      return json(res,200,{success:true,imported,duplicates,skipped,total:body.records.length,message:'Sessioni Health Connect registrate. Le attività Garmin non sono state modificate.'});
+    }catch(e){console.error('Health Connect import:',e.message);return json(res,e.status||500,{success:false,message:'Importazione Health Connect non riuscita'});}
+  }
   if(req.url?.startsWith('/api/mobile-auth/')){const pathname=new URL(req.url,'http://localhost').pathname;await mobileAuthRoute(req,res,pathname);return;}
   if(req.url?.startsWith('/api/garmin/webhook/')){let webhookPath;try{webhookPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await receiveGarminWebhook(req,res,webhookPath);return;}
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
@@ -1103,17 +1112,10 @@ http.createServer(async(req,res)=>{
           // Il tombstone resta attivo per i webhook automatici.
           const tombstone=root.collection('deletedActivities').doc(id);
           if((await ref.get()).exists){duplicates++;continue;}
-          // Riconosci la stessa attività anche quando le fonti arrotondano tempi e distanze.
-          // Il controllo è prudente: non unisce attività con valori mancanti o incompatibili.
-          const start=Number(summary.startTimeInSeconds);
-          if(Number.isFinite(start)&&start>0){
-            const near=await root.collection('activities')
-              .where('summary.startTimeInSeconds','>=',start-90)
-              .where('summary.startTimeInSeconds','<=',start+90)
-              .limit(60).get();
-            const same=near.docs.some(d=>sameRecordedWorkout(d.data()?.summary,summary));
-            if(same){duplicates++;continue;}
-          }
+          // Evita duplicati con lo storico importato da Garmin via webhook.
+          const near=await root.collection('activities').where('summary.startTimeInSeconds','==',summary.startTimeInSeconds).limit(15).get();
+          const same=near.docs.some(d=>{const old=d.data()?.summary||{};return Math.abs(Number(old.distanceInMeters)-Number(summary.distanceInMeters))<2&&Math.abs(Number(old.durationInSeconds)-Number(summary.durationInSeconds))<3;});
+          if(same){duplicates++;continue;}
           const batch=db.batch();
           // Ripristino atomico: cancellare il tombstone solo se il nuovo record viene scritto.
           batch.delete(tombstone);
