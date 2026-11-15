@@ -240,7 +240,7 @@ async function notifyActivityCoachReady(uid,id){
  if(!shouldSend)return;
  try{
   const snap=await root.collection('devices').where('enabled','==',true).get();
-  const tokens=snap.docs.map(d=>d.data().token).filter(Boolean);
+  const tokens=preferredPushTokens(snap.docs);
   let delivered=0,failed=0;
   for(let i=0;i<tokens.length;i+=500){
    const batch=tokens.slice(i,i+500);
@@ -259,6 +259,12 @@ async function notifyActivityCoachReady(uid,id){
   await marker.delete().catch(()=>{});
   throw error;
  }
+}
+// Prefer native Android tokens when enabled; otherwise retain browser push.
+function preferredPushTokens(docs){
+ const valid=docs.map(d=>d.data()).filter(d=>d.enabled===true && typeof d.token==='string' && d.token.length>0);
+ const native=valid.filter(d=>d.channel==='android');
+ return [...new Set((native.length?native:valid.filter(d=>d.channel!=='android')).map(d=>d.token))];
 }
 // Una sola analisi AI per volta: limita i picchi di memoria sul piano Render gratuito.
 // Gli eventi Garmin vengono comunque salvati prima in Firestore.
@@ -792,8 +798,9 @@ async function weeklyPushRoute(req,res,pathname){
   try{
    const body=await readJsonBody(req,4096);
    if(typeof body.token!=='string'||body.token.length<50||body.token.length>3000)return json(res,400,{success:false,message:'Token push non valido'});
+   if(body.channel!==undefined && !['android','web'].includes(body.channel))return json(res,400,{success:false,message:'Canale non valido'});
    const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(body.token).digest('hex');
-   await getFirestore().collection('runnerPulsePush').doc(user.uid).collection('devices').doc(id).set({token:body.token,updatedAt:new Date(),enabled:true},{merge:true});
+   await getFirestore().collection('runnerPulsePush').doc(user.uid).collection('devices').doc(id).set({token:body.token,channel:body.channel==='android'?'android':'web',updatedAt:new Date(),enabled:true},{merge:true});
    return json(res,200,{success:true});
   }catch(error){console.error('Push subscribe:',error.message);return json(res,500,{success:false,message:'Registrazione notifica non riuscita'});}
  }
@@ -823,7 +830,7 @@ async function weeklyPushRoute(req,res,pathname){
    const owner=await getAuth().getUserByEmail(OWNER_EMAIL);
    const db=getFirestore();const root=db.collection('runnerPulsePush').doc(owner.uid);
    const snap=await root.collection('devices').where('enabled','==',true).get();
-   const tokens=[...new Set(snap.docs.map(d=>d.data().token).filter(Boolean))];
+   const tokens=preferredPushTokens(snap.docs);
    if(!tokens.length)return json(res,409,{success:false,message:'Nessun telefono registrato. Premi prima Attiva notifiche Coach.'});
    const throttle=root.collection('settings').doc('testThrottle');
    const allowed=await db.runTransaction(async tx=>{
@@ -867,7 +874,7 @@ async function weeklyPushRoute(req,res,pathname){
    const report=await generateWeeklyCoachReport(owner.uid,week);
    await run.set({status:'report_ready',reportId:report.messageId,activitiesCount:report.activitiesCount},{merge:true});
    const snap=await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').where('enabled','==',true).get();
-   const tokens=snap.docs.map(d=>d.data().token).filter(Boolean);
+   const tokens=preferredPushTokens(snap.docs);
    let delivered=0,failed=0;
    for(let i=0;i<tokens.length;i+=500){
     const batch=tokens.slice(i,i+500);
