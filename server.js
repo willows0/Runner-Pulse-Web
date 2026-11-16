@@ -344,12 +344,25 @@ function officialFitUrl(entry){
  try{
   const url=new URL(candidate);
   if(url.protocol!=='https:'||url.username||url.password||url.port)return null;
-  if(!['api.garmin.com','connectapi.garmin.com','apis.garmin.com'].includes(url.hostname.toLowerCase()))return null;
+  if(!['api.garmin.com','connectapi.garmin.com','apis.garmin.com','healthapi.garmin.com','healthapi.garmin.com'].includes(url.hostname.toLowerCase()))return null;
   return url.href;
  }catch{return null;}
 }
-async function downloadOfficialFit(url){
- const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(25000),headers:{Accept:'application/octet-stream'}});
+async function validGarminOAuthToken(uid){
+ const ref=garminOAuthDoc(uid),snap=await ref.get();
+ if(!snap.exists||!snap.data()?.encryptedToken)throw Error('Garmin OAuth non collegato');
+ let token=decryptGarminToken(snap.data().encryptedToken);
+ if(token.refresh_token&&token.expires_in&&Date.now()-snap.data().updatedAt>Math.max(0,Number(token.expires_in)-300)*1000){
+  token=await garminOAuthExchange({grant_type:'refresh_token',refresh_token:token.refresh_token,client_id:GARMIN_CLIENT_ID});
+  await ref.set({encryptedToken:encryptGarminToken(token),updatedAt:Date.now()},{merge:true});
+ }
+ if(!token.access_token)throw Error('Garmin OAuth token mancante');
+ return token.access_token;
+}
+async function downloadOfficialFit(url,uid){
+ // OAuth 2.0 Garmin: l'URL callback puo' richiedere il bearer dell'utente.
+ const token=await validGarminOAuthToken(uid);
+ const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(25000),headers:{Accept:'application/octet-stream',Authorization:'Bearer '+token}});
  if(!response.ok)throw Error('Download Garmin HTTP '+response.status);
  const declared=Number(response.headers.get('content-length'));
  if(declared>32*1024*1024)throw Error('FIT Garmin troppo grande');
@@ -364,7 +377,7 @@ async function importOfficialFit(uid,id,entry){
  const existing=await ref.get();if(!existing.exists)return 'waiting_summary';
  if(existing.data()?.fitSampleChunks)return 'already_imported';
  const url=officialFitUrl(entry);if(!url)return 'missing_download_url';
- const bytes=await downloadOfficialFit(url);
+ const bytes=await downloadOfficialFit(url,uid);
  const name=bytes.length>12&&bytes.toString('ascii',8,12)==='.FIT'?'activity.fit':'activity.zip';
  const parsed=parseGarminArchive(bytes,name).filter(x=>x.activity);
  if(parsed.length!==1)throw Error('FIT Garmin non contiene una singola attività valida');
@@ -423,9 +436,9 @@ async function importGarminExtraSections(payload){
     if(section==='activityFiles'){
       try{
         const state=await importOfficialFit(uid,activityId,entry);
-        if(state==='imported')counts.fitImported++;
-        else if(state!=='already_imported'&&state!=='deleted')counts.fitPending++;
-      }catch(error){counts.fitPending++;console.warn('Garmin Activity Files: dettaglio in attesa di recupero:',String(error.message||error).slice(0,100));}
+        if(state==='imported'){counts.fitImported++;console.info('Garmin Activity Files: FIT importato');}
+        else if(state!=='already_imported'&&state!=='deleted'){counts.fitPending++;console.warn('Garmin Activity Files: FIT non importato, stato:',state);}
+      }catch(error){counts.fitPending++;await ref.set({fitRecoveryState:'download_or_parse_error',fitLastError:String(error.message||error).slice(0,140),fitLastAttemptAt:Date.now()},{merge:true}).catch(()=>{});console.warn('Garmin Activity Files: dettaglio in attesa di recupero:',String(error.message||error).slice(0,100));}
     }
    }else{
     const start=String(entry.calendarDate??entry.startTimeInSeconds??entry.startTimeGMT??entry.startTimeLocal??'');
@@ -439,6 +452,47 @@ async function importGarminExtraSections(payload){
  }
  return counts;
 }
+
+// Recupero dei FIT notificati prima dell'aggiornamento, senza cancellare o duplicare attività.
+// Limita la scansione per contenere le letture Firestore; non espone URL con token nei log.
+let officialFitRecoveryRunning=false;
+async function recoverStoredOfficialFits(){
+ if(officialFitRecoveryRunning||Date.now()<firestoreMaintenancePauseUntil)return;
+ officialFitRecoveryRunning=true;
+ let checked=0,imported=0,pending=0;
+ try{
+  const db=getFirestore();
+  const users=await db.collection('runnerPulseGarminOfficialSync').limit(20).get();
+  for(const user of users.docs){
+   const activities=await db.collection('runnerPulseGarmin').doc(user.id).collection('activities').orderBy('seenAt','desc').limit(200).get();
+   for(const doc of activities.docs){
+    const a=doc.data();
+    if(!a.officialActivityFileNotification||a.fitImportedAt||a.fitSampleChunks)continue;
+    const entry=a.officialActivityFileNotification;
+    if(String(entry.activityId??'')!==doc.id)continue;
+    // Evita tentativi ravvicinati quando l'URL Garmin e' scaduto o il download fallisce.
+    if(Number(a.fitNextRetryAt)>Date.now())continue;
+    checked++;
+    try{
+     const state=await importOfficialFit(user.id,doc.id,entry);
+     if(state==='imported'){imported++;await doc.ref.set({fitRecoveryState:'imported',fitLastAttemptAt:Date.now()},{merge:true});console.info('Garmin Activity Files: FIT recuperato');}
+     else if(state!=='already_imported'&&state!=='deleted'){
+      pending++;
+      await doc.ref.set({fitNextRetryAt:Date.now()+6*60*60*1000,fitRecoveryState:state,fitLastAttemptAt:Date.now()},{merge:true});
+     }
+    }catch(error){
+     pending++;
+     await doc.ref.set({fitNextRetryAt:Date.now()+6*60*60*1000,fitRecoveryState:'download_or_parse_error',fitLastError:String(error.message||error).slice(0,140),fitLastAttemptAt:Date.now()},{merge:true}).catch(()=>{});
+     console.warn('Garmin Activity Files: recupero non riuscito:',String(error.message||error).slice(0,100));
+    }
+   }
+  }
+  if(checked)console.info('Garmin Activity Files: recupero:',JSON.stringify({checked,imported,pending}));
+ }catch(error){if(!pauseMaintenanceOnQuota(error))console.warn('Garmin Activity Files: recupero non disponibile:',error.name||'Error');}
+ finally{officialFitRecoveryRunning=false;}
+}
+setTimeout(()=>{void recoverStoredOfficialFits();},60*1000).unref?.();
+setInterval(()=>{void recoverStoredOfficialFits();},60*60*1000).unref?.();
 
 // Ritenta le analisi fallite dopo errori temporanei (es. Gemini HTTP 503).
 // Il recupero legge solo lavori realmente registrati: non crea allenamenti né giudizi fittizi.
