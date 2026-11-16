@@ -1089,6 +1089,28 @@ http.createServer(async(req,res)=>{
       return json(res,200,{success:true,days:dates.map(date=>({date,seconds:byDate.get(date)?.seconds??null,score:byDate.get(date)?.score??null,coachScore:byDate.get(date)?.coachScore??null,coachJudgement:byDate.get(date)?.coachJudgement??null,coachComment:byDate.get(date)?.coachComment??null})),source:'garmin-official-push'});
     }catch(error){console.error('Sonno settimanale:',error.message);return json(res,503,{success:false,message:'Sonno temporaneamente non disponibile'});}
   }
+  // I passi Health Connect sono letti dal dispositivo: salvali per il Coach dello stesso UID.
+  if(pathname==='/api/health-connect/steps-sync'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
+    try{
+      const body=await readJsonBody(req);
+      const days=body?.days;
+      if(!Array.isArray(days)||days.length!==7)return json(res,400,{success:false,message:'Settimana non valida'});
+      const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
+      const parts=Object.fromEntries(formatter.formatToParts(new Date()).map(x=>[x.type,x.value]));
+      const today=`${parts.year}-${parts.month}-${parts.day}`;
+      const expected=[];
+      for(let i=6;i>=0;i--){const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);expected.push(d.toISOString().slice(0,10));}
+      for(let i=0;i<7;i++){
+        const day=days[i];
+        if(!day||day.date!==expected[i]||!(day.steps===null||(Number.isSafeInteger(day.steps)&&day.steps>=0&&day.steps<=200000)))return json(res,400,{success:false,message:'Dati passi non validi'});
+      }
+      await getFirestore().collection('runnerPulseHealthConnectSteps').doc(user.uid).set({days:days.map(d=>({date:d.date,steps:d.steps})),today,updatedAt:Date.now(),source:'health-connect-native'});
+      return json(res,200,{success:true});
+    }catch(error){console.error('Health Connect steps sync:',error.message);return json(res,503,{success:false,message:'Sincronizzazione passi non disponibile'});}
+  }
   if(pathname==='/api/steps/week'){
     if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
     const user=await garminGoogleUser(req);

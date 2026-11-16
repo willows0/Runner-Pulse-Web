@@ -123,6 +123,16 @@ async function coachHealthContext(db,uid){
       if(Number.isSafeInteger(n)&&n>=0&&n<=200000){context.stepsToday=n;context.stepsDate=date;break;}
     }
   }
+  // I passi Health Connect, letti dalla WebView nativa, non arrivano nei Garmin dailies.
+  // Preferisci il dato Health Connect aggiornato, associato esclusivamente a questo UID.
+  try{
+    const nativeDoc=await db.collection('runnerPulseHealthConnectSteps').doc(uid).get();
+    const saved=nativeDoc.data();
+    const nativeToday=Array.isArray(saved?.days)?saved.days.find(day=>day?.date===today):null;
+    if(saved?.today===today&&Number.isFinite(saved?.updatedAt)&&Date.now()-saved.updatedAt<36*60*60*1000&&nativeToday&&Number.isSafeInteger(nativeToday.steps)&&nativeToday.steps>=0&&nativeToday.steps<=200000){
+      context.stepsToday=nativeToday.steps;context.stepsDate=today;context.stepsSource='health-connect';
+    }
+  }catch(error){console.warn('Coach Health Connect steps:',error.message);}
   // Solo campi VO2 espliciti; non derivare VO2 da ritmo o frequenza cardiaca.
   const findVo2=(obj,depth=0)=>{
     if(!obj||typeof obj!=='object'||depth>4)return null;
