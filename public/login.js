@@ -251,8 +251,10 @@ async function refreshGarminHealth(){
 // La pagina Attività e la Home ricevono gli stessi eventi, senza richiedere
 // all'utente di premere il pulsante di importazione.
 let archiveLoading=false;
+let archiveRefreshPending=false;
 async function loadGarminArchive(){
-  if(archiveLoading||!allowedUser()||!isOwner())return;
+  if(archiveLoading){archiveRefreshPending=true;return;}
+  if(!allowedUser()||!isOwner())return;
   archiveLoading=true;
   const expectedUid=auth.currentUser.uid;
   let total=0;
@@ -276,7 +278,7 @@ async function loadGarminArchive(){
     }
   }catch(error){
     console.warn('Archivio Garmin non disponibile:',error.message);
-  }finally{archiveLoading=false;}
+  }finally{archiveLoading=false;if(archiveRefreshPending){archiveRefreshPending=false;void loadGarminArchive();}}
 }
 // Eliminazione autenticata: la UI rimuove l'attività soltanto dopo conferma Firebase.
 window.addEventListener('runnerpulse:delete-garmin',event=>{
@@ -771,9 +773,9 @@ document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
   });
   bar.value=100;label.textContent='Importazione completata';percent.textContent='100%';note.textContent='';
   status.textContent=`${result.imported} importati · ${result.duplicates} già presenti`;
-  await loadGarminArchive();
-  // Mostra sempre l'elenco aggiornato dopo una risposta di importazione riuscita.
+  window.rpActivatePage?.('activities');
   window.rpShowActivityTab?.('list');
+  await loadGarminArchive();
  }catch(error){bar.value=0;label.textContent='Importazione non riuscita';percent.textContent='';note.textContent='Controlla l’errore qui sotto.';status.textContent='Errore: '+(error.message||String(error));}
  finally{button.disabled=false;}
 });
