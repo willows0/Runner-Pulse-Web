@@ -130,7 +130,7 @@ async function coachHealthContext(db,uid){
     const nativeDoc=await db.collection('runnerPulseHealthConnectSteps').doc(uid).get();
     const saved=nativeDoc.data();
     const nativeToday=Array.isArray(saved?.days)?saved.days.find(day=>day?.date===today):null;
-    if(saved?.today===today&&Number.isFinite(saved?.updatedAt)&&Date.now()-saved.updatedAt<36*60*60*1000&&nativeToday&&Number.isSafeInteger(nativeToday.steps)&&nativeToday.steps>=0&&nativeToday.steps<=200000){
+    if(context.stepsToday===null&&saved?.today===today&&Number.isFinite(saved?.updatedAt)&&Date.now()-saved.updatedAt<36*60*60*1000&&nativeToday&&Number.isSafeInteger(nativeToday.steps)&&nativeToday.steps>=0&&nativeToday.steps<=200000){
       context.stepsToday=nativeToday.steps;context.stepsDate=today;context.stepsSource='health-connect';
     }
   }catch(error){console.warn('Coach Health Connect steps:',error.message);}
