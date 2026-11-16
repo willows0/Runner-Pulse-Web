@@ -1284,7 +1284,7 @@ http.createServer(async(req,res)=>{
       const officialDetail=Array.isArray(official)?official.find(x=>String(x?.activityId)===id):official;
       const candidates=[officialDetail?.laps,record.laps,record.lapDTOs,record.lapSummaries,summary.laps,summary.lapDTOs,summary.lapSummaries];
       const expected=Number(summary.lapCount ?? record.lapCount);
-      const validLap=x=>x && typeof x==='object' && Number(x.distance ?? x.distanceMeters)>0 && Number(x.duration ?? x.elapsedDuration ?? x.movingDuration)>0;
+      const validLap=x=>{if(!x||typeof x!=='object')return false;const distance=x.distance??x.distanceMeters;const duration=x.duration??x.elapsedDuration??x.movingDuration;return distance!=null&&duration!=null&&Number.isFinite(Number(distance))&&Number(distance)>=0&&Number.isFinite(Number(duration))&&Number(duration)>=0;};
       let laps=candidates.find(v=>Array.isArray(v)&&v.length&&v.every(validLap)&&(!Number.isInteger(expected)||expected<=0||v.length===expected))||[];
       // Nessuna approssimazione: se sono dichiarati 18 giri, non mostrare 3 riepiloghi.
 
