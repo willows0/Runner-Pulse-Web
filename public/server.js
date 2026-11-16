@@ -21,53 +21,7 @@ const firebaseServiceAccount = JSON.parse(await readFile('/etc/secrets/firebase-
 if (firebaseServiceAccount.project_id !== 'runnerpulse') throw new Error('Il file Firebase appartiene a un progetto diverso da runnerpulse');
 initializeApp({ credential: cert(firebaseServiceAccount), projectId: 'runnerpulse' });
 
-// Android WebView -> system browser -> single-use Firebase session handoff.
-const MOBILE_AUTH_TTL = 5 * 60 * 1000;
-const mobileAuthCollection = () => getFirestore().collection('runnerPulseMobileAuth');
-const mobileHash = value => createHash('sha256').update(value).digest('hex');
-const mobilePattern = /^[A-Za-z0-9_-]{32,128}$/;
-async function mobileAuthRoute(req,res,pathname){
- try {
-  if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
-  const body=await readJsonBody(req,10000);
-  if(pathname==='/api/mobile-auth/start'){
-   const {state,challenge}=body;
-   if(!mobilePattern.test(state||'')||!mobilePattern.test(challenge||''))return json(res,400,{success:false,message:'Parametri non validi'});
-   await mobileAuthCollection().doc(mobileHash(state)).create({challenge,expiresAt:Date.now()+MOBILE_AUTH_TTL,createdAt:Date.now(),status:'pending'});
-   return json(res,200,{success:true});
-  }
-  if(pathname==='/api/mobile-auth/approve'){
-   const {state,idToken}=body;
-   if(!mobilePattern.test(state||'')||typeof idToken!=='string'||idToken.length>10000)return json(res,400,{success:false,message:'Parametri non validi'});
-   const decoded=await getAuth().verifyIdToken(idToken,true);
-   if(!verifiedGoogleIdentity(decoded))return json(res,403,{success:false,message:'Accesso Google non verificato'});
-   const code=randomBytes(32).toString('base64url');
-   const ref=mobileAuthCollection().doc(mobileHash(state));
-   const ok=await getFirestore().runTransaction(async tx=>{
-    const snap=await tx.get(ref);const data=snap.data();
-    if(!data||data.status!=='pending'||data.expiresAt<Date.now())return false;
-    tx.update(ref,{status:'approved',uid:decoded.uid,codeHash:mobileHash(code)});return true;
-   });
-   return ok?json(res,200,{success:true,code}):json(res,410,{success:false,message:'Richiesta scaduta o già utilizzata'});
-  }
-  if(pathname==='/api/mobile-auth/redeem'){
-   const {state,code,verifier}=body;
-   if(!mobilePattern.test(state||'')||!mobilePattern.test(code||'')||!mobilePattern.test(verifier||''))return json(res,400,{success:false,message:'Parametri non validi'});
-   const ref=mobileAuthCollection().doc(mobileHash(state));
-   const uid=await getFirestore().runTransaction(async tx=>{
-    const snap=await tx.get(ref);const data=snap.data();
-    if(!data||data.status!=='approved'||data.expiresAt<Date.now()||data.codeHash!==mobileHash(code)||data.challenge!==createHash('sha256').update(verifier).digest('base64url'))return null;
-    tx.delete(ref);return data.uid;
-   });
-   if(!uid)return json(res,403,{success:false,message:'Codice scaduto o non valido'});
-   const token=await getAuth().createCustomToken(uid);
-   return json(res,200,{success:true,token});
-  }
-  return json(res,404,{success:false});
- }catch(e){console.warn('Mobile auth:',e.code||e.message);return json(res,e.status||400,{success:false,message:'Autenticazione non riuscita. Riprova.'});}
-}
-
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/mobile-login.html':'mobile-login.html','/mobile-login.js':'mobile-login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js'};
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.gif':'image/gif','.ico':'image/x-icon'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 function verifiedGoogleIdentity(user){return user.email_verified===true || (user.firebase?.sign_in_provider==='google.com' && user.firebase?.identities?.['google.com']?.length>0);}
@@ -240,7 +194,7 @@ async function notifyActivityCoachReady(uid,id){
  if(!shouldSend)return;
  try{
   const snap=await root.collection('devices').where('enabled','==',true).get();
-  const tokens=preferredPushTokens(snap.docs);
+  const tokens=snap.docs.map(d=>d.data().token).filter(Boolean);
   let delivered=0,failed=0;
   for(let i=0;i<tokens.length;i+=500){
    const batch=tokens.slice(i,i+500);
@@ -259,12 +213,6 @@ async function notifyActivityCoachReady(uid,id){
   await marker.delete().catch(()=>{});
   throw error;
  }
-}
-// Prefer native Android tokens when enabled; otherwise retain browser push.
-function preferredPushTokens(docs){
- const valid=docs.map(d=>d.data()).filter(d=>d.enabled===true && typeof d.token==='string' && d.token.length>0);
- const native=valid.filter(d=>d.channel==='android');
- return [...new Set((native.length?native:valid.filter(d=>d.channel!=='android')).map(d=>d.token))];
 }
 // Una sola analisi AI per volta: limita i picchi di memoria sul piano Render gratuito.
 // Gli eventi Garmin vengono comunque salvati prima in Firestore.
@@ -337,71 +285,13 @@ async function importOfficialActivities(payload){
  return {imported,duplicates,unmatched,invalid,received:entries.length};
 }
 
-// Activity Files: usa solo URL HTTPS Garmin; mai URL arbitrarie ricevute dal webhook.
-function officialFitUrl(entry){
- const candidate=entry?.callbackURL??entry?.callbackUrl??entry?.fileUrl??entry?.downloadUrl;
- if(typeof candidate!=='string')return null;
- try{
-  const url=new URL(candidate);
-  if(url.protocol!=='https:'||url.username||url.password||url.port)return null;
-  if(!['api.garmin.com','connectapi.garmin.com','apis.garmin.com','healthapi.garmin.com','healthapi.garmin.com'].includes(url.hostname.toLowerCase()))return null;
-  return url.href;
- }catch{return null;}
-}
-async function validGarminOAuthToken(uid){
- const ref=garminOAuthDoc(uid),snap=await ref.get();
- if(!snap.exists||!snap.data()?.encryptedToken)throw Error('Garmin OAuth non collegato');
- let token=decryptGarminToken(snap.data().encryptedToken);
- if(token.refresh_token&&token.expires_in&&Date.now()-snap.data().updatedAt>Math.max(0,Number(token.expires_in)-300)*1000){
-  token=await garminOAuthExchange({grant_type:'refresh_token',refresh_token:token.refresh_token,client_id:GARMIN_CLIENT_ID});
-  await ref.set({encryptedToken:encryptGarminToken(token),updatedAt:Date.now()},{merge:true});
- }
- if(!token.access_token)throw Error('Garmin OAuth token mancante');
- return token.access_token;
-}
-async function downloadOfficialFit(url,uid){
- // OAuth 2.0 Garmin: l'URL callback puo' richiedere il bearer dell'utente.
- const token=await validGarminOAuthToken(uid);
- const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(25000),headers:{Accept:'application/octet-stream',Authorization:'Bearer '+token}});
- if(!response.ok)throw Error('Download Garmin HTTP '+response.status);
- const declared=Number(response.headers.get('content-length'));
- if(declared>32*1024*1024)throw Error('FIT Garmin troppo grande');
- const chunks=[];let size=0;
- for await(const part of response.body){size+=part.length;if(size>32*1024*1024)throw Error('FIT Garmin troppo grande');chunks.push(Buffer.from(part));}
- return Buffer.concat(chunks);
-}
-async function importOfficialFit(uid,id,entry){
- const root=getFirestore().collection('runnerPulseGarmin').doc(uid);
- if((await root.collection('deletedActivities').doc(id).get()).exists)return 'deleted';
- const ref=root.collection('activities').doc(id);
- const existing=await ref.get();if(!existing.exists)return 'waiting_summary';
- if(existing.data()?.fitSampleChunks)return 'already_imported';
- const url=officialFitUrl(entry);if(!url)return 'missing_download_url';
- const bytes=await downloadOfficialFit(url,uid);
- const name=bytes.length>12&&bytes.toString('ascii',8,12)==='.FIT'?'activity.fit':'activity.zip';
- const parsed=parseGarminArchive(bytes,name).filter(x=>x.activity);
- if(parsed.length!==1)throw Error('FIT Garmin non contiene una singola attività valida');
- const detail=parsed[0].activity.detail;
- const original=existing.data().summary||{};
- const originalStart=Number(original.startTimeInSeconds??original.startTimeGMT);
- const parsedStart=Number(parsed[0].activity.summary.startTimeInSeconds);
- // Non associare un file ad un'attività diversa, anche se il webhook contiene un ID errato.
- if(Number.isFinite(originalStart)&&originalStart>0&&Math.abs(originalStart-parsedStart)>600)throw Error('FIT non corrisponde alla data dell’attività');
- const chunks=Math.ceil(detail.samples.length/300);
- if(chunks>450)throw Error('FIT con troppi campioni');
- const db=getFirestore(),batch=db.batch();
- batch.set(ref,{officialActivityDetails:{activityId:id,laps:detail.laps},fitSampleChunks:chunks,fitImportedAt:Date.now(),fitSource:'garmin-official-activity-files'},{merge:true});
- for(let j=0;j<chunks;j++)batch.set(ref.collection('fitSamples').doc(String(j).padStart(5,'0')),{samples:detail.samples.slice(j*300,(j+1)*300)});
- await batch.commit();return 'imported';
-}
-
 // Garmin Connect push: dettagli e dati Health. Conserva solo eventi associati a utenti OAuth verificati.
-// Activity Files: scarica e interpreta il FIT quando disponibile, con recupero ritentabile.
-const GARMIN_EXTRA_SECTIONS={activityDetails:'activity-details',activityFiles:'activity-files',dailies:'dailies',sleeps:'sleeps',userMetrics:'userMetrics',readiness:'readiness',readlines:'readlines'};
+// Activity Files: conserva il riferimento al file, NON lo interpreta come FIT scaricato.
+const GARMIN_EXTRA_SECTIONS={activityDetails:'activity-details',activityFiles:'activity-files',dailies:'dailies',sleeps:'sleeps'};
 // Cache solo in memoria: nessun dato sanitario nei log e nessuna scrittura aggiuntiva.
 const stepsWeekCache=new Map();
 async function importGarminExtraSections(payload){
- const db=getFirestore();const counts={stored:0,unmatched:0,invalid:0,fitPending:0,fitImported:0,bySection:{}};
+ const db=getFirestore();const counts={stored:0,unmatched:0,invalid:0,bySection:{}};
  const userCache=new Map(); // One mapping/token lookup per Garmin user per webhook
  for(const [section,kind] of Object.entries(GARMIN_EXTRA_SECTIONS)){
   const entries=Array.isArray(payload?.[section])?payload[section]:[];
@@ -430,69 +320,17 @@ async function importGarminExtraSections(payload){
     // Non creare falsi riepiloghi e non sovrascrivere il documento esistente.
     if(!(await ref.get()).exists){counts.unmatched++;continue;}
     const key=section==='activityDetails'?'officialActivityDetails':'officialActivityFileNotification';
-    if(section==='activityDetails'&&(await ref.get()).data()?.fitSampleChunks){
-      await ref.set({officialActivityDetailsReceivedAt:now},{merge:true});
-    }else await ref.set({[key]:entry,[key+'ReceivedAt']:now},{merge:true});
-    if(section==='activityFiles'){
-      try{
-        const state=await importOfficialFit(uid,activityId,entry);
-        if(state==='imported'){counts.fitImported++;console.info('Garmin Activity Files: FIT importato');}
-        else if(state!=='already_imported'&&state!=='deleted'){counts.fitPending++;console.warn('Garmin Activity Files: FIT non importato, stato:',state);}
-      }catch(error){counts.fitPending++;await ref.set({fitRecoveryState:'download_or_parse_error',fitLastError:String(error.message||error).slice(0,140),fitLastAttemptAt:Date.now()},{merge:true}).catch(()=>{});console.warn('Garmin Activity Files: dettaglio in attesa di recupero:',String(error.message||error).slice(0,100));}
-    }
+    await ref.set({[key]:entry,[key+'ReceivedAt']:now},{merge:true});
    }else{
     const start=String(entry.calendarDate??entry.startTimeInSeconds??entry.startTimeGMT??entry.startTimeLocal??'');
     const id=createHash('sha256').update(section+'|'+entry.userId+'|'+(section==='dailies'&&start?start: start+'|'+serialized)).digest('hex');
     await db.collection('runnerPulseGarminHealth').doc(uid).collection(kind).doc(id).set({data:entry,receivedAt:now,source:'garmin-official-push'},{merge:true});
-    // Un nuovo riepilogo giornaliero deve essere visibile subito nella Home.
-    if(section==='dailies')stepsWeekCache.delete(uid);
    }
    counts.stored++;
   }
  }
  return counts;
 }
-
-// Recupero dei FIT notificati prima dell'aggiornamento, senza cancellare o duplicare attività.
-// Limita la scansione per contenere le letture Firestore; non espone URL con token nei log.
-let officialFitRecoveryRunning=false;
-async function recoverStoredOfficialFits(){
- if(officialFitRecoveryRunning||Date.now()<firestoreMaintenancePauseUntil)return;
- officialFitRecoveryRunning=true;
- let checked=0,imported=0,pending=0;
- try{
-  const db=getFirestore();
-  const users=await db.collection('runnerPulseGarminOfficialSync').limit(20).get();
-  for(const user of users.docs){
-   const activities=await db.collection('runnerPulseGarmin').doc(user.id).collection('activities').orderBy('seenAt','desc').limit(200).get();
-   for(const doc of activities.docs){
-    const a=doc.data();
-    if(!a.officialActivityFileNotification||a.fitImportedAt||a.fitSampleChunks)continue;
-    const entry=a.officialActivityFileNotification;
-    if(String(entry.activityId??'')!==doc.id)continue;
-    // Evita tentativi ravvicinati quando l'URL Garmin e' scaduto o il download fallisce.
-    if(Number(a.fitNextRetryAt)>Date.now())continue;
-    checked++;
-    try{
-     const state=await importOfficialFit(user.id,doc.id,entry);
-     if(state==='imported'){imported++;await doc.ref.set({fitRecoveryState:'imported',fitLastAttemptAt:Date.now()},{merge:true});console.info('Garmin Activity Files: FIT recuperato');}
-     else if(state!=='already_imported'&&state!=='deleted'){
-      pending++;
-      await doc.ref.set({fitNextRetryAt:Date.now()+6*60*60*1000,fitRecoveryState:state,fitLastAttemptAt:Date.now()},{merge:true});
-     }
-    }catch(error){
-     pending++;
-     await doc.ref.set({fitNextRetryAt:Date.now()+6*60*60*1000,fitRecoveryState:'download_or_parse_error',fitLastError:String(error.message||error).slice(0,140),fitLastAttemptAt:Date.now()},{merge:true}).catch(()=>{});
-     console.warn('Garmin Activity Files: recupero non riuscito:',String(error.message||error).slice(0,100));
-    }
-   }
-  }
-  if(checked)console.info('Garmin Activity Files: recupero:',JSON.stringify({checked,imported,pending}));
- }catch(error){if(!pauseMaintenanceOnQuota(error))console.warn('Garmin Activity Files: recupero non disponibile:',error.name||'Error');}
- finally{officialFitRecoveryRunning=false;}
-}
-setTimeout(()=>{void recoverStoredOfficialFits();},60*1000).unref?.();
-setInterval(()=>{void recoverStoredOfficialFits();},60*60*1000).unref?.();
 
 // Ritenta le analisi fallite dopo errori temporanei (es. Gemini HTTP 503).
 // Il recupero legge solo lavori realmente registrati: non crea allenamenti né giudizi fittizi.
@@ -552,8 +390,8 @@ async function recoverGarminWebhookInbox(){
      const result=await importOfficialActivities(event.payload);
      const extra=await importGarminExtraSections(event.payload);
      recovered+=result.imported+extra.stored;unmatched+=result.unmatched+extra.unmatched;
-     const pending=Boolean(result.unmatched||result.invalid||extra.unmatched||extra.invalid||extra.fitPending);
-     await doc.ref.update({status:pending?'partial_unmatched':'processed',...result,extra,processedAt:Date.now(),nextRetryAt:pending?Date.now()+60*60*1000:null});
+     const pending=Boolean(result.unmatched||result.invalid||extra.unmatched||extra.invalid);
+     await doc.ref.update({status:pending?'partial_unmatched':'processed',...result,extra,processedAt:Date.now(),nextRetryAt:pending?Date.now()+6*60*60*1000:null});
     }catch(error){failed++;if(pauseMaintenanceOnQuota(error))return;await doc.ref.update({nextRetryAt:Date.now()+60*60*1000}).catch(()=>{});console.warn('Garmin recupero inbox:',error.name||'Error');}
    }
   }
@@ -608,9 +446,9 @@ async function receiveGarminWebhook(req,res,pathname){
  try{
   const result=await importOfficialActivities(payload);
   const extra=await importGarminExtraSections(payload);
-  const pending=Boolean(result.unmatched||result.invalid||extra.unmatched||extra.invalid||extra.fitPending);
-  await inbox.update({status:pending?'partial_unmatched':'processed',...result,extra,processedAt:Date.now(),nextRetryAt:pending?Date.now()+60*60*1000:null});
-  console.info('Garmin webhook elaborato:',JSON.stringify({...result,extra:{stored:extra.stored,unmatched:extra.unmatched,invalid:extra.invalid,bySection:extra.bySection}}));
+  const pending=Boolean(result.unmatched||result.invalid||extra.unmatched||extra.invalid);
+  await inbox.update({status:pending?'partial_unmatched':'processed',...result,extra,processedAt:Date.now(),nextRetryAt:pending?Date.now()+6*60*60*1000:null});
+  console.info('Garmin webhook elaborato:',JSON.stringify(result));
   // Non dichiarare l'importazione riuscita se nessuna attività è stata riconosciuta.
   return json(res,202,{success:true,received:true,...result});
  }catch(e){
@@ -906,9 +744,8 @@ async function weeklyPushRoute(req,res,pathname){
   try{
    const body=await readJsonBody(req,4096);
    if(typeof body.token!=='string'||body.token.length<50||body.token.length>3000)return json(res,400,{success:false,message:'Token push non valido'});
-   if(body.channel!==undefined && !['android','web'].includes(body.channel))return json(res,400,{success:false,message:'Canale non valido'});
    const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(body.token).digest('hex');
-   await getFirestore().collection('runnerPulsePush').doc(user.uid).collection('devices').doc(id).set({token:body.token,channel:body.channel==='android'?'android':'web',updatedAt:new Date(),enabled:true},{merge:true});
+   await getFirestore().collection('runnerPulsePush').doc(user.uid).collection('devices').doc(id).set({token:body.token,updatedAt:new Date(),enabled:true},{merge:true});
    return json(res,200,{success:true});
   }catch(error){console.error('Push subscribe:',error.message);return json(res,500,{success:false,message:'Registrazione notifica non riuscita'});}
  }
@@ -938,7 +775,7 @@ async function weeklyPushRoute(req,res,pathname){
    const owner=await getAuth().getUserByEmail(OWNER_EMAIL);
    const db=getFirestore();const root=db.collection('runnerPulsePush').doc(owner.uid);
    const snap=await root.collection('devices').where('enabled','==',true).get();
-   const tokens=preferredPushTokens(snap.docs);
+   const tokens=[...new Set(snap.docs.map(d=>d.data().token).filter(Boolean))];
    if(!tokens.length)return json(res,409,{success:false,message:'Nessun telefono registrato. Premi prima Attiva notifiche Coach.'});
    const throttle=root.collection('settings').doc('testThrottle');
    const allowed=await db.runTransaction(async tx=>{
@@ -982,7 +819,7 @@ async function weeklyPushRoute(req,res,pathname){
    const report=await generateWeeklyCoachReport(owner.uid,week);
    await run.set({status:'report_ready',reportId:report.messageId,activitiesCount:report.activitiesCount},{merge:true});
    const snap=await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').where('enabled','==',true).get();
-   const tokens=preferredPushTokens(snap.docs);
+   const tokens=snap.docs.map(d=>d.data().token).filter(Boolean);
    let delivered=0,failed=0;
    for(let i=0;i<tokens.length;i+=500){
     const batch=tokens.slice(i,i+500);
@@ -999,117 +836,12 @@ async function weeklyPushRoute(req,res,pathname){
 }
 
 http.createServer(async(req,res)=>{
-  if(req.url?.startsWith('/api/health-connect/import')) {
-    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
-    const user=await garminGoogleUser(req);
-    if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
-    try {
-      const body=await readJsonBody(req,180000);
-      if(!Array.isArray(body.records)||body.records.length>300)return json(res,400,{success:false,message:'Elenco attività non valido'});
-      const db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
-      const health=root.collection('healthConnectActivities');
-      let imported=0,duplicates=0,skipped=0;
-      for(const r of body.records){
-        if(typeof r?.id!=='string'||r.id.length<5||r.id.length>200||typeof r.sourcePackage!=='string'||r.sourcePackage.length>150) {skipped++;continue;}
-        const start=Number(r.start),end=Number(r.end),kind=Number(r.exerciseType);
-        if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||end<=start||end-start>86400000||start>Date.now()+3600000||start<Date.now()-35*86400000||!Number.isInteger(kind)){skipped++;continue;}
-        const key=createHash('sha256').update(r.sourcePackage+'\0'+r.id).digest('hex');
-        const ref=health.doc(key);
-        if((await ref.get()).exists){duplicates++;continue;}
-        // Compare Garmin activity timestamps; never overwrite Garmin records.
-        const sec=Math.floor(start/1000),duration=(end-start)/1000;
-        const near=await root.collection('activities').where('summary.startTimeInSeconds','>=',sec-90).where('summary.startTimeInSeconds','<=',sec+90).limit(30).get();
-        const match=near.docs.find(d=>{const a=d.data()?.summary||{};return Math.abs(Number(a.durationInSeconds)-duration)<Math.max(30,duration*.03);});
-        await ref.create({source:'health-connect',sourcePackage:r.sourcePackage,recordId:r.id,startTimeInSeconds:sec,durationInSeconds:duration,exerciseType:kind,title:String(r.title||'').slice(0,120),duplicateOfGarminId:match?.id||null,createdAt:Date.now()});
-        if(match)duplicates++;else imported++;
-      }
-      return json(res,200,{success:true,imported,duplicates,skipped,total:body.records.length,message:'Sessioni Health Connect registrate. Le attività Garmin non sono state modificate.'});
-    }catch(e){console.error('Health Connect import:',e.message);return json(res,e.status||500,{success:false,message:'Importazione Health Connect non riuscita'});}
-  }
-  if(req.url?.startsWith('/api/mobile-auth/')){const pathname=new URL(req.url,'http://localhost').pathname;await mobileAuthRoute(req,res,pathname);return;}
   if(req.url?.startsWith('/api/garmin/webhook/')){let webhookPath;try{webhookPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await receiveGarminWebhook(req,res,webhookPath);return;}
   if(req.url?.startsWith('/api/push/')){let pushPath;try{pushPath=new URL(req.url,'http://localhost').pathname;}catch{return json(res,400,{message:'URL non valido'});}await weeklyPushRoute(req,res,pushPath);return;}
   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
   // Personal API ritirata: non effettuare piu richieste verso i vecchi endpoint.
   if (['/api/garmin/health-daily','/api/garmin/check-new','/api/garmin/sync-status','/api/garmin/sync-step','/api/garmin/test','/api/garmin/activities','/api/garmin/activity-detail'].includes(pathname)) {
     return json(res,410,{success:false,message:'La vecchia Garmin Personal API e stata rimossa. Usa Garmin OAuth ufficiale o importa FIT/TCX/ZIP.'});
-  }
-  if(pathname==='/api/sleep/week'){
-    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
-    const user=await garminGoogleUser(req);
-    if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
-    try{
-      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('sleeps').orderBy('receivedAt','desc').limit(100).get();
-      const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
-      const localDate=value=>{const x=Object.fromEntries(formatter.formatToParts(value).map(p=>[p.type,p.value]));return `${x.year}-${x.month}-${x.day}`;};
-      const today=localDate(new Date()),dates=[];
-      for(let i=6;i>=0;i--){const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);dates.push(d.toISOString().slice(0,10));}
-      const byDate=new Map();
-      for(const doc of snapshot.docs){
-        const data=doc.data()?.data;if(!data||typeof data!=='object')continue;
-        const start=Number(data.startTimeInSeconds??data.sleepStartTimestampGMT);
-        const date=(typeof data.calendarDate==='string'&&/^\d{4}-\d{2}-\d{2}/.test(data.calendarDate))?data.calendarDate.slice(0,10):(Number.isFinite(start)&&start>0?localDate(new Date(start*(start>1e11?1:1000))):null);
-        if(!dates.includes(date))continue;
-        const raw=data.durationInSeconds??data.sleepTimeSeconds??data.sleepDurationInSeconds??data.totalSleepSeconds;
-        const seconds=Number(raw);
-        if(raw===undefined||raw===null||!Number.isFinite(seconds)||seconds<0||seconds>86400)continue;
-        const scoreRaw=data.sleepScores?.overall?.value??data.sleepScores?.overallScore??data.sleepScore??data.overallSleepScore;
-        const score=scoreRaw!==undefined&&scoreRaw!==null&&Number.isInteger(Number(scoreRaw))&&Number(scoreRaw)>=0&&Number(scoreRaw)<=100?Number(scoreRaw):null;
-        // Stima trasparente Runner Pulse: nessun punteggio Garmin inventato.
-        const numeric=key=>{const v=data[key];return v===null||v===undefined?null:(Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=86400?Number(v):null);};
-        const deep=numeric('deepSleepDurationInSeconds');
-        const rem=numeric('remSleepInSeconds');
-        const awake=numeric('awakeDurationInSeconds');
-        const light=numeric('lightSleepDurationInSeconds');
-        let coachScore=null,coachJudgement=null,coachComment=null;
-        // Richiediamo le tre fasi e la veglia: se mancanti, nessuna valutazione fittizia.
-        if(seconds>0&&deep!==null&&rem!==null&&awake!==null&&light!==null){
-          const asleep=deep+rem+light;
-          if(asleep>0&&asleep<=86400&&Math.abs(asleep-seconds)<=5400){
-            const hours=asleep/3600,deepPct=deep/asleep,remPct=rem/asleep;
-            const efficiency=asleep/(asleep+awake||1);
-            const durationScore=Math.max(0,100-Math.abs(hours-8)*16);
-            const deepScore=Math.max(0,100-Math.abs(deepPct-0.18)*240);
-            const remScore=Math.max(0,100-Math.abs(remPct-0.22)*200);
-            const efficiencyScore=Math.min(100,Math.max(0,(efficiency-0.6)/0.35*100));
-            coachScore=Math.round(Math.max(0,Math.min(100,durationScore*.50+deepScore*.20+remScore*.15+efficiencyScore*.15)));
-            coachJudgement=coachScore>=85?'Ottimo':coachScore>=70?'Buono':coachScore>=55?'Discreto':'Scarso';
-            const details=[];
-            if(hours<7)details.push('La durata del sonno è sotto le 7 ore');
-            else if(hours>=7&&hours<=9)details.push('La durata del sonno è in un intervallo favorevole al recupero');
-            else details.push('La durata del sonno è superiore alle 9 ore');
-            if(efficiency<0.85)details.push('sono presenti periodi di veglia significativi');
-            else details.push('i periodi di veglia risultano contenuti');
-            coachComment=details.join('; ')+'. È una stima basata sulle fasi del sonno, non una diagnosi né un punteggio Garmin.';
-          }
-        }
-        const received=Number(doc.data().receivedAt)||0;
-        if(!byDate.has(date)||received>byDate.get(date).received)byDate.set(date,{seconds,score,coachScore,coachJudgement,coachComment,received});
-      }
-      return json(res,200,{success:true,days:dates.map(date=>({date,seconds:byDate.get(date)?.seconds??null,score:byDate.get(date)?.score??null,coachScore:byDate.get(date)?.coachScore??null,coachJudgement:byDate.get(date)?.coachJudgement??null,coachComment:byDate.get(date)?.coachComment??null})),source:'garmin-official-push'});
-    }catch(error){console.error('Sonno settimanale:',error.message);return json(res,503,{success:false,message:'Sonno temporaneamente non disponibile'});}
-  }
-  // I passi Health Connect sono letti dal dispositivo: salvali per il Coach dello stesso UID.
-  if(pathname==='/api/health-connect/steps-sync'){
-    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
-    const user=await garminGoogleUser(req);
-    if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
-    try{
-      const body=await readJsonBody(req);
-      const days=body?.days;
-      if(!Array.isArray(days)||days.length!==7)return json(res,400,{success:false,message:'Settimana non valida'});
-      const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
-      const parts=Object.fromEntries(formatter.formatToParts(new Date()).map(x=>[x.type,x.value]));
-      const today=`${parts.year}-${parts.month}-${parts.day}`;
-      const expected=[];
-      for(let i=6;i>=0;i--){const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);expected.push(d.toISOString().slice(0,10));}
-      for(let i=0;i<7;i++){
-        const day=days[i];
-        if(!day||day.date!==expected[i]||!(day.steps===null||(Number.isSafeInteger(day.steps)&&day.steps>=0&&day.steps<=200000)))return json(res,400,{success:false,message:'Dati passi non validi'});
-      }
-      await getFirestore().collection('runnerPulseHealthConnectSteps').doc(user.uid).set({days:days.map(d=>({date:d.date,steps:d.steps})),today,updatedAt:Date.now(),source:'health-connect-native'});
-      return json(res,200,{success:true});
-    }catch(error){console.error('Health Connect steps sync:',error.message);return json(res,503,{success:false,message:'Sincronizzazione passi non disponibile'});}
   }
   if(pathname==='/api/steps/week'){
     if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
@@ -1118,37 +850,30 @@ http.createServer(async(req,res)=>{
     try{
       // Cache breve per utente: evita riletture di 250 documenti ad ogni ritorno nella Home.
       const cached=stepsWeekCache.get(user.uid);
-      if(cached&&cached.expires>Date.now()&&cached.payload.recordsWithSteps>0)return json(res,200,cached.payload);
-      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('dailies').orderBy('receivedAt','desc').limit(200).get();
+      if(cached&&cached.expires>Date.now())return json(res,200,cached.payload);
+      const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('dailies').orderBy('receivedAt','desc').limit(60).get();
       const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
       const parts=date=>{const v=Object.fromEntries(formatter.formatToParts(date).map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`;};
       const today=parts(new Date());const dates=[];
       for(let i=6;i>=0;i--){const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);dates.push(d.toISOString().slice(0,10));}
       const byDate=new Map();
-      let dailyRecordsWithStepField=0;
-      let dailyRecordsWithValidStepCount=0;
-      let newestStoredDate=null;
       for(const doc of snapshot.docs){
         const record=doc.data()?.data;if(!record||typeof record!=='object')continue;
         let date=typeof record.calendarDate==='string'?record.calendarDate.slice(0,10):null;
         if(!date&&Number.isFinite(Number(record.startTimeInSeconds)))date=parts(new Date(Number(record.startTimeInSeconds)*1000));
-        if(date&&(!newestStoredDate||date>newestStoredDate))newestStoredDate=date;
         if(!dates.includes(date))continue;
         // Garmin dailies: steps is the daily step count. Never infer steps from distance or activities.
         const raw=record.steps??record.totalSteps;
-        if(raw!==null&&raw!==undefined&&raw!=='')dailyRecordsWithStepField++;
         if(raw===null||raw===undefined||raw==='')continue;
         const count=Number(raw);
         if(!Number.isSafeInteger(count)||count<0||count>200000)continue;
-        dailyRecordsWithValidStepCount++;
         const existing=byDate.get(date);
         const timestamp=Number(record.startTimeInSeconds)||0;
         if(!existing||timestamp>existing.timestamp)byDate.set(date,{count,timestamp});
       }
-      console.info('Passi settimanali diagnostica:',JSON.stringify({uidSuffix:user.uid.slice(-4),documents:snapshot.size,validDays:byDate.size,newestStoredDate,requestedToday:today}));
-      const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size,recordsWithSteps:byDate.size,diagnostics:{dailyRecordsWithStepField,dailyRecordsWithValidStepCount,newestStoredDate,requestedToday:today}};
+      const payload={success:true,days:dates.map(date=>({date,steps:byDate.get(date)?.count??null})),source:'garmin-official-push',receivedDailyRecords:snapshot.size,recordsWithSteps:byDate.size};
       if(stepsWeekCache.size>200)stepsWeekCache.clear();
-      stepsWeekCache.set(user.uid,{expires:Date.now()+(byDate.size?5*60*1000:30*1000),payload});
+      stepsWeekCache.set(user.uid,{expires:Date.now()+15*60*1000,payload});
       return json(res,200,payload);
     }catch(error){console.error('Passi settimanali:',error.message);return json(res,503,{success:false,message:'Passi temporaneamente non disponibili'});}
   }
@@ -1156,27 +881,6 @@ http.createServer(async(req,res)=>{
   if(pathname==='/api/garmin/official-sync-status'){await officialSyncStatus(req,res);return;}
   if(pathname==='/api/garmin/official-verify'){await officialVerifyIdentity(req,res);return;}
   if(['/api/garmin/account-status','/api/garmin/connect','/api/garmin/callback','/api/garmin/disconnect'].includes(pathname)){await garminOAuthRoutes(req,res,pathname);return;}
-
-  // Ultimo VO2 max esplicito ricevuto da Garmin; non usare stime dalle corse.
-  if(pathname==='/api/garmin/vo2-latest'){
-    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
-    const user=await garminGoogleUser(req);
-    if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
-    try{
-      const root=getFirestore().collection('runnerPulseGarminHealth').doc(user.uid);
-      let best=null;
-      for(const section of ['userMetrics','readiness','readlines']){
-        const snap=await root.collection(section).orderBy('receivedAt','desc').limit(25).get();
-        for(const doc of snap.docs){
-          const stored=doc.data(), value=findExplicitGarminVo2(stored.data);
-          if(value===null)continue;
-          const receivedAt=Number(stored.receivedAt)||0;
-          if(!best||receivedAt>best.receivedAt)best={value,receivedAt,section};
-        }
-      }
-      return json(res,200,{success:true,value:best?.value??null,receivedAt:best?.receivedAt??null,source:best?'garmin-official-push':null});
-    }catch(error){console.error('VO2 Garmin:',error.message);return json(res,503,{success:false,message:'VO2 max temporaneamente non disponibile'});}
-  }
   if(pathname==='/api/garmin/vo2-check'){await garminVo2Check(req,res);return;}
   // Rilettura dello storico già sincronizzato: non richiede nuove chiamate a Garmin.
   // Accesso limitato al proprietario e paginazione per evitare risposte troppo grandi.
@@ -1306,7 +1010,7 @@ http.createServer(async(req,res)=>{
       const officialDetail=Array.isArray(official)?official.find(x=>String(x?.activityId)===id):official;
       const candidates=[officialDetail?.laps,record.laps,record.lapDTOs,record.lapSummaries,summary.laps,summary.lapDTOs,summary.lapSummaries];
       const expected=Number(summary.lapCount ?? record.lapCount);
-      const validLap=x=>{if(!x||typeof x!=='object')return false;const distance=x.distance??x.distanceMeters;const duration=x.duration??x.elapsedDuration??x.movingDuration;return distance!=null&&duration!=null&&Number.isFinite(Number(distance))&&Number(distance)>=0&&Number.isFinite(Number(duration))&&Number(duration)>=0;};
+      const validLap=x=>x && typeof x==='object' && Number(x.distance ?? x.distanceMeters)>0 && Number(x.duration ?? x.elapsedDuration ?? x.movingDuration)>0;
       let laps=candidates.find(v=>Array.isArray(v)&&v.length&&v.every(validLap)&&(!Number.isInteger(expected)||expected<=0||v.length===expected))||[];
       // Nessuna approssimazione: se sono dichiarati 18 giri, non mostrare 3 riepiloghi.
 
@@ -1350,20 +1054,6 @@ http.createServer(async(req,res)=>{
       else if(pathname==='/api/garmin/activities'){const activities=await getGarminActivities();json(res,200,{success:true,count:activities.length,activities});}
       else{let body;try{body=await readJsonBody(req);}catch(error){json(res,error.status||400,{success:false,message:error.message});return;}const id=String(body?.activityId??'');if(!/^\d{1,20}$/.test(id)){json(res,400,{success:false,message:'activityId non valido: è richiesto un identificativo numerico Garmin.'});return;}const result=await getGarminActivityDetail(id);json(res,200,{success:true,...result});}
     }catch(error){console.error('Errore Garmin:',error.message);json(res,502,{success:false,message:'Richiesta Garmin non riuscita. Controlla i log di Render per il codice di errore.'});}
-    return;
-  }
-  // Digital Asset Links: verifica crittografica tra il sito e l'APK Android.
-  // Non pubblicare un'impronta fittizia: compilare il JSON con SHA-256 reale.
-  if(pathname==='/.well-known/assetlinks.json'){
-    if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);res.end('Method not allowed');return;}
-    try{
-      const raw=await readFile(path.join(base,'public','.well-known','assetlinks.json'),'utf8');
-      const links=JSON.parse(raw);
-      const valid=Array.isArray(links)&&links.some(x=>x?.relation?.includes('delegate_permission/common.handle_all_urls')&&x?.target?.namespace==='android_app'&&x?.target?.package_name==='com.runnerpulse.connect'&&Array.isArray(x?.target?.sha256_cert_fingerprints)&&x.target.sha256_cert_fingerprints.some(s=>/^(?:[A-Fa-f0-9]{2}:){31}[A-Fa-f0-9]{2}$/.test(s)));
-      if(!valid){res.writeHead(503,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});res.end('Android certificate fingerprint not configured');return;}
-      res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
-      res.end(req.method==='HEAD'?undefined:JSON.stringify(links));
-    }catch(e){console.error('Digital Asset Links:',e.message);res.writeHead(503);res.end('Digital Asset Links unavailable');}
     return;
   }
   if(req.method!=='GET'&&req.method!=='HEAD'){json(res,405,{message:'Method not allowed'});return;}
