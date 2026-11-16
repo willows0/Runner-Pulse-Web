@@ -20,14 +20,15 @@ if(coach){
  history.parentNode.insertBefore(resetCoach,history);
 
  let version=0, busy=false;
- function scrollToLatest(){requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;});});}
+ function scrollToLatest(){requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;});}
+ function showAnswerStart(row){requestAnimationFrame(()=>{history.scrollTop=Math.max(0,row.offsetTop-history.offsetTop-12);});}
  // Ricalcola la posizione quando cambia l'altezza del campo o della chat.
- if(typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>{if(coach.classList.contains('active'))scrollToLatest();}).observe(history);}
+ // Non spostare la risposta mentre cambia l'altezza della chat o si apre la tastiera.
  // Anche quando la scheda viene riaperta, mostra la fine della conversazione.
  document.querySelectorAll('nav button[data-page="coach"]').forEach(button=>button.addEventListener('click',()=>{scrollToLatest();setTimeout(scrollToLatest,80);}));
  async function api(payload){const user=auth.currentUser;if(!user)throw new Error('Accedi con Google per parlare con il Coach.');const token=await user.getIdToken();const r=await fetch('/api/coach/chat',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.success)throw new Error(data.message||`Errore HTTP ${r.status}`);return data;}
- function bubble(role,message){const user=role==='user';const row=document.createElement('div');row.className='rp-chat-row '+(user?'rp-chat-user':'rp-chat-assistant');if(!user){const avatar=document.createElement('img');avatar.src='/coach-robot.png';avatar.alt='';avatar.className='rp-chat-avatar';row.append(avatar);}const wrap=document.createElement('div');wrap.className='rp-chat-bubble';const p=document.createElement('p');p.textContent=message;wrap.append(p);row.append(wrap);history.append(row);scrollToLatest();}
- async function loadHistory(){const current=++version;status.textContent='Caricamento conversazione…';try{const data=await api({action:'history'});if(current!==version)return;history.replaceChildren();for(const m of data.messages||[])bubble(m.role,m.text);status.textContent='';scrollToLatest();}catch(e){if(current===version)status.textContent=e.message;}}
+ function bubble(role,message,{scroll=true}={}){const user=role==='user';const row=document.createElement('div');row.className='rp-chat-row '+(user?'rp-chat-user':'rp-chat-assistant');if(!user){const avatar=document.createElement('img');avatar.src='/coach-robot.png';avatar.alt='';avatar.className='rp-chat-avatar';row.append(avatar);}const wrap=document.createElement('div');wrap.className='rp-chat-bubble';const p=document.createElement('p');p.textContent=message;wrap.append(p);row.append(wrap);history.append(row);if(scroll){if(user)scrollToLatest();else showAnswerStart(row);}return row;}
+ async function loadHistory(){const current=++version;status.textContent='Caricamento conversazione…';try{const data=await api({action:'history'});if(current!==version)return;history.replaceChildren();for(const m of data.messages||[])bubble(m.role,m.text,{scroll:false});status.textContent='';scrollToLatest();}catch(e){if(current===version)status.textContent=e.message;}}
  onAuthStateChanged(auth,user=>{if(user)void loadHistory();else{version++;history.replaceChildren();status.textContent='Accedi con Google per utilizzare il Coach.';}});
  resetCoach.addEventListener('click',async()=>{
    if(busy)return;
@@ -38,7 +39,7 @@ if(coach){
    catch(e){status.textContent='Cancellazione non riuscita: '+e.message;}
    finally{busy=false;resetCoach.disabled=false;send.disabled=false;}
  });
- form.addEventListener('submit',async e=>{e.preventDefault();if(busy)return;const message=question.value.trim();if(!message)return;busy=true;send.disabled=true;status.textContent='Il Coach sta rispondendo…';suggestions.hidden=true;try{const data=await api({action:'chat',message});bubble('user',message);bubble('assistant',data.answer);question.value='';status.textContent='';}catch(err){status.textContent=err.message;}finally{busy=false;send.disabled=false;question.focus();}});
+ form.addEventListener('submit',async e=>{e.preventDefault();if(busy)return;const message=question.value.trim();if(!message)return;busy=true;send.disabled=true;status.textContent='Il Coach sta rispondendo…';suggestions.hidden=true;try{const data=await api({action:'chat',message});bubble('user',message,{scroll:false});question.value='';question.blur();bubble('assistant',data.answer);status.textContent='';}catch(err){status.textContent=err.message;}finally{busy=false;send.disabled=false;}});
  question.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
  quick.addEventListener('click',()=>{suggestions.hidden=!suggestions.hidden;});
  suggestions.querySelectorAll('[data-prompt]').forEach(b=>b.addEventListener('click',()=>{question.value=b.dataset.prompt;suggestions.hidden=true;question.focus();}));
