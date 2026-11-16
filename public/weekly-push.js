@@ -74,7 +74,7 @@ async function refreshPushState(){
  try{
   if(nativeBridge())return await nativePushState();
   if(!('Notification' in window)||Notification.permission!=='granted'||!await isSupported()){
-   if(seq===refreshSequence){updateButton(false);say(Notification.permission==='denied'?'Notifiche bloccate nelle impostazioni del browser.':'');}
+   if(seq===refreshSequence){updateButton(false);say(('Notification' in window && window.Notification.permission==='denied')?'Notifiche bloccate nelle impostazioni del browser.':'');}
    return false;
   }
   const user=await authenticatedUser();
