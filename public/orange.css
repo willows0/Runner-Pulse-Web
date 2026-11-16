@@ -497,3 +497,12 @@ body > nav[aria-label="Navigazione"],#rp-detail-bottom-nav{box-sizing:border-box
 body > nav[aria-label="Navigazione"] > button,#rp-detail-bottom-nav > button{min-width:0!important;width:100%!important;max-width:100%!important;padding-left:2px!important;padding-right:2px!important;overflow:hidden!important;text-align:center!important;white-space:nowrap!important}
 body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > button span{max-width:100%!important}
 @media(max-width:380px){body > header.rp-global-banner .rp-coach-brand{font-size:clamp(19px,5.1vw,25px)!important}}
+
+/* Coach mobile: messaggi leggibili e scorrimento interno senza ritagli. */
+#coach .rp-coach-chat{width:100%!important;max-width:100%!important;min-width:0!important;height:calc(100dvh - 330px)!important;min-height:260px!important;max-height:none!important;padding:12px 12px 24px!important;overflow-y:auto!important;overflow-x:hidden!important;box-sizing:border-box!important;scroll-padding-top:12px!important;scroll-padding-bottom:24px!important;}
+#coach .rp-coach-chat::after{display:none!important;}
+#coach .rp-chat-row{width:100%!important;max-width:100%!important;min-width:0!important;flex-shrink:0!important;box-sizing:border-box!important;}
+#coach .rp-chat-assistant .rp-chat-bubble{flex:1 1 auto!important;max-width:calc(100% - 48px)!important;min-width:0!important;box-sizing:border-box!important;}
+#coach .rp-chat-user .rp-chat-bubble{max-width:92%!important;box-sizing:border-box!important;}
+#coach .rp-chat-bubble p{overflow-wrap:anywhere!important;white-space:pre-wrap!important;}
+@media(max-width:420px){#coach .rp-chat-avatar{width:28px!important;height:28px!important;}#coach .rp-chat-assistant .rp-chat-bubble{max-width:calc(100% - 38px)!important;}}

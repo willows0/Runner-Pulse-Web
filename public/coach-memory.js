@@ -21,7 +21,7 @@ if(coach){
 
  let version=0, busy=false;
  function scrollToLatest(){requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;});}
- function showAnswerStart(row){requestAnimationFrame(()=>{history.scrollTop=Math.max(0,row.offsetTop-history.offsetTop-12);});}
+ function showAnswerStart(row){requestAnimationFrame(()=>{history.scrollTop=Math.max(0,row.offsetTop-history.offsetTop-10);});}
  // Ricalcola la posizione quando cambia l'altezza del campo o della chat.
  // Non spostare la risposta mentre cambia l'altezza della chat o si apre la tastiera.
  // Anche quando la scheda viene riaperta, mostra la fine della conversazione.
