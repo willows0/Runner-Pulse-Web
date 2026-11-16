@@ -487,3 +487,13 @@ body > header.rp-global-banner .rp-coach-brand { margin-left:42px; }
 #home .rp-vo2-official-value{display:flex;flex-direction:column;align-items:flex-end}
 #home .rp-vo2-official-value strong{line-height:1.1}
 #home .rp-vo2-official-value small{font-size:11px;color:#cad6e5}
+
+
+/* Runner Pulse 2026-11-16: mobile header/navigation alignment */
+html,body{max-width:100%;overflow-x:clip}
+body > header.rp-global-banner{width:100%!important;max-width:100vw!important;box-sizing:border-box!important;min-height:84px!important;padding-top:24px!important;padding-bottom:24px!important}
+body > header.rp-global-banner .rp-coach-brand{max-width:calc(100vw - 105px);overflow-wrap:normal;white-space:nowrap;font-size:clamp(21px,5.2vw,30px)!important}
+body > nav[aria-label="Navigazione"],#rp-detail-bottom-nav{box-sizing:border-box!important;width:100%!important;max-width:100vw!important;left:0!important;right:0!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:0!important;align-items:center!important;overflow:hidden!important;padding-left:4px!important;padding-right:4px!important}
+body > nav[aria-label="Navigazione"] > button,#rp-detail-bottom-nav > button{min-width:0!important;width:100%!important;max-width:100%!important;padding-left:2px!important;padding-right:2px!important;overflow:hidden!important;text-align:center!important;white-space:nowrap!important}
+body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > button span{max-width:100%!important}
+@media(max-width:380px){body > header.rp-global-banner .rp-coach-brand{font-size:clamp(19px,5.1vw,25px)!important}}
