@@ -1,0 +1,7 @@
+Runner Pulse — verifica VO₂ max Garmin
+
+Carica su GitHub server.js nella radice e public/index.html, public/dashboard.js, public/login.js.
+
+Nella Home premi "Verifica VO₂ max Garmin". Cerca valori espliciti nei dati Garmin già archiviati e verifica l’accessibilità di un file FIT. La verifica FIT NON estrae ancora il VO₂ max dal file: non è garantito che il 51 sia recuperabile.
+
+Non usa valori fittizi, non altera sincronizzazione e non cambia autenticazione.

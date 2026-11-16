@@ -1,0 +1,7 @@
+Runner Pulse — Home premium blu notte e arancione
+
+Aggiorna su GitHub public/index.html, public/orange.css, public/login.js.
+L’orologio Garmin e il suo pulsante di sincronizzazione sono ripristinati in evidenza nella Home, con gli stessi identificativi e gestori di eventi.
+Il server conserva la sincronizzazione incrementale e lo storico; non è stato modificato.
+I dati salute restano solo quelli reali Garmin.
+Attendere deploy Render e verificare su dispositivo.

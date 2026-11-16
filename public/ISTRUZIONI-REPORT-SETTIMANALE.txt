@@ -1,0 +1,17 @@
+RUNNER PULSE - REPORT SETTIMANALE COACH
+
+Sostituisci su GitHub:
+- server.js
+- coach-api.js
+- public/weekly-push.js
+- aggiungi .github/workflows/weekly-coach.yml
+
+CONFIGURAZIONE NECESSARIA:
+1. Su Render, Environment: crea RUNNER_PULSE_CRON_SECRET con un valore casuale lungo e segreto (NON incollarlo in chat).
+2. Su GitHub, repository > Settings > Secrets and variables > Actions > New repository secret:
+   RUNNER_PULSE_CRON_SECRET = lo stesso valore di Render
+   RUNNER_PULSE_URL = URL pubblico HTTPS del servizio Render, senza slash finale.
+3. Abilita GitHub Actions nel repository. Il workflow parte domenica alle 18 e 19 UTC; il server accetta soltanto le 20:00 Europe/Rome e blocca i duplicati.
+4. Per la prima verifica controlla Actions e Logs di Render domenica alle 20:00; i cron GitHub possono subire ritardi e Render free puo impiegare tempo a riattivarsi.
+
+Il server genera con Gemini un report usando solo le attivita Garmin archiviate tra lunedi e domenica, lo salva in Firestore come messaggio Coach, poi invia la notifica. Aprendo la notifica, la chat legge il report dalla cronologia. Non inviare la chiave privata Firebase o il cron secret.

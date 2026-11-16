@@ -1,0 +1,10 @@
+RUNNER PULSE — VERSIONE ACCESSO PUBBLICO (BETA)
+
+1. Sostituisci nel repository GitHub i file con quelli presenti in questo archivio, mantenendo la stessa struttura.
+2. Attendi che Render mostri Live.
+3. In Firebase Authentication controlla che Google sia attivato e che il dominio Render sia autorizzato.
+4. Prima di diffondere il link, controlla le regole Firestore: nega gli accessi diretti dal client alle raccolte runnerPulseCoach e runnerPulseGarmin; il server usa Firebase Admin e autentica le richieste. Verifica eventuali altre raccolte e regole.
+5. Prova con due account Google distinti su due browser o profili: ciascuno deve vedere soltanto la propria cronologia AI e i propri allenamenti. Verifica che il secondo account riceva 403 sulle API Garmin.
+6. Verifica privacy policy, informativa AI, costi e limiti API Gemini, monitoraggio abusi e cancellazione dati prima del lancio pubblico.
+
+NOTE: gli allenamenti manuali sono salvati nel localStorage del dispositivo, separati per UID Firebase; NON sono sincronizzati tra dispositivi. La cronologia AI è salvata su Firestore per UID. Garmin è riservato all’account proprietario; non è disponibile il collegamento Garmin individuale. Questo pacchetto è una beta da testare, non una certificazione di sicurezza o conformità privacy.

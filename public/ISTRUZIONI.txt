@@ -1,0 +1,19 @@
+RUNNER PULSE - ALLENATORE AI
+
+1. Su GitHub, nella cartella principale del progetto (accanto a server.js), carica il NUOVO file coach-api.js.
+2. Dentro public/ sostituisci SOLO login.js con public/login.js di questo ZIP.
+3. In server.js, aggiungi in alto con gli altri import:
+   import { handleCoachAI } from './coach-api.js';
+4. In server.js, dentro http.createServer(async(req,res)=>{, SUBITO DOPO la riga:
+   let pathname;try{pathname=new URL(req.url,'http://localhost').pathname;}catch{json(res,400,{message:'URL non valido'});return;}
+   aggiungi questa riga:
+   if(pathname==='/api/coach/chat'){await handleCoachAI(req,res,authorized);return;}
+5. Salva e attendi Render Live. OPENAI_API_KEY deve essere impostata in Render Environment.
+6. Apri Runner Pulse -> Coach -> Allenatore AI.
+
+NON modificare app.js, index.html, server Garmin o i CSS.
+NON mettere coach-api.js nella cartella public: contiene la logica server.
+Non pubblicare OPENAI_API_KEY su GitHub.
+
+Nota: le domande e i dati selezionati vengono inviati a OpenAI per generare la risposta.
+Il codice imposta store:false per la Responses API; non memorizza una cronologia sul server.

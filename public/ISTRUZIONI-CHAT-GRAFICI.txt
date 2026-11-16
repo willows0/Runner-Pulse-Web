@@ -1,0 +1,11 @@
+Runner Pulse - chat e grafici blu
+
+Sostituisci su GitHub questi quattro file in public/:
+- orange.css
+- coach-memory.js
+- app.js
+- login.js
+
+La chat Coach scorre internamente e si apre sugli ultimi messaggi.
+Grafici Attivita e grafici dettaglio con palette Home.
+Nessuna modifica a server.js, Firebase o dati Garmin.

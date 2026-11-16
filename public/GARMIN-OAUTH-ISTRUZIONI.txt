@@ -1,0 +1,11 @@
+RUNNER PULSE — GARMIN OAUTH 2.0
+
+1. Caricare i file del progetto su GitHub mantenendo le cartelle.
+2. Render Environment: GARMIN_CLIENT_ID e GARMIN_CLIENT_SECRET (già configurati dall’utente). Non inserirli nel repository.
+3. Garmin Developer Portal: Redirect URI ESATTO https://runner-pulse-web.onrender.com/api/garmin/callback
+4. Attendere Render Live, entrare con Google e aprire Profilo > Garmin.
+5. L’interruttore diventa acceso solo dopo il callback Garmin riuscito.
+
+NOTA: l’OAuth Business Garmin non sostituisce la Personal API e non importa automaticamente lo storico. Starter Business riceve i nuovi dati con webhook/push, non tramite l’endpoint Personal API. L’integrazione webhook non è inclusa in questo aggiornamento.
+
+SICUREZZA: i token Garmin sono cifrati in Firestore con chiave derivata da GARMIN_CLIENT_SECRET. Se si cambia il secret, occorre ricollegare Garmin. La revoca richiede una risposta positiva dal servizio Garmin.

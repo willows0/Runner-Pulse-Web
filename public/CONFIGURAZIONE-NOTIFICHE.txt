@@ -1,0 +1,9 @@
+RUNNER PULSE — NOTIFICHE COACH DOMENICA 20:00 (ITALIA)
+
+1. Firebase Console > Impostazioni progetto > Cloud Messaging > Configurazione Web Push: crea/copia la CHIAVE PUBBLICA VAPID. Inseriscila in public/index.html al posto della stringa vuota in window.RUNNER_PULSE_VAPID_KEY. La chiave pubblica non è un segreto.
+2. Firebase Cloud Messaging API (V1) deve essere abilitata per il progetto runnerpulse. Il server usa le credenziali Firebase Admin già presenti su Render.
+3. Render: imposta RUNNER_PULSE_CRON_SECRET come stringa casuale lunga e privata (NON in GitHub).
+4. Configura un servizio cron affidabile che invii POST a https://TUO-SITO.onrender.com/api/push/weekly con header X-Cron-Secret: [segreto]. Programma: domenica 19:00 UTC durante l'ora solare italiana, 18:00 UTC durante l'ora legale. È più semplice far chiamare l'endpoint ogni 5 minuti: il server accetta soltanto domenica ore 20:00 Europe/Rome ed evita doppie notifiche con Firestore. Assicurati che l'istanza Render sia raggiungibile/attiva.
+5. Sul telefono Android, apri Runner Pulse in Chrome > Profilo > Attiva notifiche Coach > Consenti. La notifica arriverà a Chrome chiuso, purché notifiche e connessione siano abilitate. Il sistema operativo può ritardare la consegna.
+6. La notifica NON contiene statistiche inventate. Toccandola si apre Coach con la domanda sul resoconto già pronta; premi Invia per far analizzare al Coach i dati reali. Non viene generato automaticamente un resoconto prima del click.
+7. Non è ancora attiva finché non completi VAPID, cron e consenso sul telefono.

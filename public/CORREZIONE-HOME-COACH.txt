@@ -1,0 +1,14 @@
+RUNNER PULSE - Correzione Home e Coach
+
+Su GitHub sostituire questi file nella cartella public:
+- index.html
+- orange.css
+- dashboard.js
+- login.js
+
+Restano invariati server.js, autenticazione, cronologia Coach e Garmin.
+Home: eliminate tutte le schede Benessere. Mantenuti orologio Garmin e pulsante sincronizzazione.
+VO2: stima prestazionale VDOT da gare degli ultimi 30 giorni, se presenti. Non e' un VO2 misurato.
+Coach: interfaccia piu' compatta e robottino non ritagliato.
+
+Il risultato va verificato dopo il deploy su Render.
