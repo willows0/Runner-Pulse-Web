@@ -12,6 +12,46 @@ const inactiveLabel='Attiva notifiche Coach';
 let enabled=false;
 let busy=false;
 let refreshSequence=0;
+let nativeToken='';
+const nativeBridge=()=>window.RunnerPulseHealthNative && typeof window.RunnerPulseHealthNative.requestPushToken==='function';
+function awaitNativeToken(requestPermission){
+ return new Promise((resolve,reject)=>{
+  let settled=false;
+  const timer=setTimeout(()=>finish(new Error('Android non ha risposto alla richiesta del token.')),18000);
+  function finish(err,token){if(settled)return;settled=true;clearTimeout(timer);window.removeEventListener('runnerpulse:native-push-token',receive);err?reject(err):resolve(token);}
+  function receive(event){const detail=event.detail||{};if(detail.token){nativeToken=detail.token;finish(null,detail.token);}else finish(new Error(detail.error||'Token Android non disponibile.'));}
+  window.addEventListener('runnerpulse:native-push-token',receive);
+  try{requestPermission?window.RunnerPulseHealthNative.requestPushToken():window.RunnerPulseHealthNative.requestPushStatusToken();}
+  catch(e){finish(e);}
+ });
+}
+async function nativePushState(){
+ if(!nativeBridge())return false;
+ const user=await authenticatedUser();
+ const token=await awaitNativeToken(false);
+ const response=await fetch('/api/push/status?token='+encodeURIComponent(token),{headers:{Authorization:'Bearer '+await user.getIdToken()},cache:'no-store'});
+ const data=await response.json();
+ if(!response.ok)throw new Error(data.message||'Verifica notifiche Android non riuscita.');
+ updateButton(data.enabled===true);
+ say(data.enabled?'Notifiche Android attivate':'Notifiche Android non attive.');
+ return data.enabled===true;
+}
+async function toggleNativePush(){
+ const user=await authenticatedUser();
+ if(enabled){
+  const token=nativeToken||await awaitNativeToken(false);
+  const response=await fetch('/api/push/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await user.getIdToken()},body:JSON.stringify({token})});
+  const data=await response.json();
+  if(!response.ok||!data.success)throw new Error(data.message||'Disattivazione non riuscita.');
+  updateButton(false);say('Notifiche Android disattivate');
+ }else{
+  const token=await awaitNativeToken(true);
+  const response=await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await user.getIdToken()},body:JSON.stringify({token,channel:'android'})});
+  const data=await response.json();
+  if(!response.ok||!data.success)throw new Error(data.message||'Registrazione Android non riuscita.');
+  updateButton(true);say('Notifiche Android attivate. Gli avvisi del browser non verranno duplicati.');
+ }
+}
 function updateButton(active){enabled=active;if(button){button.textContent=active?activeLabel:inactiveLabel;button.setAttribute('aria-pressed',String(active));}}
 async function authenticatedUser(){
  const user=getAuth(app).currentUser;
@@ -32,6 +72,7 @@ async function refreshPushState(){
  if(busy)return;
  if(button){button.disabled=true;button.textContent='Verifica notifiche…';}
  try{
+  if(nativeBridge())return await nativePushState();
   if(!('Notification' in window)||Notification.permission!=='granted'||!await isSupported()){
    if(seq===refreshSequence){updateButton(false);say(Notification.permission==='denied'?'Notifiche bloccate nelle impostazioni del browser.':'');}
    return false;
@@ -66,6 +107,7 @@ if(button)button.addEventListener('click',async()=>{
  if(busy)return;
  ++refreshSequence;busy=true;button.disabled=true;
  try{
+  if(nativeBridge()){await toggleNativePush();return;}
   if(!('serviceWorker' in navigator)||!('Notification' in window)||!await isSupported())throw new Error('Questo browser non supporta le notifiche push. Apri Runner Pulse in Chrome su Android.');
   const user=await authenticatedUser();
   if(enabled){
@@ -98,7 +140,7 @@ if(button)button.addEventListener('click',async()=>{
 let promptTimer=null;
 let promptOpen=false;
 async function offerNotificationsAfterLogin(){
- if(promptOpen || !getAuth(app).currentUser || !button)return;
+ if(promptOpen || !getAuth(app).currentUser || !button || nativeBridge())return;
  const uid=getAuth(app).currentUser.uid;
  const seenKey='runnerPulsePushOfferV3:'+uid;
  // Memorizza la scelta in modo persistente, non soltanto per la sessione.
