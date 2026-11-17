@@ -57,7 +57,7 @@
 <label>Livello<select name="level"><option value="beginner">Principiante</option><option value="intermediate">Intermedio</option><option value="advanced" selected>Avanzato</option></select></label>
 <label>Durata massima nei giorni feriali (minuti)<input name="weekdayMinutes" type="number" min="20" max="240" value="70"></label>
 <label>Fascia oraria preferita<select name="timePreference"><option value="evening">Sera</option><option value="morning">Mattina</option><option value="afternoon">Pomeriggio</option></select></label></div>
-<button type="button" id="rp-create-proposal">Prepara proposta con il Coach</button></form>
+<button type="button" id="rp-create-proposal" onclick="window.rpBuildPlan && window.rpBuildPlan()">Prepara proposta con il Coach</button></form>
 <p id="rp-program-status" role="status" aria-live="polite"></p></div>
 <div class="card rp-program-card"><h2>Google Calendar</h2><p>Con il tuo consenso Runner Pulse potrà cercare orari liberi e, dopo la tua approvazione, aggiungere gli allenamenti.</p><button id="rp-calendar-connect" type="button">Collega Google Calendar</button><p id="rp-calendar-status" class="note" role="status">Non collegato</p></div>
 <div id="rp-program-proposal" class="card rp-program-card" hidden><h2>Proposta del Coach</h2><p id="rp-program-description"></p><div id="rp-program-sessions"></div><div class="rp-program-actions"><button id="rp-program-replan" type="button">Ricalcola proposta</button><button id="rp-program-approve" type="button">Approva e salva</button></div><p id="rp-program-result" role="status"></p></div>
@@ -166,6 +166,53 @@ document.getElementById('rp-program-approve')?.addEventListener('click',()=>{if(
 showApproved();
 
 
+})();
+</script>
+<script>
+(function(){
+ function makePlan(){
+  var form=document.getElementById('rp-program-form'),msg=document.getElementById('rp-program-status');
+  try{
+   if(!form)throw Error('Modulo Programma non trovato');
+   var f=new FormData(form),count=Math.max(2,Math.min(6,Number(f.get('days'))||3));
+   var distance=f.get('distance')==='other'?Number(f.get('otherDistance')):Number(f.get('distance'));
+   if(!(distance>0)){msg.textContent='Inserisci una distanza valida.';return;}
+   var box=document.getElementById('rp-program-proposal'),list=document.getElementById('rp-program-sessions');
+   if(!box||!list)throw Error('Riquadro della proposta non trovato');
+   list.replaceChildren();
+   var days=count===2?[2,0]:count===3?[2,4,0]:count===4?[1,3,5,0]:count===5?[1,2,4,5,0]:[1,2,3,4,5,0];
+   var now=new Date(), pref=f.get('timePreference'),time=pref==='morning'?'07:00':pref==='afternoon'?'13:00':'18:30';
+   var sessions=[];
+   for(var w=0;w<4;w++)for(var i=0;i<days.length;i++){
+    var day=days[i],d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+((day-now.getDay()+7)%7||7)+w*7);
+    var date=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    var long=day===0,title=long?'Lungo facile':i===1?'Ritmo controllato':'Corsa facile';
+    var minutes=long?Math.min(120,60+w*10+(distance>=21?20:0)):Math.min(Number(f.get('weekdayMinutes'))||70,35+w*5+(i===1?10:0));
+    var item=document.createElement('div');item.className='rp-program-session';
+    var h=document.createElement('strong');h.textContent='Settimana '+(w+1)+' · '+title;item.appendChild(h);
+    var info=document.createElement('span');info.textContent='Proposta indicativa, da adattare ai tuoi dati reali';item.appendChild(info);
+    var fields=[['Data','date',date],['Ora','time',long?'09:00':time],['Durata (min)','number',String(minutes)]];
+    var record={title,date,time:long?'09:00':time,minutes};
+    fields.forEach(function(entry){var label=document.createElement('label');label.textContent=entry[0];var input=document.createElement('input');input.type=entry[1];input.value=entry[2];if(entry[1]==='number'){input.min='15';input.max='300';}input.addEventListener('change',function(){record[entry[1]==='number'?'minutes':entry[0]==='Data'?'date':'time']=entry[1]==='number'?Number(input.value):input.value;});label.appendChild(input);item.appendChild(label);});
+    sessions.push(record);list.appendChild(item);
+   }
+   document.getElementById('rp-program-description').textContent='Bozza di quattro settimane, '+count+' allenamenti a settimana. Modifica le sedute e approva quando sei soddisfatto.';
+   box.hidden=false;box.style.display='block';
+   msg.textContent='Proposta creata: '+sessions.length+' allenamenti. Scorri sotto Google Calendar.';
+   window.rpCurrentDraft=sessions;
+   box.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){if(msg)msg.textContent='Errore Programma: '+e.message;console.error(e);}
+ }
+ window.rpBuildPlan=makePlan;
+ // Intercept the button before any old click handlers, avoiding double handling
+ document.addEventListener('click',function(e){
+  var btn=e.target.closest&&e.target.closest('#rp-create-proposal');
+  if(!btn)return;
+  e.preventDefault();e.stopImmediatePropagation();makePlan();
+ },true);
+ document.addEventListener('submit',function(e){
+  if(e.target&&e.target.id==='rp-program-form'){e.preventDefault();e.stopImmediatePropagation();makePlan();}
+ },true);
 })();
 </script>
 </body>
