@@ -230,6 +230,7 @@
   <script type="module" src="/sleep.js?v=20261117garmin"></script>
 
 <script>
+;(() => {
 // Runner Pulse - configurazione obiettivo e passaggio al Coach reale.
 // Nessun allenamento o impegno Google viene inventato o salvato senza autorizzazione.
 const form=document.getElementById('rp-program-form');
@@ -259,6 +260,8 @@ document.getElementById('rp-program-replan')?.addEventListener('click',()=>docum
 document.getElementById('rp-program-approve')?.addEventListener('click',()=>{if(!currentUid||!draft.length)return;if(draft.some(x=>!x.date||!x.time||!(x.minutes>=15&&x.minutes<=300))){document.getElementById('rp-program-result').textContent='Controlla date, orari e durata delle sedute.';return;}localStorage.setItem('runnerpulse:program:approved:'+currentUid,JSON.stringify(draft));showApproved();document.getElementById('rp-program-result').textContent='Programma approvato e salvato su questo dispositivo. Non è ancora stato inserito in Google Calendar.';});
 showApproved();
 
+
+})();
 </script>
 </body>
 </html>
