@@ -108,7 +108,24 @@
       <div id="rp-manual-modal" class="rp-manual-modal rp-manual-inline" hidden><div class="rp-manual-backdrop" data-manual-close></div><div class="rp-manual-dialog" role="dialog" aria-modal="true" aria-labelledby="rp-manual-title"><div class="rp-manual-head"><h2 id="rp-manual-title">Inserimento manuale</h2><button type="button" class="rp-manual-close" id="rp-close-manual" aria-label="Chiudi">×</button></div><form id="activityForm" class="card"><label>Data<input id="date" type="date" required></label><label>Tipo<select id="kind"><option>Corsa facile</option><option>Ripetute</option><option>Tempo run</option><option>Lungo</option><option>Gara</option></select></label><label>Distanza (km)<input id="km" type="number" min=".1" step=".1" required placeholder="Es. 10.5"></label><label>Durata (minuti)<input id="minutes" type="number" min="1" step="1" required placeholder="Es. 55"></label><div class="rp-manual-actions"><button type="button" id="rp-cancel-manual" class="rp-manual-cancel">Annulla</button><button type="submit">Salva allenamento</button></div><p id="rp-manual-message" role="status" aria-live="polite"></p></form></div></div>
       <div id="activityList" class="rp-activity-panel"></div>
     </section>
-    <section id="plan" class="page"><h1>Il tuo programma</h1><div class="card"><h2>Nessun programma automatico</h2><p>Il programma di allenamento viene creato soltanto su tua richiesta. Puoi chiedere all'allenatore AI un piano personalizzato usando i dati disponibili.</p><button id="rp-request-plan" type="button">Chiedi un programma al Coach</button><p class="note">Non verrà creato né inserito alcun allenamento in calendario senza una tua richiesta.</p></div></section>
+    <section id="plan" class="page rp-program-page">
+<h1>Il tuo programma</h1>
+<div class="card rp-program-card"><span class="rp-program-kicker">RUNNER PULSE · COACH AI</span><h2>Prepariamo il tuo prossimo obiettivo</h2><p>Il Coach ti propone il programma. Sei tu a decidere se approvarlo.</p>
+<form id="rp-program-form">
+<label>Stai preparando una gara?<select name="race"><option value="yes">Sì, preparo una gara</option><option value="no">No, voglio migliorare</option></select></label>
+<div class="rp-program-grid"><label>Distanza obiettivo<select name="distance"><option value="5">5 km</option><option value="10">10 km</option><option value="21.0975" selected>Mezza maratona · 21,1 km</option><option value="42.195">Maratona · 42,2 km</option><option value="other">Altra distanza</option></select></label>
+<label id="rp-other-distance" hidden>Altra distanza (km)<input name="otherDistance" type="number" min="0.5" max="500" step="0.1"></label>
+<label id="rp-race-date">Data della gara<input name="raceDate" type="date"></label>
+<label>Allenamenti a settimana<select name="days"><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select></label>
+<label>Livello<select name="level"><option value="beginner">Principiante</option><option value="intermediate">Intermedio</option><option value="advanced" selected>Avanzato</option></select></label>
+<label>Durata massima nei giorni feriali (minuti)<input name="weekdayMinutes" type="number" min="20" max="240" value="70"></label>
+<label>Fascia oraria preferita<select name="timePreference"><option value="evening">Sera</option><option value="morning">Mattina</option><option value="afternoon">Pomeriggio</option></select></label></div>
+<button type="submit">Prepara proposta con il Coach</button></form>
+<p id="rp-program-status" role="status" aria-live="polite"></p></div>
+<div class="card rp-program-card"><h2>Google Calendar</h2><p>Con il tuo consenso Runner Pulse potrà cercare orari liberi e, dopo la tua approvazione, aggiungere gli allenamenti.</p><button id="rp-calendar-connect" type="button">Collega Google Calendar</button><p id="rp-calendar-status" class="note" role="status">Non collegato</p></div>
+<div id="rp-program-proposal" class="card rp-program-card" hidden><h2>Proposta del Coach</h2><p id="rp-program-description"></p><div id="rp-program-sessions"></div><div class="rp-program-actions"><button id="rp-program-replan" type="button">Ricalcola proposta</button><button id="rp-program-approve" type="button">Approva e salva</button></div><p id="rp-program-result" role="status"></p></div>
+<div class="card rp-program-card"><h2>Programma approvato</h2><div id="rp-program-approved">Non hai ancora approvato un programma.</div></div>
+</section>
     <section id="coach" class="page rp-coach-page" aria-label="Chat con l’allenatore Runner Pulse">
       <div class="rp-coach-intro"><img class="rp-coach-mascot" src="/coach-robot.png" alt="Robottino allenatore con fascia arancione e calzoncini da corsa"><div class="rp-coach-intro-text"><span class="rp-coach-tag">Il tuo allenatore</span><h1>Runner Pulse</h1><span class="rp-coach-presence"><i></i> Allenatore AI</span></div></div>
       <p id="coachText" hidden></p>
@@ -211,5 +228,6 @@
   <script type="module" src="/runner-profile.js?v=welcome-20261108"></script>
   <script type="module" src="/steps.js?v=garmin-priority-20261116"></script>
   <script type="module" src="/sleep.js?v=20261117garmin"></script>
+<script type="module" src="/program.js?v=20261117"></script>
 </body>
 </html>
