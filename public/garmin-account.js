@@ -242,5 +242,8 @@ function refreshVisibleBranding(){
 }
 function scheduleBranding(){if(brandingScheduled)return;brandingScheduled=true;requestAnimationFrame(()=>{brandingScheduled=false;refreshVisibleBranding();});}
 window.addEventListener('runnerpulse:device-status',scheduleBranding);
-new MutationObserver(scheduleBranding).observe(document.body,{childList:true,subtree:true,characterData:true});
+// WebView performance: do not scan the entire DOM on every text/child mutation.
+// Activity lists, charts and live metrics can generate thousands of mutations.
+// Rebranding runs once at startup and when the connected device status changes.
+// This preserves the existing Garmin/Health integration without a global observer.
 scheduleBranding();
