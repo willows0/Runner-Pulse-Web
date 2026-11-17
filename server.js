@@ -902,13 +902,15 @@ async function weeklyPushRoute(req,res,pathname){
   const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
   if(!match)return json(res,401,{success:false,message:'Accesso richiesto'});
   let user;try{user=await getAuth().verifyIdToken(match[1],true);}catch{return json(res,401,{success:false,message:'Sessione non valida'});}
-  if(!verifiedGoogleIdentity(user)||user.email?.toLowerCase()!==OWNER_EMAIL)return json(res,403,{success:false,message:'Solo proprietario'});
+  if(!verifiedGoogleIdentity(user))return json(res,403,{success:false,message:'Account Google non verificato'});
   try{
    const body=await readJsonBody(req,4096);
    if(typeof body.token!=='string'||body.token.length<50||body.token.length>3000)return json(res,400,{success:false,message:'Token push non valido'});
    if(body.channel!==undefined && !['android','web'].includes(body.channel))return json(res,400,{success:false,message:'Canale non valido'});
    const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(body.token).digest('hex');
-   await getFirestore().collection('runnerPulsePush').doc(user.uid).collection('devices').doc(id).set({token:body.token,channel:body.channel==='android'?'android':'web',updatedAt:new Date(),enabled:true},{merge:true});
+   const root=getFirestore().collection('runnerPulsePush').doc(user.uid);
+   await root.collection('devices').doc(id).set({token:body.token,channel:body.channel==='android'?'android':'web',updatedAt:new Date(),enabled:true},{merge:true});
+   await root.set({pushEnabled:true,updatedAt:new Date()},{merge:true});
    return json(res,200,{success:true});
   }catch(error){console.error('Push subscribe:',error.message);return json(res,500,{success:false,message:'Registrazione notifica non riuscita'});}
  }
@@ -918,7 +920,7 @@ async function weeklyPushRoute(req,res,pathname){
   const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
   if(!match)return json(res,401,{success:false,message:'Accesso richiesto'});
   let user;try{user=await getAuth().verifyIdToken(match[1],true);}catch{return json(res,401,{success:false,message:'Sessione non valida'});}
-  if(!verifiedGoogleIdentity(user)||user.email?.toLowerCase()!==OWNER_EMAIL)return json(res,403,{success:false,message:'Solo proprietario'});
+  if(!verifiedGoogleIdentity(user))return json(res,403,{success:false,message:'Account Google non verificato'});
   try{
    const crypto=await import('node:crypto');
    const token=pathname==='/api/push/status' ? new URL(req.url,'http://localhost').searchParams.get('token') : (await readJsonBody(req,4096)).token;
@@ -928,15 +930,21 @@ async function weeklyPushRoute(req,res,pathname){
    if(pathname==='/api/push/status'){
     const doc=await ref.get();return json(res,200,{success:true,enabled:doc.exists && doc.data()?.enabled===true});
    }
-   await ref.delete();return json(res,200,{success:true,enabled:false});
+   await ref.delete();
+   const root=getFirestore().collection('runnerPulsePush').doc(user.uid);
+   const remaining=await root.collection('devices').where('enabled','==',true).limit(1).get();
+   if(remaining.empty)await root.set({pushEnabled:false,updatedAt:new Date()},{merge:true});
+   return json(res,200,{success:true,enabled:false});
   }catch(error){console.error('Push settings:',error.message);return json(res,500,{success:false,message:'Impossibile aggiornare le notifiche'});}
  }
  if(pathname==='/api/push/test'){
   if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
-  if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso riservato al proprietario'});
+  const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
+  if(!match)return json(res,401,{success:false,message:'Accesso richiesto'});
+  let user;try{user=await getAuth().verifyIdToken(match[1],true);}catch{return json(res,401,{success:false,message:'Sessione non valida'});}
+  if(!verifiedGoogleIdentity(user))return json(res,403,{success:false,message:'Account Google non verificato'});
   try{
-   const owner=await getAuth().getUserByEmail(OWNER_EMAIL);
-   const db=getFirestore();const root=db.collection('runnerPulsePush').doc(owner.uid);
+   const db=getFirestore();const root=db.collection('runnerPulsePush').doc(user.uid);
    const snap=await root.collection('devices').where('enabled','==',true).get();
    const tokens=preferredPushTokens(snap.docs);
    if(!tokens.length)return json(res,409,{success:false,message:'Nessun telefono registrato. Premi prima Attiva notifiche Coach.'});
@@ -972,30 +980,64 @@ async function weeklyPushRoute(req,res,pathname){
   const get=k=>parts.find(p=>p.type===k)?.value;
   const testMode=req.headers['x-runner-pulse-test']==='weekly-report-test';
   if(!testMode&&(get('weekday')!=='Sun'||get('hour')!=='20'))return json(res,409,{success:false,message:'Invio consentito soltanto domenica alle 20:00 ora italiana'});
+  const db=getFirestore();const week=`${get('year')}-${get('month')}-${get('day')}`;
+  // Le iscrizioni sono indicizzate sul documento utente, non condivise tra account.
+  // Includi anche il proprietario precedente alla migrazione multiutente.
+  const users=new Set();
   try{
    const owner=await getAuth().getUserByEmail(OWNER_EMAIL);
-   const db=getFirestore();const week=`${get('year')}-${get('month')}-${get('day')}`;
-   const run=db.collection('runnerPulsePush').doc(owner.uid).collection('weeklyRuns').doc(testMode?`test-${week}`:week);
-   const shouldSend=await db.runTransaction(async tx=>{const d=await tx.get(run);if(d.exists)return false;tx.create(run,{createdAt:new Date(),status:'started',testMode});return true;});
-   if(!shouldSend)return json(res,200,{success:true,alreadySent:true});
-   // Prima si genera e salva il resoconto; soltanto dopo si notifica il telefono.
-   const report=await generateWeeklyCoachReport(owner.uid,week);
-   await run.set({status:'report_ready',reportId:report.messageId,activitiesCount:report.activitiesCount},{merge:true});
-   const snap=await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').where('enabled','==',true).get();
-   const tokens=preferredPushTokens(snap.docs);
-   let delivered=0,failed=0;
-   for(let i=0;i<tokens.length;i+=500){
-    const batch=tokens.slice(i,i+500);
-    const result=await getMessaging().sendEachForMulticast({tokens:batch,data:{title:'Runner Pulse · Coach AI',body:testMode?'🤖 TEST: il resoconto della settimana è pronto nella chat Coach.':'🤖 Il tuo resoconto settimanale è pronto! Tocca per leggerlo nella chat Coach.',tag:'runnerpulse-weekly',url:'/index.html?weeklyCoach=1'},webpush:{headers:{Urgency:'high',TTL:'86400'}}});
-    delivered+=result.successCount;failed+=result.failureCount;
-    for(let j=0;j<result.responses.length;j++)if(['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(result.responses[j].error?.code)){
-      const crypto=await import('node:crypto');const id=crypto.createHash('sha256').update(batch[j]).digest('hex');await db.collection('runnerPulsePush').doc(owner.uid).collection('devices').doc(id).delete();
-    }
+   users.add(owner.uid);
+  }catch(error){console.warn('Weekly push: account precedente non trovato:',error.message);}
+  try{
+   let cursor=null;
+   for(let page=0;page<20;page++){
+    let query=db.collection('runnerPulsePush').where('pushEnabled','==',true).orderBy('__name__').limit(100);
+    if(cursor)query=query.startAfter(cursor);
+    const snapshot=await query.get();
+    for(const doc of snapshot.docs)users.add(doc.id);
+    if(snapshot.size<100)break;
+    cursor=snapshot.docs[snapshot.docs.length-1];
    }
-   await run.set({status:'finished',delivered,failed,completedAt:new Date()},{merge:true});
-   return json(res,200,{success:true,delivered,failed});
-  }catch(error){console.error('Weekly push:',error.message);try{const owner=await getAuth().getUserByEmail(OWNER_EMAIL);const db=getFirestore();const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const date=k=>parts.find(p=>p.type===k)?.value;await db.collection('runnerPulsePush').doc(owner.uid).collection('weeklyRuns').doc(`${req.headers['x-runner-pulse-test']==='weekly-report-test'?'test-':''}${date('year')}-${date('month')}-${date('day')}`).delete();}catch(e){console.error('Weekly retry cleanup:',e.message);}return json(res,500,{success:false,message:'Generazione o invio del report non riusciti'});}
+  }catch(error){console.error('Weekly push: elenco utenti:',error.message);return json(res,500,{success:false,message:'Impossibile leggere le iscrizioni'});}
+  let processed=0,delivered=0,failed=0,alreadySent=0,errors=0;
+  for(const uid of users){
+   const root=db.collection('runnerPulsePush').doc(uid);
+   let run=null;
+   try{
+    const snap=await root.collection('devices').where('enabled','==',true).get();
+    const tokens=preferredPushTokens(snap.docs);
+    if(!tokens.length)continue;
+    run=root.collection('weeklyRuns').doc(testMode?`test-${week}`:week);
+    const acquired=await db.runTransaction(async tx=>{
+     const existing=await tx.get(run);
+     if(existing.exists)return false;
+     tx.create(run,{createdAt:new Date(),status:'started',testMode});return true;
+    });
+    if(!acquired){alreadySent++;continue;}
+    // Ogni resoconto viene generato soltanto dai dati di questo utente.
+    const report=await generateWeeklyCoachReport(uid,week);
+    await run.set({status:'report_ready',reportId:report.messageId,activitiesCount:report.activitiesCount},{merge:true});
+    let sent=0,rejected=0;
+    for(let i=0;i<tokens.length;i+=500){
+     const batch=tokens.slice(i,i+500);
+     const result=await getMessaging().sendEachForMulticast({tokens:batch,data:{title:'Runner Pulse · Coach AI',body:testMode?'🤖 TEST: il resoconto della settimana è pronto nella chat Coach.':'🤖 Il tuo resoconto settimanale è pronto! Tocca per leggerlo nella chat Coach.',tag:'runnerpulse-weekly',url:'/index.html?weeklyCoach=1'},webpush:{headers:{Urgency:'high',TTL:'86400'}}});
+     sent+=result.successCount;rejected+=result.failureCount;
+     for(let j=0;j<result.responses.length;j++)if(['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(result.responses[j].error?.code)){
+      const id=createHash('sha256').update(batch[j]).digest('hex');
+      await root.collection('devices').doc(id).delete();
+     }
+    }
+    await run.set({status:'finished',delivered:sent,failed:rejected,completedAt:new Date()},{merge:true});
+    processed++;delivered+=sent;failed+=rejected;
+   }catch(error){
+    errors++;console.error('Weekly push user:',uid,error.message);
+    // Fallimento di un utente non deve impedire gli invii agli altri.
+    if(run)await run.delete().catch(()=>{});
+   }
+  }
+  return json(res,errors?207:200,{success:errors===0,processed,delivered,failed,alreadySent,errors});
  }
+
 }
 
 http.createServer(async(req,res)=>{
