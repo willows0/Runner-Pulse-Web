@@ -228,6 +228,37 @@
   <script type="module" src="/runner-profile.js?v=welcome-20261108"></script>
   <script type="module" src="/steps.js?v=garmin-priority-20261116"></script>
   <script type="module" src="/sleep.js?v=20261117garmin"></script>
-<script defer src="/program.js?v=rpfix20261117b"></script>
+
+<script>
+// Runner Pulse - configurazione obiettivo e passaggio al Coach reale.
+// Nessun allenamento o impegno Google viene inventato o salvato senza autorizzazione.
+const form=document.getElementById('rp-program-form');
+const status=document.getElementById('rp-program-status');
+const currentUid='local';
+const key=uid=>'runnerpulse:program:objective:'+uid;
+function toggle(){form.querySelector('#rp-other-distance').hidden=form.elements.distance.value!=='other';form.querySelector('#rp-race-date').hidden=form.elements.race.value!=='yes';}
+form.elements.distance.addEventListener('change',toggle);form.elements.race.addEventListener('change',toggle);
+try {const saved=JSON.parse(localStorage.getItem(key(currentUid))||'null');if(saved){for(const [k,v] of Object.entries(saved)){if(form.elements[k])form.elements[k].value=v;}}}catch(e){}toggle();
+const proposalBox=document.getElementById('rp-program-proposal');
+const sessionsBox=document.getElementById('rp-program-sessions');
+const approvedBox=document.getElementById('rp-program-approved');
+let draft=[];
+const weekdayNames=['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+function localDate(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');}
+function nextDate(day,week){const d=new Date();d.setHours(12,0,0,0);let delta=(day-d.getDay()+7)%7;if(delta===0)delta=7;d.setDate(d.getDate()+delta+week*7);return localDate(d);}
+function escapeText(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function showApproved(){if(!currentUid)return;const saved=JSON.parse(localStorage.getItem('runnerpulse:program:approved:'+currentUid)||'[]');approvedBox.replaceChildren();if(!saved.length){approvedBox.textContent='Non hai ancora approvato un programma.';return;}for(const item of saved){const div=document.createElement('div');div.className='rp-program-session';div.textContent=`${item.date} · ${item.time} — ${item.title} (${item.minutes} min)`;approvedBox.appendChild(div);}}
+function renderDraft(){proposalBox.hidden=false;sessionsBox.replaceChildren();draft.forEach((session,i)=>{const div=document.createElement('div');div.className='rp-program-session';div.innerHTML=`<strong>${escapeText(session.title)}</strong><span>${escapeText(session.details)}</span><label>Data <input type="date" data-field="date" data-index="${i}" value="${session.date}"></label><label>Ora <input type="time" data-field="time" data-index="${i}" value="${session.time}"></label><label>Durata (minuti) <input type="number" min="15" max="300" data-field="minutes" data-index="${i}" value="${session.minutes}"></label>`;sessionsBox.appendChild(div);});document.getElementById('rp-program-result').textContent='Bozza indicativa: non è un piano medico né un programma derivato dai dati Garmin, non ancora personalizzata sui dati degli allenamenti né sugli impegni di Google Calendar.';}
+sessionsBox.addEventListener('change',e=>{const el=e.target;if(!el.matches('[data-field]'))return;const i=Number(el.dataset.index);if(!draft[i])return;draft[i][el.dataset.field]=el.dataset.field==='minutes'?Number(el.value):el.value;});
+function createDraft(values){const days=Number(values.days);const preference=values.timePreference;const time=preference==='morning'?'07:00':preference==='afternoon'?'13:00':'18:30';const patterns={2:[2,0],3:[2,4,0],4:[1,3,5,0],5:[1,2,4,5,0],6:[1,2,3,4,5,0]};const daySet=patterns[days]||patterns[3];const distance=Number(values.distance==='other'?values.otherDistance:values.distance);const easy=values.level==='beginner'?30:values.level==='intermediate'?40:50;const max=Number(values.weekdayMinutes)||70;const sessions=[];for(let week=0;week<4;week++){daySet.forEach((day,index)=>{const long=day===0;const quality=index===1&&!long;const minutes=long?Math.min(130,Math.round((easy+20+week*7)*(distance>=21?1.5:1.1))):Math.min(max,easy+week*5+(quality?5:0));const title=long?'Lungo facile':quality?'Ritmo controllato':'Corsa facile';const details=long?'Corsa a intensità conversazionale, senza forzare':quality?'Riscaldamento, parte centrale a ritmo sostenibile ma controllato, defaticamento':'Ritmo comodo e regolare';sessions.push({date:nextDate(day,week),time:long?'09:00':time,title,details,minutes});});}return sessions;}
+form.addEventListener('submit',event=>{event.preventDefault();const values=Object.fromEntries(new FormData(form).entries());if(values.distance==='other'&&!(Number(values.otherDistance)>0)){status.textContent='Indica la distanza della gara.';return;}if(values.race==='yes'&&values.raceDate&&values.raceDate<localDate(new Date())){status.textContent='La data della gara deve essere futura.';return;}localStorage.setItem(key(currentUid),JSON.stringify(values));draft=createDraft(values);document.getElementById('rp-program-description').textContent=`Bozza di 4 settimane · ${values.days} sedute a settimana · ${values.race==='yes'?'Preparazione gara':'Miglioramento generale'}. Puoi cambiare data, ora e durata di ogni seduta prima di approvare.`;renderDraft();status.textContent='Proposta creata qui sotto. Controllala prima di approvare.';proposalBox.scrollIntoView({behavior:'smooth',block:'start'});});
+document.getElementById('rp-calendar-connect')?.addEventListener('click',()=>{
+ document.getElementById('rp-calendar-status').textContent='Integrazione Google Calendar da configurare: occorrono autorizzazione Calendar e collegamento sicuro al servizio. Non è stato letto né modificato alcun evento.';
+});
+document.getElementById('rp-program-replan')?.addEventListener('click',()=>form.requestSubmit());
+document.getElementById('rp-program-approve')?.addEventListener('click',()=>{if(!currentUid||!draft.length)return;if(draft.some(x=>!x.date||!x.time||!(x.minutes>=15&&x.minutes<=300))){document.getElementById('rp-program-result').textContent='Controlla date, orari e durata delle sedute.';return;}localStorage.setItem('runnerpulse:program:approved:'+currentUid,JSON.stringify(draft));showApproved();document.getElementById('rp-program-result').textContent='Programma approvato e salvato su questo dispositivo. Non è ancora stato inserito in Google Calendar.';});
+showApproved();
+
+</script>
 </body>
 </html>
