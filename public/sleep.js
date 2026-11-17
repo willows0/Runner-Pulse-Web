@@ -17,12 +17,15 @@ async function load(){
   const days=Array.isArray(payload.days)?payload.days:[],available=days.filter(d=>Number.isFinite(d.seconds)&&d.seconds>=0),latest=available.at(-1);
   el('rp-sleep-duration').textContent=latest?duration(latest.seconds):'—';
   el('rp-sleep-date').textContent=latest?new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(latest.date+'T12:00:00Z')):'Dati non disponibili';
-  const judgement=latest?.coachJudgement||'Non disponibile';
+  // Il numero nel cerchio è esclusivamente il punteggio ufficiale Garmin.
+  // Il giudizio è una lettura del Coach coerente con quel numero.
+  const garminScore=Number.isInteger(latest?.score)&&latest.score>=0&&latest.score<=100?latest.score:null;
+  const judgement=garminScore===null?'Non disponibile':garminScore>=80?'Ottimo':garminScore>=60?'Buono':garminScore>=40?'Discreto':'Scarso';
   const colors={'Ottimo':'#22c55e','Buono':'#38bdf8','Discreto':'#f59e0b','Scarso':'#ef4444','Da migliorare':'#ef4444'};
-  el('rp-sleep-score').textContent=Number.isInteger(latest?.coachScore)?String(latest.coachScore):'—';
+  el('rp-sleep-score').textContent=garminScore===null?'—':String(garminScore);
   el('rp-sleep-judgement').textContent=judgement;
   el('rp-sleep-ring').style.setProperty('--ring-color',colors[judgement]||'#64748b');
-  el('rp-sleep-coach-comment').textContent=latest?.coachComment||'La valutazione richiede durata, fasi del sonno e periodi di veglia disponibili.';
+  el('rp-sleep-coach-comment').textContent=latest?.coachComment?latest.coachComment.replace(/ È una stima basata sulle fasi del sonno, non una diagnosi né un punteggio Garmin\.$/, '')+'. Il giudizio è coerente con il punteggio Garmin, quando disponibile.':(garminScore===null?'Punteggio Garmin non disponibile.':'Giudizio del Coach basato sul punteggio Garmin; dati sulle fasi del sonno insufficienti per un commento dettagliato.');
   const bars=el('rp-sleep-bars');bars.replaceChildren();
   const max=Math.max(1,...days.map(d=>Number.isFinite(d.seconds)?d.seconds:0));
   for(const day of days){
