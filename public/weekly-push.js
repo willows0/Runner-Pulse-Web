@@ -6,7 +6,8 @@ const config={apiKey:'AIzaSyBVTj9i4545kOmvx3H78_YliE54nPSFyLg',authDomain:'runne
 const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(config);
 const button=document.getElementById('rp-enable-weekly-push');
 const status=document.getElementById('rp-weekly-push-status');
-function say(message){if(status)status.textContent=message;}
+// Il Profilo non mostra messaggi sotto il pulsante notifiche.
+function say(message){if(status)status.textContent='';}
 const activeLabel='Disattiva notifiche Coach';
 const inactiveLabel='Attiva notifiche Coach';
 let enabled=false;
@@ -132,7 +133,7 @@ if(button)button.addEventListener('click',async()=>{
    if(!response.ok||!result.success)throw new Error(result.message||'Registrazione non riuscita.');
    updateButton(true);say('Notifiche attivate');
   }
- }catch(error){say(error.message||'Impossibile aggiornare le notifiche.');}
+ }catch(error){window.alert(error.message||'Impossibile aggiornare le notifiche.');}
  finally{busy=false;button.disabled=false;}
 });
 // Richiesta di consenso dopo il login Google: la richiesta browser avviene SOLO
