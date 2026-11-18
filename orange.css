@@ -358,3 +358,8 @@ header.rp-premium-header.rp-global-banner{
 #plan button.rp-day-card .rp-day-main,#plan button.rp-day-card .rp-day-main strong {color:#fff !important;}
 #plan button.rp-day-card .rp-day-main small {color:#d6e2ed !important;}
 #plan .rp-week-head {color:#19324c !important;opacity:1 !important;}
+
+#plan .rp-plan-tabs button[aria-selected="false"]{background:#193650!important;background-image:none!important;color:#e8f0f8!important;box-shadow:none!important}
+#plan .rp-plan-tabs button[aria-selected="true"]{background:#f4770b!important;color:white!important}
+#plan .rp-day-card,#plan button.rp-day-card,#plan .rp-plan-panel button.rp-day-card{background:#183653!important;background-image:none!important;color:white!important;border:1px solid #486681!important}
+#plan .rp-detail-page .rp-step{background:#183653!important;color:#fff!important}

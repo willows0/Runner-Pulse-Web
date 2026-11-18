@@ -242,6 +242,26 @@ showApproved();
  plan.append(calendar,overview,settings,detail);
  let sessions=[];let currentTab='calendar';
  const dayNames=['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
+ let rpPlanUid=null;
+ window.addEventListener('runnerpulse:auth-user',e=>{rpPlanUid=e.detail?.uid||null;});
+ function realPaces(){
+  const uid=rpPlanUid||window.firebaseAuth?.currentUser?.uid;
+  if(!uid)return [];
+  let rows=[];try{rows=JSON.parse(localStorage.getItem('runnerPulseActivitiesV1:uid:'+uid)||'[]')}catch{}
+  if(!Array.isArray(rows))return [];
+  return rows.filter(x=>Number(x.km)>=3&&Number(x.minutes)>0&&Number(x.minutes)/Number(x.km)>=3&&Number(x.minutes)/Number(x.km)<=12)
+   .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,12)
+   .map(x=>Number(x.minutes)/Number(x.km)).sort((a,b)=>a-b);
+ }
+ function paceLabel(v){let sec=Math.round(v*60);return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0')+'/km';}
+ function paceGuidance(s){
+  const data=realPaces();
+  if(data.length<3)return {text:'Ritmo a sensazione: corsa facile a intensità conversazionale; nella parte controllata mantieni uno sforzo regolare.',note:'Per una stima numerica attendibile servono almeno 3 corse con distanza e durata valide nelle Attività di questo account.'};
+  const med=data[Math.floor(data.length/2)],easy=/facile|lungo/i.test(s.title||'');
+  const lo=easy?med*1.08:med*.97,hi=easy?med*1.22:med*1.05;
+  return {text:'Riferimento indicativo '+paceLabel(lo)+'–'+paceLabel(hi)+' (stima da '+data.length+' attività registrate; non è un ritmo di soglia o gara misurato).',note:'Stima ricavata dalla mediana del passo medio delle ultime '+data.length+' attività valide. Non considera dislivello, condizioni, zone cardiache o recupero: verifica sempre le sensazioni e adatta lo sforzo.'};
+ }
+
  function safeDate(date){const d=new Date(date+'T12:00:00');return Number.isNaN(d.getTime())?null:d}
  function getSessions(){
   if(window.rpCurrentDraft?.length)return window.rpCurrentDraft;
@@ -276,9 +296,9 @@ showApproved();
   const meta=document.createElement('p');meta.className='rp-detail-meta';meta.textContent=[s.date,s.time,(s.minutes||'—')+' minuti'].filter(Boolean).join(' · ');detail.appendChild(meta);
   const title=document.createElement('h3');title.textContent="Struttura dell’allenamento";detail.appendChild(title);
   const total=Number(s.minutes)||0;const warm=Math.min(15,Math.max(5,Math.round(total*.2)));const cool=Math.min(10,Math.max(5,Math.round(total*.15)));const main=Math.max(0,total-warm-cool);
-  const steps=[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',s.details||'Corsa a intensità controllata: usa uno sforzo sostenibile, senza forzare. Il ritmo numerico va definito dopo l’analisi dei tuoi allenamenti registrati.'],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
+  const guidance=paceGuidance(s);const steps=[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',guidance.text],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
   steps.forEach(([name,duration,description],i)=>{const item=document.createElement('div');item.className='rp-step';const n=document.createElement('span');n.className='rp-step-num';n.textContent=i+1;const body=document.createElement('div');const strong=document.createElement('strong');strong.textContent=name;const p=document.createElement('p');p.textContent=duration+' · '+description;body.append(strong,p);item.append(n,body);detail.appendChild(item)});
-  const note=document.createElement('p');note.className='rp-detail-note';note.textContent='Struttura indicativa: non è un allenamento sincronizzato con l’orologio e non include ritmi personalizzati finché non vengono calcolati dai dati reali.';detail.appendChild(note);
+  const note=document.createElement('p');note.className='rp-detail-note';note.textContent=guidance.note;detail.appendChild(note);
   detail.scrollIntoView({behavior:'smooth',block:'start'});
  }
  // Observe new drafts without replacing the already working generator.
