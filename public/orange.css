@@ -561,3 +561,12 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #plan .rp-program-card p,#plan .rp-program-card label {color:#dce7f3!important}
 #plan .rp-program-card button {background:#f4770b!important;color:#fff!important}
 #plan .rp-program-card input,#plan .rp-program-card select {background:#f7f9fc!important;color:#142940!important}
+
+/* Piano: tema stabile anche con CSS precedente in cache */
+#plan .rp-plan-tabs button {background:#1e3a57 !important;color:#e8f0f8 !important;border:1px solid #47637c !important;box-shadow:none !important;}
+#plan .rp-plan-tabs button[aria-selected="true"] {background:#f4770b !important;color:#fff !important;border-color:#f4770b !important;}
+#plan button.rp-day-card {background:#183653 !important;background-image:none !important;color:#fff !important;border:1px solid #47637c !important;}
+#plan button.rp-day-card .rp-day-date,#plan button.rp-day-card .rp-day-icon {color:#ffae65 !important;}
+#plan button.rp-day-card .rp-day-main,#plan button.rp-day-card .rp-day-main strong {color:#fff !important;}
+#plan button.rp-day-card .rp-day-main small {color:#d6e2ed !important;}
+#plan .rp-week-head {color:#19324c !important;opacity:1 !important;}
