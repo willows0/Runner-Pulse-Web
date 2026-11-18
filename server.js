@@ -1048,11 +1048,14 @@ http.createServer(async(req,res)=>{
     try {
       const body=await readJsonBody(req,180000);
       if(!Array.isArray(body.records)||body.records.length>300)return json(res,400,{success:false,message:'Elenco attività non valido'});
+      const source=body.source==='honor'?'honor':'health-connect';
       const db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
       const health=root.collection('healthConnectActivities');
       let imported=0,duplicates=0,skipped=0;
       for(const r of body.records){
         if(typeof r?.id!=='string'||r.id.length<5||r.id.length>200||typeof r.sourcePackage!=='string'||r.sourcePackage.length>150) {skipped++;continue;}
+        // HONOR: reject all other data origins, including Garmin and unknown apps.
+        if(source==='honor'&&!/(^|\.)honor(\.|$)|(^|\.)hihonor(\.|$)/i.test(r.sourcePackage)){skipped++;continue;}
         const start=Number(r.start),end=Number(r.end),kind=Number(r.exerciseType);
         if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||end<=start||end-start>86400000||start>Date.now()+3600000||start<Date.now()-35*86400000||!Number.isInteger(kind)){skipped++;continue;}
         const key=createHash('sha256').update(r.sourcePackage+'\0'+r.id).digest('hex');
@@ -1062,7 +1065,7 @@ http.createServer(async(req,res)=>{
         const sec=Math.floor(start/1000),duration=(end-start)/1000;
         const near=await root.collection('activities').where('summary.startTimeInSeconds','>=',sec-90).where('summary.startTimeInSeconds','<=',sec+90).limit(30).get();
         const match=near.docs.find(d=>{const a=d.data()?.summary||{};return Math.abs(Number(a.durationInSeconds)-duration)<Math.max(30,duration*.03);});
-        await ref.create({source:'health-connect',sourcePackage:r.sourcePackage,recordId:r.id,startTimeInSeconds:sec,durationInSeconds:duration,exerciseType:kind,title:String(r.title||'').slice(0,120),duplicateOfGarminId:match?.id||null,createdAt:Date.now()});
+        await ref.create({source,sourcePackage:r.sourcePackage,recordId:r.id,startTimeInSeconds:sec,durationInSeconds:duration,exerciseType:kind,title:String(r.title||'').slice(0,120),duplicateOfGarminId:match?.id||null,createdAt:Date.now()});
         if(match)duplicates++;else imported++;
       }
       return json(res,200,{success:true,imported,duplicates,skipped,total:body.records.length,message:'Sessioni Health Connect registrate. Le attività Garmin non sono state modificate.'});
