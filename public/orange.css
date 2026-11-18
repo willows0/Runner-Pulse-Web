@@ -575,3 +575,12 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #plan .rp-plan-tabs button[aria-selected="true"]{background:#f4770b!important;color:white!important}
 #plan .rp-day-card,#plan button.rp-day-card,#plan .rp-plan-panel button.rp-day-card{background:#183653!important;background-image:none!important;color:white!important;border:1px solid #486681!important}
 #plan .rp-detail-page .rp-step{background:#183653!important;color:#fff!important}
+
+/* HONOR Health: profilo dispositivi, nessuna connessione simulata */
+.rp-honor-health-card{margin:16px 0;padding:20px;border-radius:22px;background:linear-gradient(135deg,#142940,#203e5d);color:#f5f8fd;border:1px solid #47627d}
+.rp-honor-head{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.rp-honor-head strong{font-size:1.25rem;color:#ff9b4a}
+.rp-honor-state{border-radius:20px;background:#334c62;color:#e4e9f0;padding:6px 10px;font-size:.8rem}
+.rp-honor-health-card p{color:#dce5f1;line-height:1.5}
+.rp-honor-health-card button{border:0;border-radius:13px;background:#f4770b;color:white;font-weight:700;padding:12px 16px}
+#rp-honor-health-info[hidden]{display:none}
