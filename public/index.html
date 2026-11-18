@@ -310,5 +310,68 @@ showApproved();
  },true);
 })();
 </script>
+
+<script id="rp-plan-pages-v2">
+(function(){
+ const plan=document.getElementById('plan');if(!plan||document.getElementById('rp-plan-tabs'))return;
+ const heading=plan.querySelector('h1');
+ const tabs=document.createElement('div');tabs.id='rp-plan-tabs';tabs.className='rp-plan-tabs';tabs.setAttribute('role','tablist');
+ [['calendar','Calendario'],['overview','Piano'],['settings','Obiettivo']].forEach(([id,label])=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.planTab=id;b.setAttribute('role','tab');b.addEventListener('click',()=>show(id));tabs.appendChild(b)});
+ heading.after(tabs);
+ const calendar=document.createElement('div');calendar.id='rp-plan-calendar';calendar.className='rp-plan-panel';
+ const overview=document.createElement('div');overview.id='rp-plan-overview';overview.className='rp-plan-panel';
+ const settings=document.createElement('div');settings.id='rp-plan-settings';settings.className='rp-plan-panel';
+ const detail=document.createElement('div');detail.id='rp-plan-detail';detail.className='rp-detail-page';detail.hidden=true;
+ const original=Array.from(plan.children).filter(e=>e!==heading&&e!==tabs);
+ original.forEach(e=>settings.appendChild(e));
+ plan.append(calendar,overview,settings,detail);
+ let sessions=[];let currentTab='calendar';
+ const dayNames=['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
+ function safeDate(date){const d=new Date(date+'T12:00:00');return Number.isNaN(d.getTime())?null:d}
+ function getSessions(){
+  if(window.rpCurrentDraft?.length)return window.rpCurrentDraft;
+  const uid=window.firebaseAuth?.currentUser?.uid||null;
+  if(uid){try{return JSON.parse(localStorage.getItem('runnerpulse:program:approved:'+uid)||'[]')}catch(e){}}
+  return sessions;
+ }
+ function makeButton(session,index){
+  const d=safeDate(session.date),b=document.createElement('button');b.type='button';b.className='rp-day-card';
+  const date=document.createElement('span');date.className='rp-day-date';date.textContent=d?dayNames[d.getDay()]:'DATA';
+  const num=document.createElement('b');num.textContent=d?d.getDate():'–';date.appendChild(num);
+  const main=document.createElement('span');main.className='rp-day-main';
+  const title=document.createElement('strong');title.textContent=session.title||'Allenamento';
+  const small=document.createElement('small');small.textContent=(session.time||'Orario da definire')+' · '+(session.minutes||'—')+' minuti';
+  main.append(title,small);
+  const icon=document.createElement('span');icon.className='rp-day-icon';icon.textContent=/riposo/i.test(session.title||'')?'☾':'🏃';
+  b.append(date,main,icon);b.addEventListener('click',()=>openDetail(session,index));return b;
+ }
+ function render(){sessions=getSessions();calendar.replaceChildren();overview.replaceChildren();
+  if(!sessions.length){const p=document.createElement('p');p.textContent='Non hai ancora una proposta. Apri Obiettivo e premi “Prepara proposta con il Coach”.';calendar.appendChild(p);const b=document.createElement('button');b.textContent='Configura obiettivo';b.addEventListener('click',()=>show('settings'));calendar.appendChild(b);overview.appendChild(p.cloneNode(true));return;}
+  const sorted=sessions.map((s,i)=>({s,i})).sort((a,b)=>(a.s.date||'').localeCompare(b.s.date||''));
+  let week='';sorted.forEach(({s,i})=>{const d=safeDate(s.date);if(!d)return;const monday=new Date(d);monday.setDate(d.getDate()-(d.getDay()+6)%7);const key=monday.toISOString().slice(0,10);if(key!==week){week=key;const h=document.createElement('h3');h.className='rp-week-head';h.textContent='Settimana del '+monday.toLocaleDateString('it-IT',{day:'numeric',month:'long'});calendar.appendChild(h);}calendar.appendChild(makeButton(s,i));});
+  const h=document.createElement('h2');h.textContent='Programma di allenamento';overview.appendChild(h);
+  const intro=document.createElement('p');intro.textContent='Tocca un allenamento per vedere la struttura della seduta.';overview.appendChild(intro);
+  sorted.forEach(({s,i})=>overview.appendChild(makeButton(s,i)));
+  const actions=document.createElement('div');actions.className='rp-program-actions';const edit=document.createElement('button');edit.type='button';edit.textContent='Modifica proposta';edit.addEventListener('click',()=>show('settings'));actions.appendChild(edit);overview.appendChild(actions);
+ }
+ function show(tab){currentTab=tab;detail.hidden=true;tabs.hidden=false;heading.hidden=false;for(const [name,el] of [['calendar',calendar],['overview',overview],['settings',settings]])el.hidden=name!==tab;tabs.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.planTab===tab)));if(tab!=='settings')render();}
+ function openDetail(s,index){calendar.hidden=true;overview.hidden=true;settings.hidden=true;tabs.hidden=true;heading.hidden=true;detail.hidden=false;detail.replaceChildren();
+  const back=document.createElement('button');back.type='button';back.className='rp-detail-back';back.textContent='← Torna al programma';back.addEventListener('click',()=>show(currentTab));detail.appendChild(back);
+  const h=document.createElement('h2');h.className='rp-detail-title';h.textContent=s.title||'Allenamento';detail.appendChild(h);
+  const meta=document.createElement('p');meta.className='rp-detail-meta';meta.textContent=[s.date,s.time,(s.minutes||'—')+' minuti'].filter(Boolean).join(' · ');detail.appendChild(meta);
+  const title=document.createElement('h3');title.textContent="Struttura dell’allenamento";detail.appendChild(title);
+  const total=Number(s.minutes)||0;const warm=Math.min(15,Math.max(5,Math.round(total*.2)));const cool=Math.min(10,Math.max(5,Math.round(total*.15)));const main=Math.max(0,total-warm-cool);
+  const steps=[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',s.details||'Segui l’intensità indicata dal Coach. Ritmi e ripetute precisi saranno disponibili quando il piano userà i tuoi dati reali.'],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
+  steps.forEach(([name,duration,description],i)=>{const item=document.createElement('div');item.className='rp-step';const n=document.createElement('span');n.className='rp-step-num';n.textContent=i+1;const body=document.createElement('div');const strong=document.createElement('strong');strong.textContent=name;const p=document.createElement('p');p.textContent=duration+' · '+description;body.append(strong,p);item.append(n,body);detail.appendChild(item)});
+  const note=document.createElement('p');note.className='rp-detail-note';note.textContent='Struttura indicativa: non è un allenamento sincronizzato con l’orologio e non include ritmi personalizzati finché non vengono calcolati dai dati reali.';detail.appendChild(note);
+  detail.scrollIntoView({behavior:'smooth',block:'start'});
+ }
+ // Observe new drafts without replacing the already working generator.
+ const observer=new MutationObserver(()=>{if(window.rpCurrentDraft?.length){const next=window.rpCurrentDraft;if(sessions!==next){sessions=next;show('calendar');}}});
+ const target=document.getElementById('rp-program-sessions');if(target)observer.observe(target,{childList:true});
+ const btn=document.getElementById('rp-create-proposal');btn?.addEventListener('click',()=>{queueMicrotask(()=>{if(window.rpCurrentDraft?.length){sessions=window.rpCurrentDraft;show('calendar');}})});
+ show('calendar');
+})();
+</script>
 </body>
 </html>
