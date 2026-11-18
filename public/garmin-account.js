@@ -61,7 +61,7 @@ function renderHonor(){
  honorButton.disabled=!auth.currentUser||honorBusy;
  honorButton.setAttribute('aria-checked',String(honorSelected));
  honorButton.dataset.status=honorSelected?'connected':'disconnected';
- honorLabel.textContent=honorBusy?'Verifica in corso…':honorSelected?'Selezionato via Health Connect':'Non collegato';
+ honorLabel.textContent=honorBusy?'Autorizzazione in corso…':honorSelected?'Selezionato via Health Connect':'Non collegato';
  honorButton.title='HONOR Health tramite Health Connect';
 }
 window.addEventListener('runnerpulse:health-permission-status',event=>{
@@ -73,19 +73,19 @@ honorButton.addEventListener('click',async()=>{
  if(honorBusy)return;
  if(honorSelected){honorSelected=false;renderHonor();message.textContent='HONOR deselezionato. I permessi Health Connect non sono stati revocati.';return;}
  if(!auth.currentUser){message.textContent='Accedi prima con Google.';return;}
- if(!window.RunnerPulseHealthNative?.requestPermissionStatus){
-  message.textContent='Apri Runner Pulse Connect su Android per verificare Health Connect.';return;
+ if(!window.RunnerPulseHealthNative?.requestHealthAuthorization){
+  message.textContent='Aggiorna Runner Pulse Connect su Android per autorizzare Health Connect direttamente.';return;
  }
  if(!window.confirm(garminConnected?'Passare da Garmin a HONOR Health? Dopo la verifica dei permessi, Garmin verrà scollegato da Runner Pulse. Gli allenamenti salvati rimarranno.':'Selezionare HONOR Health tramite Health Connect?'))return;
  honorBusy=true;renderHonor();
  try{
   const status=await new Promise((resolve,reject)=>{
-   const timer=setTimeout(()=>{window.removeEventListener('runnerpulse:health-permission-status',handler);reject(Error('Verifica Health Connect scaduta. Garmin non è stato scollegato.'));},12000);
+   const timer=setTimeout(()=>{window.removeEventListener('runnerpulse:health-permission-status',handler);reject(Error('Autorizzazione non completata. Garmin non è stato scollegato.'));},180000);
    function handler(event){clearTimeout(timer);window.removeEventListener('runnerpulse:health-permission-status',handler);resolve(event.detail?.status);}
    window.addEventListener('runnerpulse:health-permission-status',handler);
-   try{window.RunnerPulseHealthNative.requestPermissionStatus();}catch(e){clearTimeout(timer);window.removeEventListener('runnerpulse:health-permission-status',handler);reject(e);}
+   try{window.RunnerPulseHealthNative.requestHealthAuthorization();}catch(e){clearTimeout(timer);window.removeEventListener('runnerpulse:health-permission-status',handler);reject(e);}
   });
-  if(status!=='authorized')throw Error('Health Connect non è autorizzato completamente. Garmin è rimasto collegato.');
+  if(status!=='authorized')throw Error('Non sono stati concessi tutti i permessi richiesti. Garmin è rimasto collegato.');
   if(garminConnected){
    const token=await auth.currentUser.getIdToken();
    const response=await fetch('/api/garmin/disconnect',{method:'POST',headers:{Authorization:'Bearer '+token}});
