@@ -143,6 +143,7 @@ if(healthButton&&healthLabel){
  const syncButton=document.createElement('button');
  syncButton.type='button';syncButton.textContent='Importa allenamenti Health Connect';
  syncButton.style.marginTop='12px';
+  syncButton.hidden=true;syncButton.style.display='none'; // Nasconde il vecchio pulsante arancione di importazione
  healthButton.closest('div')?.parentElement?.appendChild(syncButton);
  syncButton.addEventListener('click',()=>{
   if(!auth.currentUser){message.textContent='Accedi prima con Google';return;}
