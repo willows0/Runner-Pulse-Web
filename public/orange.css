@@ -532,3 +532,32 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 .rp-step strong{font-size:17px}
 .rp-step p{margin:7px 0 0;color:#bbccdc;font-size:14px}
 .rp-detail-note{color:#a9c0d1;font-size:13px}
+
+/* FIX 18/11: Piano usa le stesse card blu notte/arancio di Home e Profilo.
+   Selettori mirati per prevalere sui vecchi stili globali dei pulsanti. */
+#plan.rp-program-page {color:#152940!important}
+#plan.rp-program-page>h1 {color:#17263b!important}
+#plan .rp-plan-tabs {background:#142b46!important;border:1px solid #365675!important;display:flex!important;gap:5px!important;padding:5px!important;border-radius:17px!important}
+#plan .rp-plan-tabs>button {background:#203c5a!important;color:#e6f0fa!important;border:1px solid #385875!important;box-shadow:none!important;min-width:0!important;padding:11px 4px!important;font-size:clamp(12px,3.4vw,16px)!important}
+#plan .rp-plan-tabs>button[aria-selected="true"] {background:#f4770b!important;color:#fff!important;border-color:#f4770b!important}
+#plan .rp-week-head {color:#1b344f!important;font-weight:900!important;opacity:1!important}
+#plan .rp-day-card {background:linear-gradient(135deg,#142840,#203e5d)!important;border:1px solid #486681!important;color:#fff!important;box-shadow:0 6px 16px #112b4220!important;border-radius:20px!important;padding:15px 13px!important}
+#plan .rp-day-card:active {background:#294c6b!important}
+#plan .rp-day-date {color:#ffb26e!important}
+#plan .rp-day-date b {color:#fff!important}
+#plan .rp-day-main strong {color:#fff!important}
+#plan .rp-day-main small {color:#c8d8e7!important}
+#plan .rp-day-icon {color:#ff912e!important}
+#plan .rp-detail-title {color:#152940!important}
+#plan .rp-detail-meta,#plan .rp-detail-note {color:#546a7e!important}
+#plan .rp-detail-back {background:#183653!important;color:#fff!important}
+#plan .rp-step {background:linear-gradient(135deg,#142840,#203e5d)!important;border:1px solid #486681!important;color:#fff!important}
+#plan .rp-step-num {color:#ff922c!important}
+#plan .rp-step strong {color:#fff!important}
+#plan .rp-step p {color:#c8d8e7!important}
+#plan .rp-plan-panel>p,#plan .rp-plan-panel>div:not(.rp-week-head) {color:#24364a}
+#plan .rp-program-card {background:linear-gradient(135deg,#142840,#203e5d)!important;border:1px solid #486681!important;color:#fff!important}
+#plan .rp-program-card h2,#plan .rp-program-card h3 {color:#ffab63!important}
+#plan .rp-program-card p,#plan .rp-program-card label {color:#dce7f3!important}
+#plan .rp-program-card button {background:#f4770b!important;color:#fff!important}
+#plan .rp-program-card input,#plan .rp-program-card select {background:#f7f9fc!important;color:#142940!important}
