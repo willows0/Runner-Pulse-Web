@@ -1272,7 +1272,8 @@ http.createServer(async(req,res)=>{
   }
   if(pathname==='/api/garmin/import-file'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
-    if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso riservato al proprietario'});
+    const importingUser=await garminGoogleUser(req);
+    if(!importingUser)return json(res,401,{success:false,message:'Accedi con un account Google verificato per importare le tue attività'});
     try{
       const filename=decodeURIComponent(String(req.headers['x-rp-filename']||''));
       if(!/\.(fit|zip|tcx)$/i.test(filename))return json(res,400,{success:false,message:'Carica un file FIT, ZIP o TCX'});
@@ -1280,7 +1281,7 @@ http.createServer(async(req,res)=>{
       for await(const chunk of req){size+=chunk.length;if(size>max)throw Object.assign(new Error('File troppo grande (limite 85 MB). Dividi lo ZIP in archivi più piccoli.'),{status:413});chunks.push(chunk);}
       const buffer=Buffer.concat(chunks);
       const parsed=/\.tcx$/i.test(filename)?parseTcx(buffer).map((activity,i)=>({name:filename+(i?' #'+(i+1):''),activity})):parseGarminArchive(buffer,filename);
-      const user=await garminGoogleUser(req),db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
+      const user=importingUser,db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
       let imported=0,duplicates=0,failed=0;const errors=[];
       for(const {name,activity,error} of parsed){
         if(error){failed++;if(errors.length<8)errors.push(name+': '+error);continue;}
