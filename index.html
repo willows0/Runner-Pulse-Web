@@ -18,6 +18,19 @@
     #splash[hidden] { display:none !important; }
     #enterApp:disabled { opacity:.8; cursor:default; }
   </style>
+
+<style id="rp-plan-final-palette">
+/* Isolated plan palette, independent of cached CSS and global button rules. */
+#plan #rp-plan-tabs{background:#152d49!important;border:1px solid #3c5b77!important;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:5px!important;padding:5px!important;border-radius:18px!important}
+#plan #rp-plan-tabs button{background:#24415d!important;background-image:none!important;color:#f2f6fc!important;border:0!important;box-shadow:none!important;min-width:0!important;width:100%!important;padding:12px 3px!important;font-size:clamp(12px,3.4vw,16px)!important;border-radius:13px!important}
+#plan #rp-plan-tabs button[aria-selected="true"]{background:#fa790c!important;background-image:none!important;color:white!important}
+#plan button.rp-day-card,#plan #rp-plan-calendar button.rp-day-card,#plan #rp-plan-overview button.rp-day-card{background:#183653!important;background-image:none!important;border:1px solid #4c6984!important;color:white!important;box-shadow:0 5px 14px #10233c20!important;border-radius:18px!important;padding:15px 12px!important}
+#plan button.rp-day-card .rp-day-date{color:#ffb17b!important}#plan button.rp-day-card .rp-day-date b{color:white!important}
+#plan button.rp-day-card .rp-day-main strong{color:white!important}#plan button.rp-day-card .rp-day-main small{color:#d4e1ef!important}
+#plan .rp-week-head{color:#183653!important;opacity:1!important}
+#plan .rp-step{background:#183653!important;background-image:none!important;color:white!important;border:1px solid #4c6984!important}
+#plan .rp-step strong{color:white!important}#plan .rp-step p{color:#d4e1ef!important}
+</style>
 </head>
 <body>
   <header class="rp-premium-header rp-global-banner" aria-label="Runner Pulse">
@@ -266,9 +279,9 @@ showApproved();
   const meta=document.createElement('p');meta.className='rp-detail-meta';meta.textContent=[s.date,s.time,(s.minutes||'—')+' minuti'].filter(Boolean).join(' · ');detail.appendChild(meta);
   const title=document.createElement('h3');title.textContent="Struttura dell’allenamento";detail.appendChild(title);
   const total=Number(s.minutes)||0;const warm=Math.min(15,Math.max(5,Math.round(total*.2)));const cool=Math.min(10,Math.max(5,Math.round(total*.15)));const main=Math.max(0,total-warm-cool);
-  const steps=[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',s.details||'Segui l’intensità indicata dal Coach. Ritmi e ripetute precisi saranno disponibili quando il piano userà i tuoi dati reali.'],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
+  const steps=[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',s.details||'Mantieni un’intensità controllata e sostenibile, senza forzare. Il ritmo numerico non è stato ancora calcolato per questa seduta.'],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
   steps.forEach(([name,duration,description],i)=>{const item=document.createElement('div');item.className='rp-step';const n=document.createElement('span');n.className='rp-step-num';n.textContent=i+1;const body=document.createElement('div');const strong=document.createElement('strong');strong.textContent=name;const p=document.createElement('p');p.textContent=duration+' · '+description;body.append(strong,p);item.append(n,body);detail.appendChild(item)});
-  const note=document.createElement('p');note.className='rp-detail-note';note.textContent='Struttura indicativa: non è un allenamento sincronizzato con l’orologio e non include ritmi personalizzati finché non vengono calcolati dai dati reali.';detail.appendChild(note);
+  const note=document.createElement('p');note.className='rp-detail-note';note.textContent='Proposta indicativa, non ancora sincronizzata con l’orologio. Il Coach deve calcolare ritmi e recuperi dai dati effettivamente disponibili prima di prescriverli.';detail.appendChild(note);
   detail.scrollIntoView({behavior:'smooth',block:'start'});
  }
  // Observe new drafts without replacing the already working generator.
