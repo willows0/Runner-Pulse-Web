@@ -363,11 +363,3 @@ header.rp-premium-header.rp-global-banner{
 #plan .rp-plan-tabs button[aria-selected="true"]{background:#f4770b!important;color:white!important}
 #plan .rp-day-card,#plan button.rp-day-card,#plan .rp-plan-panel button.rp-day-card{background:#183653!important;background-image:none!important;color:white!important;border:1px solid #486681!important}
 #plan .rp-detail-page .rp-step{background:#183653!important;color:#fff!important}
-
-/* Home: rimuovi controlli manuali e vecchio riepilogo, senza rimuovere ID usati dal codice. */
-#home .rp-elite-footer,#home .rp-watch-actions{display:none!important}
-#home .rp-watch-hint{display:none!important}
-/* Piano: solo la scheda attiva è arancione; allenamenti sempre blu. */
-#plan .rp-plan-tabs>button[aria-selected="false"]{background:#203c5a!important;background-image:none!important;color:#e6f0fa!important}
-#plan .rp-plan-tabs>button[aria-selected="true"]{background:#f4770b!important;background-image:none!important;color:#fff!important}
-#plan .rp-plan-panel button.rp-day-card,#plan button.rp-day-card{background:#183653!important;background-image:none!important;color:#fff!important}
