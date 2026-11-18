@@ -126,7 +126,7 @@ navigator.serviceWorker?.addEventListener('message',event=>{
  }
 });
 setTimeout(openPendingCoachActivity,250);
-function render(){const totalKm=entries.reduce((s,x)=>s+(Number(x.km)||0),0);const totalMin=entries.reduce((s,x)=>s+(Number(x.minutes)||0),0);$('count').textContent=entries.length;$('distance').textContent=fmt(totalKm);$('avgPace').textContent=pace(totalKm,totalMin).replace(' min/km','');$('activityList').replaceChildren();[...entries].sort(activityNewestFirst).forEach(x=>{const c=document.createElement('div');c.className='card';const open=document.createElement('button');open.className='activity-open';open.type='button';const title=document.createElement('b');title.textContent=`${x.kind||'Corsa'} · ${x.km==null?'Distanza non disponibile':fmt(x.km)+' km'}`;const sub=document.createElement('small');sub.textContent=`${activityDateIT(x.date)} · ${fmt(x.minutes)} min · ${pace(x.km,x.minutes)}`;open.append(title,sub);open.onclick=()=>showDetail(x);const del=document.createElement('button');del.className='delete';del.textContent='Elimina';del.onclick=async()=>{
+function render(){const totalKm=entries.reduce((s,x)=>s+(Number(x.km)||0),0);const totalMin=entries.reduce((s,x)=>s+(Number(x.minutes)||0),0);$('count').textContent=entries.length;$('distance').textContent=fmt(totalKm);$('avgPace').textContent=pace(totalKm,totalMin).replace(' min/km','');$('activityList').replaceChildren();[...entries].sort(activityNewestFirst).forEach(x=>{const c=document.createElement('div');c.className='card';const open=document.createElement('button');open.className='activity-open';open.type='button';const title=document.createElement('b');title.textContent=`${x.kind||'Corsa'} · ${x.km==null?'Distanza non disponibile':fmt(x.km)+' km'}`;const sub=document.createElement('small');sub.textContent=`${activityDateIT(x.date)} · ${fmt(x.minutes)} min · ${pace(x.km,x.minutes)}`;open.append(title,sub);open.onclick=()=>showDetail(x);const del=document.createElement('button');del.className='delete';del.textContent='Elimina';if(x.source==='honor'){del.hidden=true;del.title='Eliminazione HONOR dal server non ancora disponibile';}del.onclick=async()=>{
   if(!window.confirm(`Vuoi eliminare definitivamente da Runner Pulse l'allenamento del ${activityDateIT(x.date)}?${x.source==='garmin'?' Sarà eliminato anche da Firebase, ma resterà su Garmin Connect.':''}`))return;
   del.disabled=true;
   try{
@@ -172,6 +172,18 @@ function normalizeGarmin(a){
     elevation:num(['totalElevationGain','elevationGain']),calories:num(['calories','activeKilocalories']),
     avgSpeed:speed!=null?Math.round(speed*3.6*100)/100:null};
 }
+window.addEventListener('runnerpulse:honor-activities',event=>{
+ if(!key)return;
+ const records=Array.isArray(event.detail?.activities)?event.detail.activities:[];
+ entries=entries.filter(x=>x.source!=='honor');
+ for(const a of records){
+  const start=Number(a.startTimeInSeconds),duration=Number(a.durationInSeconds);
+  if(!Number.isFinite(start)||!Number.isFinite(duration)||duration<=0)continue;
+  entries.push({id:'honor-'+String(a.id),date:new Date(start*1000).toISOString().slice(0,10),
+   kind:a.title||'Allenamento HONOR',km:null,minutes:Math.round(duration/6)/10,source:'honor'});
+ }
+ render();
+});
 window.addEventListener('runnerpulse:garmin-data',e=>{if(!key)return;const data=e.detail;const list=Array.isArray(data?.activities)?data.activities:[];let added=0,updated=0,skipped=0;const existing=new Map(entries.map((x,i)=>[String(x.id),i]));for(const raw of list){const item=normalizeGarmin(raw);if(!item||deletedGarminIds.has(item.garminId)){skipped++;continue;}const i=existing.get(item.id);if(i!==undefined){entries[i]={...entries[i],...item};updated++;}else{entries.unshift(item);added++;existing.set(item.id,0);}}if(Array.isArray(data?.activities)){if(!data.fromArchive)localStorage.setItem('runnerPulseGarminLastSync',new Date().toISOString());save();if(!data.fromArchive)$('importResult').textContent=`Importazione completata: ${added} nuove, ${updated} aggiornate, ${skipped} non utilizzabili. ${list.length} attività ricevute dal server.`;if(!list.length&&!data.fromArchive)$('importResult').textContent='Il servizio non ha restituito attività in questa richiesta.';}});
 // Firestore e' autorevole per lo storico Garmin dopo una lettura completa e riuscita.
 // Non eliminare attivita' manuali o dati locali in caso di errore di rete.
