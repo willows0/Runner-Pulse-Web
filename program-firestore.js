@@ -1,6 +1,30 @@
 // Programma: usa SOLO il server autenticato e attività reali di Firestore.
 import {getApps} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import {getAuth} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {getFirestore,doc,getDoc,setDoc} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+// Per utente: Firestore e cache locale. Mai mischiare i piani di account diversi.
+const app=getApps().find(a=>a.options.projectId==='runnerpulse');
+if(app){
+ const auth=getAuth(app),db=getFirestore(app);
+ onAuthStateChanged(auth,async user=>{
+  window.rpSavedApproved=null;window.rpCurrentDraft=null;
+  if(!user){window.dispatchEvent(new Event('rp-plan-updated'));return;}
+  const uid=user.uid,key='runnerpulse:program:approved:'+uid;
+  let local=[];try{local=JSON.parse(localStorage.getItem(key)||'[]')}catch{}
+  if(Array.isArray(local)&&local.length)window.rpSavedApproved=local;
+  window.dispatchEvent(new Event('rp-plan-updated'));
+  try{
+   const snap=await getDoc(doc(db,'users',uid,'trainingPlans','current'));
+   if(getAuth(app).currentUser?.uid!==uid)return;
+   if(snap.exists()&&Array.isArray(snap.data().sessions)){
+    window.rpSavedApproved=snap.data().sessions;
+    localStorage.setItem(key,JSON.stringify(window.rpSavedApproved));
+    window.dispatchEvent(new Event('rp-plan-updated'));
+   }
+  }catch(err){console.warn('Lettura piano Firestore:',err.message)}
+ });
+}
+window.rpFirebaseApprovalActive=true;
 window.rpFirestorePlan=async function(){
  const form=document.getElementById('rp-program-form'),status=document.getElementById('rp-program-status');
  const btn=document.getElementById('rp-create-proposal');
@@ -37,15 +61,28 @@ window.rpFirestorePlan=async function(){
  }catch(error){status.textContent='Errore: '+error.message;console.error('Programma Firestore:',error)}finally{btn.disabled=false;}
 };
 
-// Approva soltanto la proposta mostrata e solo per lo stesso account. Nessuna scrittura su Calendar.
-document.addEventListener('click',function(event){
+// Salva il piano approvato nel database dell'utente; cache locale come fallback esplicito.
+document.addEventListener('click',async function(event){
  const btn=event.target.closest?.('#rp-program-approve');
- if(!btn||!window.rpCurrentDraft?.length||!window.rpFirestoreDraftOwner)return;
+ if(!btn)return;
  event.preventDefault();event.stopImmediatePropagation();
- const app=getApps().find(a=>a.options.projectId==='runnerpulse');
- const user=app&&getAuth(app).currentUser;
  const result=document.getElementById('rp-program-result');
- if(!user||user.uid!==window.rpFirestoreDraftOwner){result.textContent='Sessione cambiata: accedi nuovamente.';return;}
- localStorage.setItem('runnerpulse:program:approved:'+user.uid,JSON.stringify(window.rpCurrentDraft));
- result.textContent='Proposta approvata e salvata su questo dispositivo. Google Calendar non è ancora collegato.';
+ const active=getApps().find(a=>a.options.projectId==='runnerpulse');
+ const user=active&&getAuth(active).currentUser;
+ const draft=window.rpCurrentDraft;
+ if(!user||!Array.isArray(draft)||!draft.length){result.textContent='Prepara prima una proposta e accedi con Google.';return;}
+ if(window.rpFirestoreDraftOwner&&window.rpFirestoreDraftOwner!==user.uid){result.textContent='Account cambiato. Rigenera il piano.';return;}
+ btn.disabled=true;result.textContent='Salvataggio del programma…';
+ try{
+  const uid=user.uid;
+  const sessions=draft.map(s=>JSON.parse(JSON.stringify(s)));
+  await setDoc(doc(getFirestore(active),'users',uid,'trainingPlans','current'),{sessions,updatedAt:new Date().toISOString(),ownerUid:uid});
+  localStorage.setItem('runnerpulse:program:approved:'+uid,JSON.stringify(sessions));
+  window.rpSavedApproved=sessions;window.rpCurrentDraft=null;
+  result.textContent='Programma approvato e salvato su Firestore. Lo ritrovi nella scheda Piano anche dopo la riapertura.';
+  window.dispatchEvent(new Event('rp-plan-updated'));
+ }catch(error){
+  result.textContent='Non è stato possibile salvare il piano su Firestore: '+error.message+'. Il piano non è stato confermato.';
+  console.error('Salvataggio piano:',error);
+ }finally{btn.disabled=false;}
 },true);
