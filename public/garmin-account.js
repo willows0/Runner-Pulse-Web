@@ -62,12 +62,14 @@ if(honorButton&&honorLabel){
  info.addEventListener('click',()=>{message.textContent='HONOR Health richiede un collegamento autorizzato: non è ancora disponibile una connessione reale.';});
  honorButton.closest('.rp-device-row')?.querySelector('.rp-device-right')?.prepend(info);
 }
+// Non bloccare i collegamenti in base ai soli permessi Health Connect.
+// Il servizio scelto va verificato prima di cambiare la fonte attiva.
 function enforceExclusive(){
- const healthGranted=switches.get('healthconnect')?.getAttribute('aria-checked')==='true';
- const health=switches.get('healthconnect'),garmin=switches.get('garmin');
- if(health){health.disabled=garminConnected;health.title=garminConnected?'Disconnetti Garmin prima di attivare Health Connect':'Gestisci Health Connect';}
- if(garmin&&healthGranted&&!garminConnected){garmin.disabled=true;garmin.title='Revoca prima Health Connect';}
- if(honorButton)honorButton.disabled=true;
+ const health=switches.get('healthconnect');
+ const garmin=switches.get('garmin');
+ if(health){health.disabled=false;health.title='Gestisci Health Connect';}
+ if(garmin){garmin.disabled=false;garmin.title='Gestisci Garmin';}
+ if(honorButton)honorButton.disabled=true; // HONOR richiede ancora l’integrazione effettiva
 }
 // Health Connect e' una fonte Android locale, non un account OAuth web.
 // Il controllo rimane disconnesso finche' non esiste un bridge Android autorizzato.
@@ -143,7 +145,6 @@ if(healthButton&&healthLabel){
  }
 
  healthButton.addEventListener('click',()=>{
-  if(garminConnected){message.textContent='Disconnetti Garmin prima di collegare Health Connect.';return;}
   const existing=document.getElementById('rp-health-connect-info');
   if(existing){existing.remove();}
   const overlay=document.createElement('div');overlay.id='rp-health-connect-info';
@@ -224,7 +225,6 @@ async function refresh(){
  }catch(error){if(id===generation)showUnknown(error.message||'impossibile verificare lo stato');}
 }
 switches.get('garmin').addEventListener('click',()=>{
- if(!garminConnected&&healthButton?.getAttribute('aria-checked')==='true'){message.textContent='Revoca prima Health Connect per collegare Garmin.';return;}
  if(garminConnected){if(!window.confirm('Vuoi scollegare il tuo account Garmin da Runner Pulse?'))return;void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch('/api/garmin/disconnect',{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok)throw new Error(data.message||'Scollegamento non riuscito');await refresh();}catch(error){message.textContent=error.message||'Scollegamento non riuscito';}})();return;}
  if(!garminOAuthAvailable||!garminConnectUrl){message.textContent='Autorizzazione Garmin non ancora disponibile.';return;}
  void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch(garminConnectUrl,{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok||!data.authorizationUrl)throw new Error(data.message||'Autorizzazione Garmin non disponibile');window.location.assign(data.authorizationUrl);}catch(error){message.textContent=error.message||'Connessione non riuscita';}})();
