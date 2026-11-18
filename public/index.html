@@ -37,16 +37,16 @@
     <section id="home" class="page active rp-sport-home">
       <section class="rp-elite-hero" aria-label="Panoramica sportiva">
         <div class="rp-elite-top"><span class="rp-elite-kicker">RUNNER PULSE <span class="rp-elite-dot">●</span> PERFORMANCE</span><span class="rp-elite-live">IL TUO SPORT</span></div>
-        <div class="rp-elite-main"><div class="rp-elite-copy"><h1>Corri forte.<br><em>Vai oltre.</em></h1><p>Ogni corsa racconta i tuoi progressi.</p></div><div class="rp-elite-watch"><span class="rp-watch-caption">GARMIN CONNECT</span><button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Stato sincronizzazione Garmin" title="Stato sincronizzazione Garmin">
+        <div class="rp-elite-main"><div class="rp-elite-copy"><h1>Corri forte.<br><em>Vai oltre.</em></h1><p>Ogni corsa racconta i tuoi progressi.</p></div><div class="rp-elite-watch"><span class="rp-watch-caption"></span><button id="rp-sync-clock" class="rp-sync-clock" type="button" aria-label="Stato sincronizzazione Garmin" title="Stato sincronizzazione Garmin">
       <svg class="rp-watch" viewBox="0 0 58 82" aria-hidden="true"><defs><linearGradient id="watchframe" x1="0" x2="1"><stop stop-color="#242b31"/><stop offset=".5" stop-color="#53595e"/><stop offset="1" stop-color="#11151b"/></linearGradient></defs><path d="M17 2h24l4 16H13zM13 64h32l-4 16H17z" fill="#171b20"/><rect x="4" y="15" width="50" height="52" rx="13" fill="url(#watchframe)"/><rect x="9" y="20" width="40" height="42" rx="9" fill="#10151a"/><rect x="54" y="33" width="3" height="13" rx="1.5" fill="#252b30"/><circle cx="33" cy="29" r="4" fill="#ff6b16"/><path d="m28 36-8 8-10 3m19-11 10 6 7-2m-18-4-3 12-9 10m9-10 12 6 7 7" stroke="#ff6b16" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <svg class="rp-ring-svg" viewBox="0 0 48 48" aria-hidden="true"><circle class="rp-sync-track" cx="24" cy="24" r="19"/><circle id="rp-sync-ring" class="rp-sync-ring" cx="24" cy="24" r="19"/></svg>
-    </button><strong id="rp-sync-percent" class="rp-watch-percent" aria-live="polite">—</strong><span id="rp-sync-text" class="rp-watch-sync-status" role="status">Verifica sincronizzazione…</span><span class="rp-watch-hint">Tocca per sincronizzare</span></div></div>
-        <div class="rp-elite-footer"><div><span>ALLENAMENTI REGISTRATI</span><strong id="count">0</strong></div><div class="rp-elite-sync-summary"><span>GARMIN</span><span>Storico conservato</span></div></div>
+    </button><strong id="rp-sync-percent" class="rp-watch-percent" aria-live="polite">—</strong><span id="rp-sync-text" class="rp-watch-sync-status" role="status">Verifica sincronizzazione…</span><span class="rp-watch-hint">Tocca per gestire</span></div></div>
+        <div class="rp-elite-footer" hidden aria-hidden="true"><div><span>ALLENAMENTI REGISTRATI</span><strong id="count">0</strong></div><div class="rp-elite-sync-summary"><span>GARMIN</span><span>Storico conservato</span></div></div>
       </section>
       <div class="rp-section-head"><div><span class="rp-overline">PERFORMANCE</span><h2>Ultimi 7 giorni</h2></div><span class="rp-section-tag">Le tue corse</span></div>
       <div class="rp-performance-grid"><article class="rp-performance-card rp-performance-primary"><span>CHILOMETRI PERCORSI</span><strong id="rp-week-km">—</strong><small>Negli ultimi 7 giorni</small></article><article class="rp-performance-card"><span>USCITE</span><strong id="rp-week-runs">—</strong><small>Corse registrate</small></article><article class="rp-performance-card"><span>PASSO MEDIO</span><strong id="avgPace">—</strong><small>Min/km</small></article></div>
       <span id="distance" hidden aria-hidden="true">0</span>
-      <div class="rp-watch-actions"><button type="button" id="rp-check-new-activities" class="rp-refresh-button">↻ Controlla nuove attività</button><p id="rp-new-activities-result" role="status" class="rp-watch-result">Lo storico Garmin già salvato non viene riscaricato.</p></div>
+      <div class="rp-watch-actions" hidden aria-hidden="true"><button type="button" id="rp-check-new-activities" class="rp-refresh-button">↻ Controlla nuove attività</button><p id="rp-new-activities-result" role="status" class="rp-watch-result">Lo storico Garmin già salvato non viene riscaricato.</p></div>
       <div hidden aria-hidden="true"><p id="garminStatus"></p><p id="garminUpdated"></p></div>
     </section>
     <section id="activities" class="page">
@@ -67,7 +67,7 @@
 <label>Livello<select name="level"><option value="beginner">Principiante</option><option value="intermediate">Intermedio</option><option value="advanced" selected>Avanzato</option></select></label>
 <label>Durata massima nei giorni feriali (minuti)<input name="weekdayMinutes" type="number" min="20" max="240" value="70"></label>
 <label>Fascia oraria preferita<select name="timePreference"><option value="evening">Sera</option><option value="morning">Mattina</option><option value="afternoon">Pomeriggio</option></select></label></div>
-<button type="button" id="rp-create-proposal" onclick="window.rpBuildPlan && window.rpBuildPlan()">Prepara proposta con il Coach</button></form>
+<button type="button" id="rp-create-proposal">Prepara proposta con il Coach</button></form>
 <p id="rp-program-status" role="status" aria-live="polite"></p></div>
 <div class="card rp-program-card"><h2>Google Calendar</h2><p>Con il tuo consenso Runner Pulse potrà cercare orari liberi e, dopo la tua approvazione, aggiungere gli allenamenti.</p><button id="rp-calendar-connect" type="button">Collega Google Calendar</button><p id="rp-calendar-status" class="note" role="status">Non collegato</p></div>
 <div id="rp-program-proposal" class="card rp-program-card" hidden><h2>Proposta del Coach</h2><p id="rp-program-description"></p><div id="rp-program-sessions"></div><div class="rp-program-actions"><button id="rp-program-replan" type="button">Ricalcola proposta</button><button id="rp-program-approve" type="button">Approva e salva</button></div><p id="rp-program-result" role="status"></p></div>
@@ -87,64 +87,14 @@
   <script src="/app.js"></script>
   <script src="/dashboard.js" defer></script>
   <script>
-  (() => {
-    const splash = document.getElementById('splash');
-    const enter = document.getElementById('enterApp');
-    if (!splash || !enter) return;
-    sessionStorage.removeItem('runnerPulseSplashSeen');
-    splash.hidden = false;
-    let playing = false;
-    enter.onclick = () => {
-      if (playing) return;
-      playing = true;
-      enter.disabled = true;
-      enter.textContent = 'Ascolta il tuo cuore ♥';
-      const AudioContextType = window.AudioContext || window.webkitAudioContext;
-      let ctx;
-      try { if (AudioContextType) ctx = new AudioContextType(); } catch {}
-      if (ctx) {
-        const master = ctx.createGain();
-        master.gain.value = 0.8;
-        master.connect(ctx.destination);
-        const thump = (at, pitch, strength) => {
-          const oscillator = ctx.createOscillator();
-          const envelope = ctx.createGain();
-          oscillator.type = 'triangle';
-          oscillator.frequency.setValueAtTime(pitch, at);
-          oscillator.frequency.exponentialRampToValueAtTime(65, at + 0.16);
-          envelope.gain.setValueAtTime(0.0001, at);
-          envelope.gain.exponentialRampToValueAtTime(strength, at + 0.014);
-          envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.21);
-          oscillator.connect(envelope).connect(master);
-          oscillator.start(at);
-          oscillator.stop(at + 0.22);
-        };
-        const beat = () => {
-          if (ctx.state !== 'running') return;
-          const t = ctx.currentTime + 0.025;
-          thump(t, 165, 0.62);
-          thump(t + 0.22, 130, 0.42);
-        };
-        void ctx.resume().then(() => {
-          beat();
-          const timer = setInterval(beat, 1050);
-          setTimeout(() => { clearInterval(timer); void ctx.close().catch(() => {}); }, 3400);
-        }).catch(() => {});
-      }
-      setTimeout(() => {
-        splash.hidden = true;
-        enter.disabled = false;
-        enter.textContent = 'Entra in Runner Pulse';
-        playing = false;
-      }, 3700);
-    };
-  })();
+  // Accesso diretto: nessun pulsante di ingresso e nessun reset ad ogni apertura.
+  (() => { const splash=document.getElementById('splash');if(splash)splash.hidden=true; })();
   </script>
   <script type="module" src="/login.js"></script>
   <script type="module" src="/coach-memory.js"></script>
   <script type="module" src="/runner-profile.js"></script>
 
-<script>
+<script type="module">
 ;(() => {
 // Runner Pulse - configurazione obiettivo e passaggio al Coach reale.
 // Nessun allenamento o impegno Google viene inventato o salvato senza autorizzazione.
