@@ -313,7 +313,7 @@ showApproved();
  document.addEventListener('click',function(e){
   var btn=e.target.closest&&e.target.closest('#rp-create-proposal');
   if(!btn)return;
-  e.preventDefault();e.stopImmediatePropagation();makePlan();
+  e.preventDefault();e.stopImmediatePropagation();if(window.rpFirestorePlan)window.rpFirestorePlan();else makePlan();
  },true);
  document.addEventListener('submit',function(e){
   if(e.target&&e.target.id==='rp-program-form'){e.preventDefault();e.stopImmediatePropagation();makePlan();}
@@ -391,9 +391,9 @@ showApproved();
   const meta=document.createElement('p');meta.className='rp-detail-meta';meta.textContent=[s.date,s.time,(s.minutes||'—')+' minuti'].filter(Boolean).join(' · ');detail.appendChild(meta);
   const title=document.createElement('h3');title.textContent="Struttura dell’allenamento";detail.appendChild(title);
   const total=Number(s.minutes)||0;const warm=Math.min(15,Math.max(5,Math.round(total*.2)));const cool=Math.min(10,Math.max(5,Math.round(total*.15)));const main=Math.max(0,total-warm-cool);
-  const guidance=paceGuidance(s);const steps=[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',guidance.text],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
+  const guidance=paceGuidance(s);const steps=Array.isArray(s.steps)&&s.steps.length?s.steps.map(x=>[x.name,x.minutes+' min',x.description]):[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',guidance.text],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
   steps.forEach(([name,duration,description],i)=>{const item=document.createElement('div');item.className='rp-step';const n=document.createElement('span');n.className='rp-step-num';n.textContent=i+1;const body=document.createElement('div');const strong=document.createElement('strong');strong.textContent=name;const p=document.createElement('p');p.textContent=duration+' · '+description;body.append(strong,p);item.append(n,body);detail.appendChild(item)});
-  const note=document.createElement('p');note.className='rp-detail-note';note.textContent=guidance.note;detail.appendChild(note);
+  const note=document.createElement('p');note.className='rp-detail-note';note.textContent=Array.isArray(s.steps)&&s.steps.length?'Stima dai dati archiviati: controlla sempre le sensazioni; non sostituisce la valutazione di un allenatore.':guidance.note;detail.appendChild(note);
   detail.scrollIntoView({behavior:'smooth',block:'start'});
  }
  // Observe new drafts without replacing the already working generator.
@@ -403,5 +403,6 @@ showApproved();
  show('calendar');
 })();
 </script>
+<script type="module" src="/program-firestore.js?v=20261118b"></script>
 </body>
 </html>
