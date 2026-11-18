@@ -67,7 +67,7 @@ async function mobileAuthRoute(req,res,pathname){
  }catch(e){console.warn('Mobile auth:',e.code||e.message);return json(res,e.status||400,{success:false,message:'Autenticazione non riuscita. Riprova.'});}
 }
 
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/mobile-login.html':'mobile-login.html','/mobile-login.js':'mobile-login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js','/program.js':'program.js'};
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/mobile-login.html':'mobile-login.html','/mobile-login.js':'mobile-login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js','/program.js':'program.js','/program-firestore.js':'program-firestore.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.gif':'image/gif','.ico':'image/x-icon'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 function verifiedGoogleIdentity(user){return user.email_verified===true || (user.firebase?.sign_in_provider==='google.com' && user.firebase?.identities?.['google.com']?.length>0);}
@@ -1380,6 +1380,57 @@ http.createServer(async(req,res)=>{
     }catch(error){console.error('Archivio Garmin:',error.message);return json(res,502,{success:false,message:'Impossibile leggere lo storico Garmin'});}
   }
   if(['/api/garmin/sync-status','/api/garmin/sync-step'].includes(pathname)){await syncRequest(req,res,pathname);return;}
+  // Piano personalizzato: solo dati Garmin realmente archiviati dell'utente autenticato.
+  if(pathname==='/api/program/propose'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accedi con Google per generare il piano.'});
+    try{
+      const input=await readJsonBody(req,4096);
+      const days=Number(input?.days),distance=Number(input?.distance),maxMinutes=Number(input?.weekdayMinutes||70);
+      if(!Number.isInteger(days)||days<2||days>6||!Number.isFinite(distance)||distance<0.5||distance>500||!Number.isFinite(maxMinutes)||maxMinutes<20||maxMinutes>240||!['morning','afternoon','evening'].includes(input?.timePreference))return json(res,400,{success:false,message:'Controlla i dati dell’obiettivo.'});
+      const docs=await getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('activities').limit(1500).get();
+      const removed=await getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('deletedActivities').limit(1500).get();
+      const deleted=new Set(removed.docs.map(d=>d.id));
+      const runs=[];
+      for(const doc of docs.docs){
+        if(deleted.has(doc.id))continue;
+        const r=doc.data()||{},a=r.summary||{};
+        const kind=String(a.activityType?.typeKey||a.activityType?.typeId||a.activityName||'').toLowerCase();
+        if(kind&&!/(run|corsa|running|treadmill|trail)/.test(kind))continue;
+        const meters=Number(a.distance??a.distanceInMeters),seconds=Number(a.duration??a.durationInSeconds??a.elapsedDuration);
+        const raw=a.startTimeLocal??a.startTimeGMT??a.startTime??a.startTimeInSeconds??r.startTimeInSeconds;
+        const date=typeof raw==='number'?new Date(raw<1e11?raw*1000:raw):typeof raw==='string'&&/^\d{10,13}$/.test(raw)?new Date(Number(raw)<1e11?Number(raw)*1000:Number(raw)):new Date(raw);
+        const km=meters/1000,minutes=seconds/60,pace=minutes/km,hr=Number(a.averageHR??a.averageHeartRate);
+        if(!Number.isFinite(date.getTime())||date>Date.now()+86400000||date<Date.now()-180*86400000||!Number.isFinite(km)||km<2||km>100||!Number.isFinite(minutes)||minutes<10||minutes>600||pace<3||pace>12)continue;
+        runs.push({date:date.toISOString().slice(0,10),km,minutes,pace,hr:Number.isFinite(hr)&&hr>=70&&hr<=220?hr:null});
+      }
+      runs.sort((a,b)=>b.date.localeCompare(a.date));
+      const recent=runs.filter(r=>Date.parse(r.date)>=Date.now()-42*86400000);
+      const paces=recent.slice(0,16).map(r=>r.pace).sort((a,b)=>a-b);
+      const median=paces.length>=3?paces[Math.floor(paces.length/2)]:null;
+      const weeklyKm=recent.reduce((sum,r)=>sum+r.km,0)/6;
+      const avgHr=recent.filter(r=>r.hr!==null).map(r=>r.hr);
+      const hr=avgHr.length>=3?Math.round(avgHr.reduce((a,b)=>a+b,0)/avgHr.length):null;
+      const paceFmt=p=>{const n=Math.round(p*60);return Math.floor(n/60)+':'+String(n%60).padStart(2,'0')+'/km'};
+      const patterns={2:[2,0],3:[2,4,0],4:[1,3,5,0],5:[1,2,4,5,0],6:[1,2,3,4,5,0]};
+      const daySet=patterns[days],pref=input.timePreference==='morning'?'07:00':input.timePreference==='afternoon'?'13:00':'18:30';
+      const sessions=[];const now=new Date();now.setHours(12,0,0,0);
+      const baseEasy=recent.length>=3?Math.max(25,Math.min(65,Math.round(recent.slice(0,12).reduce((s,r)=>s+r.minutes,0)/Math.min(12,recent.length)))):35;
+      for(let week=0;week<4;week++)for(let i=0;i<daySet.length;i++){
+        const day=daySet[i],delta=(day-now.getDay()+7)%7||7,d=new Date(now);d.setDate(now.getDate()+delta+week*7);
+        const long=day===0,quality=i===1&&!long&&recent.length>=3;
+        const factor=[1,1.05,1.08,.82][week];
+        const duration=Math.round(Math.min(long?125:maxMinutes,Math.max(25,(long?baseEasy*1.35:baseEasy*(quality?1.05:0.85))*factor))/5)*5;
+        const warm=Math.max(5,Math.round(duration*.2/5)*5),cool=Math.max(5,Math.round(duration*.15/5)*5),main=Math.max(5,duration-warm-cool);
+        const title=long?'Lungo facile':quality?'Ritmo controllato':'Corsa facile';
+        const paceText=median===null?'Ritmo conversazionale, guidato dalle sensazioni':quality?paceFmt(median*.97)+' – '+paceFmt(median*1.05):paceFmt(median*1.08)+' – '+paceFmt(median*1.22);
+        const description=quality?'Sforzo sostenibile e regolare, senza andare al massimo.':'Corsa facile, mantieni la capacità di parlare.';
+        sessions.push({date:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),time:long?'09:00':pref,title,minutes:duration,details:description+' '+paceText,steps:[{name:'Riscaldamento',minutes:warm,description:'Corsa molto facile e progressiva.'},{name:'Parte centrale',minutes:main,description:description+' '+paceText},{name:'Defaticamento',minutes:cool,description:'Rallenta progressivamente.'}]});
+      }
+      return json(res,200,{success:true,sessions,metrics:{totalStored:docs.size,validRuns:runs.length,recentRuns:recent.length,weeklyKm:Math.round(weeklyKm*10)/10,averageHR:hr,medianPace:median?paceFmt(median):null},caveats:[median===null?'Dati insufficienti per stimare il passo: intensità a sensazione.':'I ritmi sono stime basate sul passo medio, non soglie fisiologiche misurate.','Sonno e recupero non sono ancora inclusi nel calcolo.','Gli orari non sono stati verificati con Google Calendar.']});
+    }catch(error){console.error('Programma Firestore:',error);return json(res,500,{success:false,message:'Impossibile elaborare le attività archiviate. Riprova.'});}
+  }
   if(pathname==='/api/coach/activity'){await handleActivityCoach(req,res,authorized,readJsonBody,json);return;}
   if(pathname==='/api/coach/chat'){await handleCoachAI(req,res,authorized);return;}
   if(pathname==='/api/status'){if(req.method!=='GET'){json(res,405,{message:'Method not allowed'});return;}json(res,200,{garminConfigured:false,garminConnected:false,message:'Personal API rimossa. Connessione Garmin ufficiale gestita separatamente.'});return;}
