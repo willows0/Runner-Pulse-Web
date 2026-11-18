@@ -741,13 +741,13 @@ window.addEventListener('runnerpulse:activity-coach',async event=>{
  }catch(e){if(pane===document.getElementById('rp-detail-coach'))result.textContent='Valutazione non disponibile: '+(e.message||String(e));}
 });
 
-// Importazione FIT/ZIP autenticata, solo proprietario; nessun dato salvato in localStorage prima del successo server.
+// Importazione FIT/ZIP autenticata per ogni utente Google verificato; nessun dato salvato in localStorage prima del successo server.
 document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
  const input=document.getElementById('rp-fit-file'),button=document.getElementById('rp-fit-upload'),status=document.getElementById('rp-fit-status');
  const wrap=document.getElementById('rp-fit-progress-wrap'),bar=document.getElementById('rp-fit-progress'),label=document.getElementById('rp-fit-progress-label'),percent=document.getElementById('rp-fit-progress-percent'),note=document.getElementById('rp-fit-progress-note');
  const file=input?.files?.[0];
  if(!file){status.textContent='Seleziona prima un file FIT, ZIP o TCX.';return;}
- if(!allowedUser()||!isOwner()){status.textContent='Accedi con l’account Google proprietario.';return;}
+ if(!allowedUser()){status.textContent='Accedi con Google per importare i tuoi allenamenti.';return;}
  if(file.size>85*1024*1024){status.textContent='Il file supera 85 MB: dividi lo ZIP in archivi più piccoli.';return;}
  button.disabled=true;wrap.hidden=false;bar.value=0;percent.textContent='0%';label.textContent='Caricamento file';note.textContent='Non chiudere la pagina.';status.textContent='';
  try{
