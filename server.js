@@ -1041,6 +1041,16 @@ async function weeklyPushRoute(req,res,pathname){
 }
 
 http.createServer(async(req,res)=>{
+  if(req.url?.split('?')[0]==='/api/health-connect/activities'){
+    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
+    try{
+      const snapshot=await getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('healthConnectActivities').limit(300).get();
+      const activities=snapshot.docs.map(doc=>({id:doc.id,...doc.data()})).filter(a=>a.source==='honor'&&!a.duplicateOfGarminId).sort((a,b)=>b.startTimeInSeconds-a.startTimeInSeconds);
+      return json(res,200,{success:true,activities});
+    }catch(error){console.error('HONOR activity list',error.message);return json(res,503,{success:false,message:'Attività HONOR non disponibili'});}
+  }
   if(req.url?.startsWith('/api/health-connect/import')) {
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
     const user=await garminGoogleUser(req);
