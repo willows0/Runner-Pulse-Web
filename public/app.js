@@ -126,10 +126,15 @@ navigator.serviceWorker?.addEventListener('message',event=>{
  }
 });
 setTimeout(openPendingCoachActivity,250);
-function render(){const totalKm=entries.reduce((s,x)=>s+(Number(x.km)||0),0);const totalMin=entries.reduce((s,x)=>s+(Number(x.minutes)||0),0);$('count').textContent=entries.length;$('distance').textContent=fmt(totalKm);$('avgPace').textContent=pace(totalKm,totalMin).replace(' min/km','');$('activityList').replaceChildren();[...entries].sort(activityNewestFirst).forEach(x=>{const c=document.createElement('div');c.className='card';const open=document.createElement('button');open.className='activity-open';open.type='button';const title=document.createElement('b');title.textContent=`${x.kind||'Corsa'} · ${x.km==null?'Distanza non disponibile':fmt(x.km)+' km'}`;const sub=document.createElement('small');sub.textContent=`${activityDateIT(x.date)} · ${fmt(x.minutes)} min · ${pace(x.km,x.minutes)}`;if(x.provider)sub.textContent+=' · '+x.provider;open.append(title,sub);open.onclick=()=>showDetail(x);const del=document.createElement('button');del.className='delete';del.textContent='Elimina';if(x.source==='honor'||x.source==='health-connect'){del.hidden=true;del.title='La sessione Health Connect rimane salvata nell’archivio dell’account';}del.onclick=async()=>{
-  if(!window.confirm(`Vuoi eliminare definitivamente da Runner Pulse l'allenamento del ${activityDateIT(x.date)}?${x.source==='garmin'?' Sarà eliminato anche da Firebase, ma resterà su Garmin Connect.':''}`))return;
+function render(){const totalKm=entries.reduce((s,x)=>s+(Number(x.km)||0),0);const totalMin=entries.reduce((s,x)=>s+(Number(x.minutes)||0),0);$('count').textContent=entries.length;$('distance').textContent=fmt(totalKm);$('avgPace').textContent=pace(totalKm,totalMin).replace(' min/km','');$('activityList').replaceChildren();[...entries].sort(activityNewestFirst).forEach(x=>{const c=document.createElement('div');c.className='card';const open=document.createElement('button');open.className='activity-open';open.type='button';const title=document.createElement('b');title.textContent=`${x.kind||'Corsa'} · ${x.km==null?'Distanza non disponibile':fmt(x.km)+' km'}`;const sub=document.createElement('small');sub.textContent=`${activityDateIT(x.date)} · ${fmt(x.minutes)} min · ${pace(x.km,x.minutes)}`;if(x.provider)sub.textContent+=' · '+x.provider;open.append(title,sub);open.onclick=()=>showDetail(x);const del=document.createElement('button');del.className='delete';del.textContent='Elimina';if(x.source==='honor'||x.source==='health-connect'){del.title='Elimina da Runner Pulse (non da HONOR Health o Health Connect)';}del.onclick=async()=>{
+  if(!window.confirm(`Vuoi eliminare definitivamente da Runner Pulse l'allenamento del ${activityDateIT(x.date)}?${x.source==='garmin'?' Sarà eliminato anche da Firebase, ma resterà su Garmin Connect.':(x.source==='honor'||x.source==='health-connect')?' Sarà eliminato anche da Firebase, ma resterà sul dispositivo.':''}`))return;
   del.disabled=true;
   try{
+    if(x.source==='honor'||x.source==='health-connect'){
+      const id=String(x.id||'').replace(/^hc-/,'');
+      if(!/^[a-f0-9]{64}$/.test(id))throw new Error('ID attività Health Connect non valido.');
+      await new Promise((resolve,reject)=>window.dispatchEvent(new CustomEvent('runnerpulse:delete-health-activity',{detail:{activityId:id,resolve,reject}})));
+    }
     if(x.source==='garmin'){
       const id=String(x.garminId||String(x.id||'').replace(/^garmin-/,''));
       if(!/^\d{1,20}$/.test(id))throw new Error('Identificativo Garmin non valido: nessun dato eliminato.');
@@ -185,8 +190,9 @@ window.addEventListener('runnerpulse:honor-activities',event=>{
   const honor=/(^|\.)honor(\.|$)|(^|\.)hihonor(\.|$)/i.test(String(a.sourcePackage||''));
   const provider=honor?'HONOR Health':'Health Connect';
   const activitySource=honor?'honor':'health-connect';
+  const dist=safeNumber(a.distanceMeters);
   received.push({id:'hc-'+String(a.id),coachId:'hc-'+String(a.id),date:date.toISOString().slice(0,10),
-   kind:String(a.title||'Allenamento'),km:null,provider,
+   kind:String(a.title||'Allenamento'),km:dist!==null&&dist>=0?Math.round(dist/10)/100:null,provider,
    minutes:Math.round(duration/6)/10,source:activitySource,startTime:start});
  }
  // L'archivio Firebase è autorevole solo quando una lettura valida è riuscita.

@@ -4,13 +4,33 @@ const config={apiKey:'AIzaSyBVTj9i4545kOmvx3H78_YliE54nPSFyLg',authDomain:'runne
 const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(config),auth=getAuth(app);
 const el=id=>document.getElementById(id);
 let generation=0;
+const honorSelected=()=>{const uid=auth.currentUser?.uid;if(!uid)return false;try{return localStorage.getItem('runnerpulse-active-source:'+uid)==='honor';}catch{return false;}};
+let nativeSleep=null,lastSynced='';
+async function saveHealthSleep(data){
+ const user=auth.currentUser;
+ if(!user||!honorSelected()||!Array.isArray(data?.days)||data.days.length!==7)return;
+ const k=user.uid+':'+JSON.stringify(data.days);
+ if(k===lastSynced)return;
+ nativeSleep=data;
+ try{
+  const token=await user.getIdToken();if(auth.currentUser?.uid!==user.uid)return;
+  const r=await fetch('/api/health-connect/sleep-sync',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({days:data.days})});
+  if(!r.ok)throw Error('HTTP '+r.status);
+  lastSynced=k;
+  void load();
+ }catch(e){console.warn('Sincronizzazione sonno Health Connect:',e.message);}
+}
+window.addEventListener('runnerpulse:health-sleep',e=>{if(e.detail?.days)void saveHealthSleep(e.detail);});
+const requestNative=()=>{if(honorSelected()&&!window.RunnerPulseHealthNative?.requestHomeHealth&&window.RunnerPulseHealthNative?.requestSleep)try{window.RunnerPulseHealthNative.requestSleep();}catch(e){console.warn('Sonno Health Connect:',e.message);}};
+
 const duration=seconds=>`${Math.floor(seconds/3600)}h ${String(Math.floor((seconds%3600)/60)).padStart(2,'0')}m`;
 function reset(message){el('rp-sleep-duration').textContent='—';el('rp-sleep-date').textContent='Dati non disponibili';el('rp-sleep-score').textContent='—';el('rp-sleep-judgement').textContent='Non disponibile';el('rp-sleep-coach-comment').textContent='';el('rp-sleep-ring').style.setProperty('--ring-color','#64748b');el('rp-sleep-bars').replaceChildren();el('rp-sleep-note').textContent=message;}
 async function load(){
  const current=++generation,user=auth.currentUser;
  if(!user){reset('Accedi per visualizzare il sonno.');return;}
+ requestNative();
  try{
-  const token=await user.getIdToken(),response=await fetch('/api/sleep/week',{headers:{Authorization:'Bearer '+token},cache:'no-store'});
+  const token=await user.getIdToken(),response=await fetch('/api/sleep/week'+(honorSelected()?'?source=health-connect':''),{headers:{Authorization:'Bearer '+token},cache:'no-store'});
   if(!response.ok)throw new Error('HTTP '+response.status);
   const payload=await response.json();
   if(current!==generation||auth.currentUser?.uid!==user.uid)return;
@@ -33,9 +53,9 @@ async function load(){
    const label=document.createElement('span');label.textContent=new Intl.DateTimeFormat('it-IT',{weekday:'short',timeZone:'UTC'}).format(new Date(day.date+'T12:00:00Z'));
    cell.append(bar,label);bars.append(cell);
   }
-  el('rp-sleep-note').textContent=available.length?`Dati Garmin disponibili per ${available.length} giorni su 7.`:'Nessun riepilogo del sonno disponibile negli ultimi 7 giorni.';
+  el('rp-sleep-note').textContent=available.length?`${honorSelected()?'Health Connect':'Garmin'}: ${available.length} giorni con dati su 7.`:'Nessun riepilogo del sonno disponibile negli ultimi 7 giorni.';
  }catch(error){if(current===generation)reset('Impossibile leggere il sonno dal server ('+error.message+').');}
 }
-onAuthStateChanged(auth,load);
-window.addEventListener('runnerpulse:garmin-connection',load);
+onAuthStateChanged(auth,()=>{lastSynced='';nativeSleep=null;load();});
+window.addEventListener('runnerpulse:garmin-connection',load);window.addEventListener('runnerpulse:device-status',load);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});

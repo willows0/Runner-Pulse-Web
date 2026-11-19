@@ -589,3 +589,6 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #settings .rp-devices .rp-device-switch { padding:0!important; border-radius:28px!important; }
 #settings .rp-devices .rp-device-switch:not(:disabled) { cursor:pointer!important; opacity:1!important; touch-action:manipulation; }
 #settings .rp-devices .rp-device-switch:disabled { cursor:not-allowed!important; opacity:.45!important; }
+
+/* HONOR: nascondi realmente il pannello FC quando non selezionato. */
+#home #rp-health-resting-panel[hidden]{display:none!important;}

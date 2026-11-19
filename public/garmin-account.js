@@ -79,6 +79,20 @@ function honorSave(selected){
  try{if(selected)localStorage.setItem(key,'honor');else localStorage.removeItem(key);}
  catch(error){message.textContent='Il telefono non ha potuto salvare la preferenza HONOR: '+(error.message||'memoria non disponibile');}
 }
+// Conferma server obbligatoria: una sessione Health Connect rimossa non torna all'import successivo.
+window.addEventListener('runnerpulse:delete-health-activity',async event=>{
+ const {activityId,resolve,reject}=event.detail||{};
+ const user=auth.currentUser;
+ if(!user){reject?.(new Error('Accedi con Google.'));return;}
+ try{
+  const token=await user.getIdToken();
+  if(auth.currentUser?.uid!==user.uid)throw Error('Account cambiato durante l’operazione');
+  const response=await fetch('/api/health-connect/delete-activity',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({activityId})});
+  const data=await response.json();
+  if(!response.ok||!data.success)throw Error(data.message||'Eliminazione non riuscita');
+  resolve?.();
+ }catch(error){reject?.(error);}
+});
 let honorActivitiesRequest=0;
 async function loadHonorActivities(){
  const user=auth.currentUser;
