@@ -26,6 +26,9 @@ const watchButton=document.getElementById('rp-sync-clock');
 const watchActions=document.querySelector('.rp-watch-actions');
 const connectionDot=document.getElementById('rp-watch-connection-dot');
 let connectionState='unknown';
+// Lo stato Garmin va inizializzato PRIMA di renderHonor(): altrimenti
+// il modulo si interrompe e tutti gli interruttori restano disabilitati.
+let garminConnected=false;
 function publishConnection(service){
  const name=service==='honor'?'HONOR Health':service==='garmin'?'Garmin Connect':service==='polar'?'Polar Flow':service==='suunto'?'Suunto App':service==='samsung'?'Samsung Health':'';
  window.runnerPulseConnectedService=service||null;
@@ -50,6 +53,12 @@ for(const [id,name,subtitle] of services){
  const state=document.createElement('span');state.className='rp-device-state';state.textContent='Non collegato';
  const button=document.createElement('button');button.type='button';button.className='rp-device-switch';button.setAttribute('role','switch');button.setAttribute('aria-label',`Collegamento ${name}`);button.setAttribute('aria-checked','false');button.disabled=true;
  right.append(state,button);row.append(left,right);list.append(row);switches.set(id,button);labels.set(id,state);
+}
+// Non mostrare interruttori apparentemente utilizzabili se non esiste un'integrazione.
+for(const id of ['polar','suunto','samsung']){
+ const button=switches.get(id),state=labels.get(id);
+ if(button){button.disabled=true;button.title='Collegamento non ancora disponibile';}
+ if(state)state.textContent='Non ancora disponibile';
 }
 // HONOR Health si collega tramite Health Connect, non con OAuth HONOR.
 const honorButton=switches.get('honor');
@@ -266,7 +275,6 @@ const healthStyle=document.createElement('style');
 healthStyle.textContent='.rp-hc-overlay{position:fixed;inset:0;z-index:10000;background:#07101dd9;display:flex;align-items:center;justify-content:center;padding:20px}.rp-hc-overlay[hidden]{display:none}.rp-hc-dialog{max-width:420px;width:100%;background:#142b49;color:white;border:1px solid #416387;border-radius:18px;padding:22px;box-shadow:0 20px 60px #0009}.rp-hc-dialog h2{margin:0 0 14px}.rp-hc-dialog p{line-height:1.55}.rp-hc-dialog button{background:#2878d5;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-weight:700}';
 document.head.append(healthStyle);
 let generation=0;
-let garminConnected=false;
 let garminOAuthAvailable=false;
 let garminConnectUrl='';
 function setGarminUI(connected,available){

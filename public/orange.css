@@ -584,3 +584,8 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 .rp-honor-health-card p{color:#dce5f1;line-height:1.5}
 .rp-honor-health-card button{border:0;border-radius:13px;background:#f4770b;color:white;font-weight:700;padding:12px 16px}
 #rp-honor-health-info[hidden]{display:none}
+
+/* Tasti dispositivi: non ereditare il cursore "bloccato" da altri riquadri profilo. */
+#settings .rp-devices .rp-device-switch { padding:0!important; border-radius:28px!important; }
+#settings .rp-devices .rp-device-switch:not(:disabled) { cursor:pointer!important; opacity:1!important; touch-action:manipulation; }
+#settings .rp-devices .rp-device-switch:disabled { cursor:not-allowed!important; opacity:.45!important; }
