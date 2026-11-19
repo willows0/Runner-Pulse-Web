@@ -14,6 +14,7 @@ import { handleCoachAI, generateWeeklyCoachReport } from './coach-api.js';
 import {handleActivityCoach,activityCoachReport} from './activity-coach.js';
 import {isHonorPackage,healthCoachId} from './activity-data.js';
 import {normalizePlan,planRef,revisionOf} from './training-plan.js';
+import {handleGoogleCalendarRoute} from './google-calendar-integration.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -69,7 +70,7 @@ async function mobileAuthRoute(req,res,pathname){
  }catch(e){console.warn('Mobile auth:',e.code||e.message);return json(res,e.status||400,{success:false,message:'Autenticazione non riuscita. Riprova.'});}
 }
 
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/mobile-login.html':'mobile-login.html','/mobile-login.js':'mobile-login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js','/program.js':'program.js','/plan-manager.js':'plan-manager.js'};
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/mobile-login.html':'mobile-login.html','/mobile-login.js':'mobile-login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js','/program.js':'program.js','/plan-manager.js':'plan-manager.js','/google-calendar.js':'google-calendar.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.gif':'image/gif','.ico':'image/x-icon'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 function verifiedGoogleIdentity(user){return user.email_verified===true || (user.firebase?.sign_in_provider==='google.com' && user.firebase?.identities?.['google.com']?.length>0);}
@@ -1362,6 +1363,7 @@ http.createServer(async(req,res)=>{
   if(pathname==='/api/garmin/webhook-diagnostics'){await garminWebhookDiagnostics(req,res);return;}
   if(pathname==='/api/garmin/official-sync-status'){await officialSyncStatus(req,res);return;}
   if(pathname==='/api/garmin/official-verify'){await officialVerifyIdentity(req,res);return;}
+  if(pathname.startsWith('/api/calendar/')){await handleGoogleCalendarRoute(req,res,pathname);return;}
   if(['/api/garmin/account-status','/api/garmin/connect','/api/garmin/callback','/api/garmin/disconnect'].includes(pathname)){await garminOAuthRoutes(req,res,pathname);return;}
 
   // Ultimo VO2 max esplicito ricevuto da Garmin; non usare stime dalle corse.
