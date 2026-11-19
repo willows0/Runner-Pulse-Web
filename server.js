@@ -12,6 +12,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { handleCoachAI, generateWeeklyCoachReport } from './coach-api.js';
 import {handleActivityCoach,activityCoachReport} from './activity-coach.js';
+import {isHonorPackage,healthCoachId} from './activity-data.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -266,6 +267,12 @@ function preferredPushTokens(docs){
  const native=valid.filter(d=>d.channel==='android');
  return [...new Set((native.length?native:valid.filter(d=>d.channel!=='android')).map(d=>d.token))];
 }
+// Per importazioni storiche l'analisi rimane disponibile a richiesta;
+// la notifica automatica non deve inviare decine di vecchie sedute in blocco.
+function recentEnoughForAutomaticCoach(seconds){
+ const date=Number(seconds)*1000;
+ return Number.isFinite(date)&&date<=Date.now()+3600000&&date>=Date.now()-72*3600000;
+}
 // Una sola analisi AI per volta: limita i picchi di memoria sul piano Render gratuito.
 // Gli eventi Garmin vengono comunque salvati prima in Firestore.
 const pendingCoachJobs=[];
@@ -275,7 +282,7 @@ function scheduleActivityCoach(uid,id){
  const key=uid+':'+id;
  if(queuedCoachIds.has(key))return;
  if(pendingCoachJobs.length>=100){
-  console.warn('Garmin Coach: coda piena; allenamento salvato, analisi recuperabile dalla scheda Coach AI');
+  console.warn('Runner Pulse Coach: coda piena; allenamento salvato, analisi recuperabile dalla scheda Coach AI');
   return;
  }
  queuedCoachIds.add(key);
@@ -292,9 +299,9 @@ async function processCoachJobs(){
     await activityCoachReport(job.uid,job.id);
     await notifyActivityCoachReady(job.uid,job.id);
     await getFirestore().collection('runnerPulseCoachRetries').doc(job.uid).collection('activities').doc(job.id).delete().catch(()=>{});
-    console.info('Garmin Coach: analisi completata e invio notifica elaborato');
+    console.info('Runner Pulse Coach: analisi completata e invio notifica elaborato');
    }catch(error){
-    console.warn('Garmin Coach: analisi/notifica non riuscita:',error.name||'Error',error.status||'');
+    console.warn('Runner Pulse Coach: analisi/notifica non riuscita:',error.name||'Error',error.status||'');
     // Conserva il lavoro fallito in Firestore, anche se Render viene riavviato.
     try{
      const ref=getFirestore().collection('runnerPulseCoachRetries').doc(job.uid).collection('activities').doc(job.id);
@@ -1047,12 +1054,10 @@ http.createServer(async(req,res)=>{
     if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
     try{
       const snapshot=await getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('healthConnectActivities').orderBy('startTimeInSeconds','desc').limit(300).get();
-      // Un import precedente può aver salvato la sessione sotto 'health-connect'
-      // prima che la selezione HONOR fosse ripristinata. Conta l'origine reale
-      // firmata nel record, non soltanto l'etichetta impostata dalla pagina.
-      const honorPackage=source=>/(^|\.)honor(\.|$)|(^|\.)hihonor(\.|$)/i.test(String(source||''));
+      // Tutte le fonti Health Connect: HONOR e altri produttori, stesso account Google.
+      // Escludi solo le sessioni già presenti in Garmin o duplicate fra provider.
       const activities=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}))
-        .filter(a=>(a.source==='honor'||(a.source==='health-connect'&&honorPackage(a.sourcePackage)))&&!a.duplicateOfGarminId);
+        .filter(a=>!a.duplicateOfGarminId&&!a.duplicateOfHealthId);
       return json(res,200,{success:true,activities});
     }catch(error){console.error('HONOR activity list',error.message);return json(res,503,{success:false,message:'Attività HONOR non disponibili'});}
   }
@@ -1063,14 +1068,14 @@ http.createServer(async(req,res)=>{
     try {
       const body=await readJsonBody(req,180000);
       if(!Array.isArray(body.records)||body.records.length>300)return json(res,400,{success:false,message:'Elenco attività non valido'});
-      const source=body.source==='honor'?'honor':'health-connect';
+      const honorOnly=body.source==='honor';
       const db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
       const health=root.collection('healthConnectActivities');
-      let imported=0,duplicates=0,skipped=0;
+      let imported=0,duplicates=0,skipped=0,analysisQueued=0;
       for(const r of body.records){
         if(typeof r?.id!=='string'||r.id.length<5||r.id.length>200||typeof r.sourcePackage!=='string'||r.sourcePackage.length>150) {skipped++;continue;}
         // HONOR: reject all other data origins, including Garmin and unknown apps.
-        if(source==='honor'&&!/(^|\.)honor(\.|$)|(^|\.)hihonor(\.|$)/i.test(r.sourcePackage)){skipped++;continue;}
+        if(honorOnly&&!isHonorPackage(r.sourcePackage)){skipped++;continue;}
         const start=Number(r.start),end=Number(r.end),kind=Number(r.exerciseType);
         if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||end<=start||end-start>86400000||start>Date.now()+3600000||start<Date.now()-35*86400000||!Number.isInteger(kind)){skipped++;continue;}
         const key=createHash('sha256').update(r.sourcePackage+'\0'+r.id).digest('hex');
@@ -1080,10 +1085,20 @@ http.createServer(async(req,res)=>{
         const sec=Math.floor(start/1000),duration=(end-start)/1000;
         const near=await root.collection('activities').where('summary.startTimeInSeconds','>=',sec-90).where('summary.startTimeInSeconds','<=',sec+90).limit(30).get();
         const match=near.docs.find(d=>{const a=d.data()?.summary||{};return Math.abs(Number(a.durationInSeconds)-duration)<Math.max(30,duration*.03);});
-        await ref.create({source,sourcePackage:r.sourcePackage,recordId:r.id,startTimeInSeconds:sec,durationInSeconds:duration,exerciseType:kind,title:String(r.title||'').slice(0,120),duplicateOfGarminId:match?.id||null,createdAt:Date.now()});
-        if(match)duplicates++;else imported++;
+        // Stessa sessione registrata da due app diverse non genera due analisi o due notifiche.
+        const existingHealth=await health.where('startTimeInSeconds','>=',sec-90).where('startTimeInSeconds','<=',sec+90).limit(30).get();
+        const matchingHealth=existingHealth.docs.find(d=>{
+          const old=d.data();return !old.duplicateOfGarminId&&!old.duplicateOfHealthId&&
+            Math.abs(Number(old.durationInSeconds)-duration)<Math.max(30,duration*.03);
+        });
+        const recordSource=isHonorPackage(r.sourcePackage)?'honor':'health-connect';
+        await ref.create({source:recordSource,sourcePackage:r.sourcePackage,recordId:r.id,startTimeInSeconds:sec,durationInSeconds:duration,exerciseType:kind,title:String(r.title||'').slice(0,120),duplicateOfGarminId:match?.id||null,duplicateOfHealthId:matchingHealth?.id||null,createdAt:Date.now()});
+        if(match||matchingHealth)duplicates++;else{
+          imported++;
+          if(recentEnoughForAutomaticCoach(sec)){scheduleActivityCoach(user.uid,healthCoachId(key));analysisQueued++;}
+        }
       }
-      return json(res,200,{success:true,imported,duplicates,skipped,total:body.records.length,message:'Sessioni Health Connect registrate. Le attività Garmin non sono state modificate.'});
+      return json(res,200,{success:true,imported,duplicates,skipped,analysisQueued,total:body.records.length,message:'Sessioni Health Connect registrate. Analisi e notifiche automatiche per le nuove sessioni; lo storico resta analizzabile dalla scheda Coach.'});
     }catch(e){console.error('Health Connect import:',e.message);return json(res,e.status||500,{success:false,message:'Importazione Health Connect non riuscita'});}
   }
   if(req.url?.startsWith('/api/mobile-auth/')){const pathname=new URL(req.url,'http://localhost').pathname;await mobileAuthRoute(req,res,pathname);return;}
@@ -1323,6 +1338,7 @@ http.createServer(async(req,res)=>{
           if(detail.samples.length>120000)throw Error('Attività troppo grande per importazione singola');
           if(Math.ceil(detail.samples.length/300)>450)throw Error('Troppi campioni FIT');
           await batch.commit();imported++;
+          if(recentEnoughForAutomaticCoach(Number(summary.startTimeInSeconds)))scheduleActivityCoach(user.uid,id);
         }catch(err){failed++;if(errors.length<8)errors.push(name+': '+err.message);}
       }
       return json(res,200,{success:true,imported,duplicates,failed,total:parsed.length,errors});
@@ -1330,7 +1346,7 @@ http.createServer(async(req,res)=>{
   }
   if(pathname==='/api/garmin/delete-activity'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
-    if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Accesso non autorizzato'});
+    if(!await authorized(req))return json(res,403,{success:false,message:'Accedi con Google'});
     try{
       const body=await readJsonBody(req);
       const id=String(body?.activityId??'');
@@ -1382,7 +1398,7 @@ http.createServer(async(req,res)=>{
   }
   if(pathname==='/api/garmin/archive'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
-    if(!await ownerAuthorized(req))return json(res,403,{success:false,message:'Garmin disponibile soltanto per il proprietario.'});
+    if(!await authorized(req))return json(res,403,{success:false,message:'Accedi con Google'});
     try{
       const body=await readJsonBody(req);
       const after=body?.after==null?'':String(body.after);
@@ -1393,7 +1409,7 @@ http.createServer(async(req,res)=>{
       let query=collection.orderBy('__name__').limit(100);
       if(after)query=query.startAfter(collection.doc(after));
       const snapshot=await query.get();
-      const activities=snapshot.docs.map(doc=>{const data=doc.data()||{};const summary=data.summary;if(!summary||typeof summary!=='object')return null;return {...summary,activityId:summary.activityId??summary.summaryId??data.garminId??doc.id};}).filter(Boolean);
+      const activities=snapshot.docs.map(doc=>{const data=doc.data()||{};const summary=data.summary;if(!summary||typeof summary!=='object')return null;return {...summary,activityId:summary.activityId??summary.summaryId??data.garminId??doc.id,originSource:data.source||'garmin'};}).filter(Boolean);
       const next=snapshot.size===100?snapshot.docs[snapshot.docs.length-1].id:null;
       return json(res,200,{success:true,activities,next});
     }catch(error){console.error('Archivio Garmin:',error.message);return json(res,502,{success:false,message:'Impossibile leggere lo storico Garmin'});}
