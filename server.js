@@ -13,6 +13,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { handleCoachAI, generateWeeklyCoachReport } from './coach-api.js';
 import {handleActivityCoach,activityCoachReport} from './activity-coach.js';
 import {isHonorPackage,healthCoachId} from './activity-data.js';
+import {normalizePlan,planRef,revisionOf} from './training-plan.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -68,7 +69,7 @@ async function mobileAuthRoute(req,res,pathname){
  }catch(e){console.warn('Mobile auth:',e.code||e.message);return json(res,e.status||400,{success:false,message:'Autenticazione non riuscita. Riprova.'});}
 }
 
-const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/mobile-login.html':'mobile-login.html','/mobile-login.js':'mobile-login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js','/program.js':'program.js'};
+const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/dashboard.js':'dashboard.js','/style.css':'style.css','/orange.css':'orange.css','/login.js':'login.js','/mobile-login.html':'mobile-login.html','/mobile-login.js':'mobile-login.js','/garmin-account.js':'garmin-account.js','/coach-memory.js':'coach-memory.js','/runner-profile.js':'runner-profile.js','/login.css':'login.css','/privacy.html':'privacy.html','/coach-robot.png':'coach-robot.png','/coach-notification.png':'coach-notification.png','/firebase-messaging-sw.js':'firebase-messaging-sw.js','/weekly-push.js':'weekly-push.js','/steps.js':'steps.js','/sleep.js':'sleep.js','/vo2.js':'vo2.js','/program.js':'program.js','/plan-manager.js':'plan-manager.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.gif':'image/gif','.ico':'image/x-icon'};
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));}
 function verifiedGoogleIdentity(user){return user.email_verified===true || (user.firebase?.sign_in_provider==='google.com' && user.firebase?.identities?.['google.com']?.length>0);}
@@ -1554,6 +1555,29 @@ http.createServer(async(req,res)=>{
     }catch(error){console.error('Archivio Garmin:',error.message);return json(res,502,{success:false,message:'Impossibile leggere lo storico Garmin'});}
   }
   if(['/api/garmin/sync-status','/api/garmin/sync-step'].includes(pathname)){await syncRequest(req,res,pathname);return;}
+  if(pathname==='/api/training-plan'||pathname==='/api/training-plan/draft'){
+    if(!['GET','PUT','DELETE'].includes(req.method))return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,403,{success:false,message:'Accedi con Google'});
+    const ref=pathname.endsWith('/draft')?getFirestore().collection('users').doc(user.uid).collection('trainingPlans').doc('draft'):planRef(getFirestore(),user.uid);
+    try{
+      if(req.method==='GET'){
+        const snap=await ref.get(),data=snap.data()||{};
+        return json(res,200,{success:true,sessions:snap.exists&&Array.isArray(data.sessions)?data.sessions:[],revision:revisionOf(snap),updatedAt:data.updatedAt||null});
+      }
+      const input=await readJsonBody(req,75000);
+      if(!Number.isSafeInteger(input?.expectedRevision)||input.expectedRevision<0)return json(res,400,{success:false,message:'Versione del piano mancante. Ricarica prima di modificare.'});
+      const sessions=req.method==='PUT'?normalizePlan(input.sessions):null;
+      const next=await getFirestore().runTransaction(async tx=>{
+        const snap=await tx.get(ref),revision=revisionOf(snap);
+        if(revision!==input.expectedRevision){const e=Error('Il piano è cambiato in un’altra sessione. Ricaricalo prima di salvarlo.');e.status=409;throw e;}
+        if(req.method==='DELETE')tx.delete(ref);
+        else tx.set(ref,{sessions,revision:revision+1,updatedAt:new Date().toISOString(),ownerUid:user.uid});
+        return req.method==='DELETE'?0:revision+1;
+      });
+      return json(res,200,{success:true,sessions:sessions||[],revision:next});
+    }catch(e){console.warn('Piano personale',e.code||e.message);return json(res,e.status||((e.code||'').includes('permission')?403:400),{success:false,message:e.message||'Errore nel salvataggio del piano.'});}
+  }
   if(pathname==='/api/coach/activity'){await handleActivityCoach(req,res,authorized,readJsonBody,json);return;}
   if(pathname==='/api/coach/chat'){await handleCoachAI(req,res,authorized);return;}
   if(pathname==='/api/status'){if(req.method!=='GET'){json(res,405,{message:'Method not allowed'});return;}json(res,200,{garminConfigured:false,garminConnected:false,message:'Personal API rimossa. Connessione Garmin ufficiale gestita separatamente.'});return;}
