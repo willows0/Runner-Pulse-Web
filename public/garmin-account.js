@@ -93,16 +93,20 @@ async function loadHonorActivities(){
   if(!data.success||!Array.isArray(data.activities))throw Error('Risposta attività non valida');
   window.dispatchEvent(new CustomEvent('runnerpulse:honor-activities',{detail:{uid,activities:data.activities}}));
  }catch(error){
-  if(auth.currentUser?.uid===uid)console.warn('Recupero allenamenti HONOR:',error.message);
+  if(auth.currentUser?.uid===uid)console.warn('Recupero allenamenti Health Connect:',error.message);
   // In caso di errore non si cancellano le attività già presenti sul dispositivo.
  }
 }
-function syncHonor(){
- if(!honorSelected||honorSyncBusy||garminConnected||honorPermission!=="authorized"||!auth.currentUser)return;
- if(!window.RunnerPulseHealthNative?.requestExerciseSync){message.textContent="Per sincronizzare HONOR apri Runner Pulse Connect su Android.";return;}
- honorSyncBusy=true;message.textContent="Lettura allenamenti HONOR da Health Connect…";
- try{window.RunnerPulseHealthNative.requestExerciseSync();}catch(e){honorSyncBusy=false;message.textContent="Lettura HONOR non disponibile.";}
+function syncAuthorizedHealth(){
+ // HONOR e altri produttori condividono Health Connect e lo stesso archivio per UID.
+ if(honorSyncBusy||garminConnected||honorPermission!=="authorized"||!auth.currentUser)return;
+ if(!window.RunnerPulseHealthNative?.requestExerciseSync)return;
+ honorSyncBusy=true;
+ message.textContent='Lettura allenamenti da Health Connect…';
+ try{window.RunnerPulseHealthNative.requestExerciseSync();}
+ catch(e){honorSyncBusy=false;message.textContent='Lettura Health Connect non disponibile.';}
 }
+function syncHonor(){if(honorSelected)syncAuthorizedHealth();}
 
 let honorBusy=false;
 let honorPermission='unknown';
@@ -124,7 +128,7 @@ window.addEventListener('runnerpulse:health-permission-status',event=>{
  honorPermission=event.detail?.status||'unknown';
  // Non cancellare la scelta salvata durante un controllo permessi transitorio.
  if(honorSelected&&honorPermission!=='authorized'&&!garminConnected){connectionState='unknown';publishConnection(null);}
- if(honorSelected&&honorPermission==='authorized')syncHonor();
+ if(honorPermission==='authorized')syncAuthorizedHealth();
  renderHonor();
 });
 honorButton.addEventListener('click',async()=>{
@@ -191,7 +195,7 @@ if(healthButton&&healthLabel){
   healthButton.setAttribute('aria-checked',String(granted));
   healthButton.dataset.status=granted?'connected':'disconnected';
   healthLabel.textContent=granted?'Permessi autorizzati sul telefono':state==='partial'?'Permessi parziali':state==='denied'?'Permessi non concessi':state==='error'?'Verifica non riuscita':'Da autorizzare';
-  healthLabel.title=granted?'Ultima verifica effettuata dall’app Android. Sincronizzazione con il sito non ancora attiva.':'';
+  healthLabel.title=granted?'Ultima verifica effettuata dall’app Android; le nuove sessioni vengono importate nell’account Google.':'';
   enforceExclusive();
  }
  renderHealthState();
@@ -223,7 +227,7 @@ if(healthButton&&healthLabel){
    if(!response.ok)throw Error(result.message||'Importazione non riuscita');
    // Ricarica dal database appena il server conferma l'importazione.
    await loadHonorActivities();
-   message.textContent=`HONOR: ${result.imported} nuove sessioni, ${result.duplicates} già presenti, ${result.skipped} escluse.`;
+   message.textContent=`${honorSelected?'HONOR':'Health Connect'}: ${result.imported} nuove sessioni, ${result.duplicates} già presenti, ${result.skipped} escluse.`;
   }catch(e){message.textContent=e.message||'Errore importazione Health Connect';}
   finally{honorSyncBusy=false;syncButton.disabled=false;syncButton.textContent='Importa allenamenti Health Connect';}
  });
@@ -251,7 +255,7 @@ if(healthButton&&healthLabel){
   overlay.className='rp-hc-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','Collegamento Health Connect');
   const card=document.createElement('div');card.className='rp-hc-dialog';
   const heading=document.createElement('h2');heading.textContent='Google Health Connect';
-  const info=document.createElement('p');info.textContent='Le autorizzazioni sono gestite sul telefono. La sincronizzazione con il sito non è ancora attiva.';
+  const info=document.createElement('p');info.textContent='Le autorizzazioni sono gestite sul telefono. Le sessioni disponibili saranno importate nell’account Google dopo l’autorizzazione.';
   const launch=document.createElement('button');launch.type='button';
   const isGranted=['authorized','partial'].includes(sessionStorage.getItem(hcStateKey));
   launch.textContent=isGranted?'Gestisci / Revoca autorizzazioni':'Apri app e autorizza';

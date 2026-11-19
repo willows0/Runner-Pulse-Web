@@ -63,7 +63,7 @@ const allowedUser = () => {
 };
 async function authorizedPost(endpoint, body) {
   if (!allowedUser()) throw new Error('Accedi con il tuo account Google autorizzato.');
-  if(endpoint.startsWith('/api/garmin/')&&!isOwner())throw new Error('Garmin non disponibile per questo account.');
+  if(endpoint.startsWith('/api/garmin/')&&!['/api/garmin/archive','/api/garmin/delete-activity','/api/garmin/import-file'].includes(endpoint)&&!isOwner())throw new Error('Garmin non disponibile per questo account.');
   const token = await auth.currentUser.getIdToken();
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -127,7 +127,7 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('rp-garmin-test')?.toggleAttribute('disabled',!isOwner());
     window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:{uid:user.uid,owner:isOwner()}}));
-    if(isOwner()){void loadGarminArchive();}else{stopAutoSync();}
+    void loadGarminArchive();if(!isOwner())stopAutoSync();
   }else{healthRequest++;resetHealth();window.dispatchEvent(new CustomEvent('runnerpulse:auth-user',{detail:null}));stopAutoSync();}
   if (user && !allowed) {
     showError('Accedi con un account Google verificato per utilizzare Runner Pulse.');
@@ -254,7 +254,7 @@ let archiveLoading=false;
 let archiveRefreshPending=false;
 async function loadGarminArchive(){
   if(archiveLoading){archiveRefreshPending=true;return;}
-  if(!allowedUser()||!isOwner())return;
+  if(!allowedUser())return;
   archiveLoading=true;
   const expectedUid=auth.currentUser.uid;
   let total=0;
@@ -264,7 +264,7 @@ async function loadGarminArchive(){
     let complete=false;
     for(let page=0;page<100;page++){
       const result=await authorizedPost('/api/garmin/archive',after?{after}:{});
-      if(!allowedUser()||!isOwner()||auth.currentUser.uid!==expectedUid)return;
+      if(!allowedUser()||auth.currentUser.uid!==expectedUid)return;
       if(result.activities?.length){
         total+=result.activities.length;
         for(const activity of result.activities){const id=activity?.activityId??activity?.id??activity?.summaryId;if(id!=null)archiveIds.push(String(id));}
@@ -273,7 +273,7 @@ async function loadGarminArchive(){
       if(!result.next){complete=true;break;}
       after=result.next;
     }
-    if(complete&&allowedUser()&&isOwner()&&auth.currentUser?.uid===expectedUid){
+    if(complete&&allowedUser()&&auth.currentUser?.uid===expectedUid){
       window.dispatchEvent(new CustomEvent('runnerpulse:garmin-archive-complete',{detail:{uid:expectedUid,ids:archiveIds}}));
     }
   }catch(error){
@@ -284,7 +284,7 @@ async function loadGarminArchive(){
 window.addEventListener('runnerpulse:delete-garmin',event=>{
   const {activityId,resolve,reject}=event.detail||{};
   if(typeof resolve!=='function'||typeof reject!=='function')return;
-  if(!allowedUser()||!isOwner()){reject(new Error('Accedi con l’account Google proprietario.'));return;}
+  if(!allowedUser()){reject(new Error('Accedi con Google.'));return;}
   authorizedPost('/api/garmin/delete-activity',{activityId}).then(resolve,reject);
 });
 // Importazione automatica a blocchi: il progresso percentuale è mostrato solo
@@ -733,8 +733,8 @@ window.addEventListener('runnerpulse:activity-coach',async event=>{
  pane.replaceChildren();
  const title=document.createElement('h3');title.textContent='Parere del Coach AI';
  const result=document.createElement('p');result.className='rp-hint';result.setAttribute('role','status');
- result.textContent=id?'Analisi dei dati reali in corso…':'Analisi disponibile per gli allenamenti Garmin salvati in Firebase.';
- pane.append(title,result);if(!/^\d{1,20}$/.test(id))return;
+ result.textContent=id?'Analisi dei dati reali in corso…':'Analisi disponibile per gli allenamenti salvati in Firebase da Garmin, HONOR o Health Connect e file FIT/TCX.';
+ pane.append(title,result);if(!/^(?:\d{1,20}|hc-[a-f0-9]{64})$/.test(id))return;
  try{const data=await authorizedPost('/api/coach/activity',{activityId:id});
   if(pane!==document.getElementById('rp-detail-coach')||pane.hidden)return;
   result.textContent=data.text;result.style.whiteSpace='pre-wrap';
