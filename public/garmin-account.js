@@ -57,8 +57,37 @@ const honorLabel=labels.get('honor');
 let honorSelected=false;
 const honorStoreKey=()=>auth.currentUser?`runnerpulse-active-source:${auth.currentUser.uid}`:null;
 let honorSyncBusy=false;
-function honorRestore(){const key=honorStoreKey();honorSelected=Boolean(key&&localStorage.getItem(key)==='honor');renderHonor();if(honorSelected&&!garminConnected&&honorPermission==='authorized')syncHonor();}
-function honorSave(selected){const key=honorStoreKey();if(key){if(selected)localStorage.setItem(key,"honor");else localStorage.removeItem(key);}}
+// La selezione appartiene all'UID, non alla sessione di login.
+function honorRestore(){
+ const key=honorStoreKey();
+ try{honorSelected=Boolean(key&&localStorage.getItem(key)==='honor');}
+ catch(error){console.warn('Preferenza HONOR non leggibile',error);honorSelected=false;}
+ renderHonor();
+ if(honorSelected&&!garminConnected&&honorPermission==='authorized')syncHonor();
+}
+function honorSave(selected){
+ const key=honorStoreKey();if(!key)return;
+ try{if(selected)localStorage.setItem(key,'honor');else localStorage.removeItem(key);}
+ catch(error){message.textContent='Il telefono non ha potuto salvare la preferenza HONOR: '+(error.message||'memoria non disponibile');}
+}
+let honorActivitiesRequest=0;
+async function loadHonorActivities(){
+ const user=auth.currentUser;
+ if(!user)return;
+ const uid=user.uid,request=++honorActivitiesRequest;
+ try{
+  const token=await user.getIdToken();
+  const response=await fetch('/api/health-connect/activities',{headers:{Authorization:'Bearer '+token},cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const data=await response.json();
+  if(request!==honorActivitiesRequest||auth.currentUser?.uid!==uid)return;
+  if(!data.success||!Array.isArray(data.activities))throw Error('Risposta attività non valida');
+  window.dispatchEvent(new CustomEvent('runnerpulse:honor-activities',{detail:{uid,activities:data.activities}}));
+ }catch(error){
+  if(auth.currentUser?.uid===uid)console.warn('Recupero allenamenti HONOR:',error.message);
+  // In caso di errore non si cancellano le attività già presenti sul dispositivo.
+ }
+}
 function syncHonor(){
  if(!honorSelected||honorSyncBusy||garminConnected||honorPermission!=="authorized"||!auth.currentUser)return;
  if(!window.RunnerPulseHealthNative?.requestExerciseSync){message.textContent="Per sincronizzare HONOR apri Runner Pulse Connect su Android.";return;}
@@ -70,10 +99,16 @@ let honorBusy=false;
 let honorPermission='unknown';
 function renderHonor(){
  honorButton.disabled=!auth.currentUser||honorBusy;
- honorButton.setAttribute('aria-checked',String(honorSelected));
- honorButton.dataset.status=honorSelected&&honorPermission==='authorized'?'connected':honorSelected?'unknown':'disconnected';
- if(honorSelected&&!garminConnected){connectionState=honorPermission==='authorized'?'connected':'unknown';publishConnection(honorPermission==='authorized'?'honor':null);}
- honorLabel.textContent=honorBusy?'Autorizzazione in corso…':honorSelected?'Selezionato via Health Connect':'Non collegato';
+ const active=honorSelected&&!garminConnected;
+ honorButton.setAttribute('aria-checked',String(active));
+ honorButton.dataset.status=active?(honorPermission==='authorized'?'connected':'unknown'):'disconnected';
+ if(active){
+  connectionState=honorPermission==='authorized'?'connected':'unknown';
+  publishConnection(honorPermission==='authorized'?'honor':null);
+ }else if(!garminConnected){
+  connectionState='disconnected';publishConnection(null);
+ }
+ honorLabel.textContent=honorBusy?'Autorizzazione in corso…':active?(honorPermission==='authorized'?'Collegato via Health Connect':'Verifica autorizzazione necessaria'):honorSelected?'Garmin attivo · HONOR in attesa':'Non collegato';
  honorButton.title='HONOR Health tramite Health Connect';
 }
 window.addEventListener('runnerpulse:health-permission-status',event=>{
@@ -151,9 +186,8 @@ if(healthButton&&healthLabel){
   enforceExclusive();
  }
  renderHealthState();
- if(window.RunnerPulseHealthNative?.requestPermissionStatus){
-  try{window.RunnerPulseHealthNative.requestPermissionStatus();}catch(e){console.warn('Health Connect status',e);}
- }
+ // Non chiedere lo stato qui: Firebase potrebbe non aver completato il login.
+ // La verifica parte in onAuthStateChanged, evitando la limitazione Android di 20 s.
  // Importazione manuale e autenticata. Solo l'app Android può fornire i record reali.
  const syncButton=document.createElement('button');
  syncButton.type='button';syncButton.textContent='Importa allenamenti Health Connect';
@@ -178,7 +212,9 @@ if(healthButton&&healthLabel){
    const response=await fetch('/api/health-connect/import',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({records:data.records||[],source:honorSelected?'honor':'health-connect'})});
    const result=await response.json();
    if(!response.ok)throw Error(result.message||'Importazione non riuscita');
-   message.textContent=`HONOR: ${result.imported} nuove sessioni, ${result.duplicates} già presenti, ${result.skipped} escluse. ${result.imported?'Riapri Attività per aggiornare la lista.':''}`;
+   // Ricarica dal database appena il server conferma l'importazione.
+   await loadHonorActivities();
+   message.textContent=`HONOR: ${result.imported} nuove sessioni, ${result.duplicates} già presenti, ${result.skipped} escluse.`;
   }catch(e){message.textContent=e.message||'Errore importazione Health Connect';}
   finally{honorSyncBusy=false;syncButton.disabled=false;syncButton.textContent='Importa allenamenti Health Connect';}
  });
@@ -236,7 +272,8 @@ let garminConnectUrl='';
 function setGarminUI(connected,available){
  connectionState=connected?'connected':'disconnected';
  garminConnected=connected;garminOAuthAvailable=available;
- if(connected&&honorSelected){honorSelected=false;honorSave(false);}
+ // Non cancellare una scelta HONOR salvata durante la verifica Garmin.
+ // Finché Garmin è collegato, HONOR non viene però dichiarato connesso.
  if(!connected&&honorSelected){connectionState=honorPermission==='authorized'?'connected':'unknown';publishConnection(honorPermission==='authorized'?'honor':null);}
  else publishConnection(connected?'garmin':null);renderHonor();
  const btn=switches.get('garmin');btn.dataset.status=connectionState;btn.setAttribute('aria-checked',String(connected));btn.disabled=!auth.currentUser||(!available&&!connected);
@@ -247,7 +284,7 @@ function showUnknown(reason){
  connectionState='unknown';
  const btn=switches.get('garmin');btn.dataset.status='unknown';btn.disabled=true;btn.setAttribute('aria-checked','false');
  labels.get('garmin').dataset.status='unknown';labels.get('garmin').textContent='Non verificabile';
- if(connectionDot){connectionDot.dataset.status='unknown';connectionDot.dataset.checking='true';connectionDot.title='Connessione temporaneamente non verificabile';connectionDot.setAttribute('aria-label','Stato connessione orologio: non verificabile');}
+ if(connectionDot&&!(honorSelected&&honorPermission==='authorized'&&!garminConnected)){connectionDot.dataset.status='unknown';connectionDot.dataset.checking='true';connectionDot.title='Connessione temporaneamente non verificabile';connectionDot.setAttribute('aria-label','Stato connessione orologio: non verificabile');}
  message.textContent='Connessione temporaneamente non verificabile'+(reason?': '+reason:'. Riprova più tardi.')+' Non scollegare il dispositivo.';
  if(oldStatus)oldStatus.textContent=message.textContent;
 }
@@ -287,7 +324,41 @@ switches.get('garmin').addEventListener('click',()=>{
  if(!garminOAuthAvailable||!garminConnectUrl){message.textContent='Autorizzazione Garmin non ancora disponibile.';return;}
  void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch(garminConnectUrl,{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok||!data.authorizationUrl)throw new Error(data.message||'Autorizzazione Garmin non disponibile');window.location.assign(data.authorizationUrl);}catch(error){message.textContent=error.message||'Connessione non riuscita';}})();
 });
-onAuthStateChanged(auth,()=>{renderHonor();void refresh();});
+let honorStatusRetry=null;
+onAuthStateChanged(auth,user=>{
+ if(honorStatusRetry){clearTimeout(honorStatusRetry);honorStatusRetry=null;}
+ // L'app può essere chiusa e riaperta: Firebase ripristina il login, noi la fonte.
+ ++honorActivitiesRequest;
+ honorPermission='unknown';
+ honorSyncBusy=false;
+ honorRestore();
+ void refresh();
+ if(user){
+  void loadHonorActivities();
+  // Richiedi una nuova verifica dei permessi Android: il pallino verde
+  // appare soltanto dopo una conferma reale di Health Connect.
+  if(window.RunnerPulseHealthNative?.requestPermissionStatus){
+   try{window.RunnerPulseHealthNative.requestPermissionStatus();}
+   catch(error){console.warn('Verifica Health Connect',error);}
+   // L'app Android limita le verifiche troppo ravvicinate: un secondo controllo
+   // è effettuato solo se il primo non ha dato risposta e HONOR è selezionato.
+   honorStatusRetry=setTimeout(()=>{
+    if(auth.currentUser?.uid===user.uid&&honorSelected&&honorPermission==='unknown'){
+     try{window.RunnerPulseHealthNative.requestPermissionStatus();}catch(error){console.warn('Seconda verifica Health Connect',error);}
+    }
+   },22000);
+  }
+ }
+});
+// L'autenticazione dell'interfaccia potrebbe completarsi dopo questa callback.
+// La richiesta ripetuta è idempotente e verifica sempre l'UID.
+window.addEventListener('runnerpulse:auth-user',event=>{
+ if(event.detail?.uid)void loadHonorActivities();
+ else ++honorActivitiesRequest;
+});
+document.querySelector('body > nav button[data-page="activities"]')?.addEventListener('click',()=>{
+ if(auth.currentUser)void loadHonorActivities();
+});
 window.addEventListener('focus',()=>{if(auth.currentUser)void refresh();});
 window.addEventListener('runnerpulse:device-refresh',()=>void refresh());
 

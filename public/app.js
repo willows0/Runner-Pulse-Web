@@ -173,16 +173,23 @@ function normalizeGarmin(a){
     avgSpeed:speed!=null?Math.round(speed*3.6*100)/100:null};
 }
 window.addEventListener('runnerpulse:honor-activities',event=>{
- if(!key)return;
- const records=Array.isArray(event.detail?.activities)?event.detail.activities:[];
- entries=entries.filter(x=>x.source!=='honor');
- for(const a of records){
+ // Non mostrare MAI gli allenamenti di un altro account dopo il logout/login.
+ if(!key||!event.detail?.uid||key!=='runnerPulseActivitiesV1:uid:'+event.detail.uid)return;
+ if(!Array.isArray(event.detail.activities))return;
+ const received=[];
+ for(const a of event.detail.activities){
   const start=Number(a.startTimeInSeconds),duration=Number(a.durationInSeconds);
-  if(!Number.isFinite(start)||!Number.isFinite(duration)||duration<=0)continue;
-  entries.push({id:'honor-'+String(a.id),date:new Date(start*1000).toISOString().slice(0,10),
-   kind:a.title||'Allenamento HONOR',km:null,minutes:Math.round(duration/6)/10,source:'honor'});
+  if(!Number.isSafeInteger(start)||start<=0||!Number.isFinite(duration)||duration<=0)continue;
+  const date=new Date(start*1000);
+  if(!Number.isFinite(date.getTime()))continue;
+  received.push({id:'honor-'+String(a.id),date:date.toISOString().slice(0,10),
+   kind:String(a.title||'Allenamento HONOR'),km:null,
+   minutes:Math.round(duration/6)/10,source:'honor',startTime:start});
  }
- render();
+ // L'archivio Firebase è autorevole solo quando una lettura valida è riuscita.
+ // Conserva tutte le attività Garmin e manuali indipendentemente dal numero HONOR.
+ entries=entries.filter(x=>x.source!=='honor').concat(received);
+ save(); // render + memoria per il prossimo riavvio dell'app
 });
 window.addEventListener('runnerpulse:garmin-data',e=>{if(!key)return;const data=e.detail;const list=Array.isArray(data?.activities)?data.activities:[];let added=0,updated=0,skipped=0;const existing=new Map(entries.map((x,i)=>[String(x.id),i]));for(const raw of list){const item=normalizeGarmin(raw);if(!item||deletedGarminIds.has(item.garminId)){skipped++;continue;}const i=existing.get(item.id);if(i!==undefined){entries[i]={...entries[i],...item};updated++;}else{entries.unshift(item);added++;existing.set(item.id,0);}}if(Array.isArray(data?.activities)){if(!data.fromArchive)localStorage.setItem('runnerPulseGarminLastSync',new Date().toISOString());save();if(!data.fromArchive)$('importResult').textContent=`Importazione completata: ${added} nuove, ${updated} aggiornate, ${skipped} non utilizzabili. ${list.length} attività ricevute dal server.`;if(!list.length&&!data.fromArchive)$('importResult').textContent='Il servizio non ha restituito attività in questa richiesta.';}});
 // Firestore e' autorevole per lo storico Garmin dopo una lettura completa e riuscita.
