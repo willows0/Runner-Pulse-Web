@@ -5,8 +5,14 @@ const app=getApps().find(a=>a.options.projectId===config.projectId)||initializeA
 const auth=getAuth(app),value=document.getElementById('rp-vo2-official-value'),note=document.getElementById('rp-vo2-official-note');
 let requestId=0,lastVitals='';
 const honorSelected=()=>{const uid=auth.currentUser?.uid;if(!uid)return false;try{return localStorage.getItem('runnerpulse-active-source:'+uid)==='honor';}catch{return false;}};
-const todayRome=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const isToday=time=>{const t=Number(time);return Number.isFinite(t)&&t>0&&new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(t))===todayRome();};
+const romeDay=time=>{
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(time)).map(p=>[p.type,p.value]));
+ return `${parts.year}-${parts.month}-${parts.day}`;
+};
+const todayRome=()=>romeDay(Date.now());
+const parsedTime=time=>{const t=Number(time);if(!Number.isFinite(t)||t<=0)return null;const ms=t<1e11?t*1000:t;return ms<=Date.now()+86400000&&ms>=Date.UTC(2000,0,1)?ms:null;};
+const isToday=time=>{const t=parsedTime(time);return t!==null&&romeDay(t)===todayRome();};
+const formattedDate=time=>{const t=parsedTime(time);return t===null?null:new Intl.DateTimeFormat('it-IT',{timeZone:'Europe/Rome',day:'numeric',month:'long',year:'numeric'}).format(new Date(t));};
 const activeSource=()=>honorSelected()?(window.runnerPulseConnectedService==='honor'?'honor':null):(window.runnerPulseConnectedService==='garmin'?'garmin':null);
 
 window.addEventListener('runnerpulse:health-vitals',async e=>{
@@ -36,11 +42,15 @@ async function load(){
   const data=await response.json();
   if(id!==requestId||auth.currentUser?.uid!==user.uid||activeSource()!==source)return;
   const v=source==='honor'?data.vo2max:data.value;
-  const measuredToday=isToday(source==='honor'?data.vo2ObservedAt:data.receivedAt);
-  if(measuredToday&&typeof v==='number'&&Number.isFinite(v)){
+  const when=source==='honor'?data.vo2ObservedAt:data.receivedAt;
+  const date=formattedDate(when);
+  // Il VO₂ max non e' una metrica quotidiana: mostrare l'ultimo dato
+  // effettivamente ricevuto, con data e provenienza esplicite.
+  if(typeof v==='number'&&Number.isFinite(v)&&v>=10&&v<=95){
    value.textContent=v.toLocaleString('it-IT',{maximumFractionDigits:1});
-   note.textContent=honorSelected()?'Valore da Health Connect':'Valore ufficiale Garmin';
-  }else note.textContent='VO₂ max non misurato oggi';
+   if(source==='honor')note.textContent=date?'Ultima misurazione Health Connect · '+date:'Ultima misurazione Health Connect · data non disponibile';
+   else note.textContent=date?'Ultimo valore ufficiale Garmin · ricevuto il '+date:'Ultimo valore ufficiale Garmin · data di ricezione non disponibile';
+  }else note.textContent=source==='honor'?'Nessun VO₂ max disponibile da Health Connect':'Nessun VO₂ max ricevuto da Garmin';
   const hr=document.getElementById('rp-health-resting-hr');
   const hrNote=document.getElementById('rp-health-resting-hr-note');
   const hrPanel=document.getElementById('rp-health-resting-panel');

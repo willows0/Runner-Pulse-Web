@@ -5,7 +5,18 @@ const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(
 const el=id=>document.getElementById(id);
 let generation=0;
 const honorSelected=()=>{const uid=auth.currentUser?.uid;if(!uid)return false;try{return localStorage.getItem('runnerpulse-active-source:'+uid)==='honor';}catch{return false;}};
-const todayRome=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const todayRome=()=>{
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
+ return `${parts.year}-${parts.month}-${parts.day}`;
+};
+const previousDate=date=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-1);return d.toISOString().slice(0,10);};
+// Le fonti indicizzano il sonno talvolta per il giorno del risveglio, talvolta
+// per quello di inizio. Accettare solo oggi o ieri, senza mostrare notti piu' vecchie.
+function lastNight(days,today){
+ const valid=days.filter(d=>d&&Number.isFinite(d.seconds)&&d.seconds>0);
+ return valid.find(d=>d.date===today)||valid.find(d=>d.date===previousDate(today))||null;
+}
+const displayDate=date=>new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z'));
 const activeSource=()=>honorSelected()?(window.runnerPulseConnectedService==='honor'?'honor':null):(window.runnerPulseConnectedService==='garmin'?'garmin':null);
 
 let nativeSleep=null,lastSynced='';
@@ -38,15 +49,15 @@ async function load(){
   if(!response.ok)throw new Error('HTTP '+response.status);
   const payload=await response.json();
   if(current!==generation||auth.currentUser?.uid!==user.uid||activeSource()!==source)return;
-  const days=Array.isArray(payload.days)?payload.days:[],available=days.filter(d=>Number.isFinite(d.seconds)&&d.seconds>=0),latest=available.find(d=>d.date===todayRome());
+  const days=Array.isArray(payload.days)?payload.days:[],available=days.filter(d=>Number.isFinite(d.seconds)&&d.seconds>0),latest=lastNight(available,todayRome());
   el('rp-sleep-duration').textContent=latest?duration(latest.seconds):'—';
-  el('rp-sleep-date').textContent=latest?new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(latest.date+'T12:00:00Z')):'Dati non disponibili oggi';
+  el('rp-sleep-date').textContent=latest?'Registrato il '+displayDate(latest.date):'Ultima notte non disponibile';
   const judgement=latest?.coachJudgement||'Non disponibile';
   const colors={'Ottimo':'#22c55e','Buono':'#38bdf8','Discreto':'#f59e0b','Scarso':'#ef4444','Da migliorare':'#ef4444'};
   el('rp-sleep-score').textContent=Number.isInteger(latest?.coachScore)?String(latest.coachScore):'—';
   el('rp-sleep-judgement').textContent=judgement;
   el('rp-sleep-ring').style.setProperty('--ring-color',colors[judgement]||'#64748b');
-  el('rp-sleep-coach-comment').textContent=latest?(latest.coachComment||'La valutazione richiede durata, fasi del sonno e periodi di veglia disponibili.'):'Nessun dato del sonno registrato per oggi.';
+  el('rp-sleep-coach-comment').textContent=latest?(latest.coachComment||'La valutazione richiede durata, fasi del sonno e periodi di veglia disponibili.'):'Nessun dato del sonno registrato per l’ultima notte (oggi o ieri).';
   const bars=el('rp-sleep-bars');bars.replaceChildren();
   const max=Math.max(1,...days.map(d=>Number.isFinite(d.seconds)?d.seconds:0));
   for(const day of days){
