@@ -1046,8 +1046,13 @@ http.createServer(async(req,res)=>{
     const user=await garminGoogleUser(req);
     if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
     try{
-      const snapshot=await getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('healthConnectActivities').limit(300).get();
-      const activities=snapshot.docs.map(doc=>({id:doc.id,...doc.data()})).filter(a=>a.source==='honor'&&!a.duplicateOfGarminId).sort((a,b)=>b.startTimeInSeconds-a.startTimeInSeconds);
+      const snapshot=await getFirestore().collection('runnerPulseGarmin').doc(user.uid).collection('healthConnectActivities').orderBy('startTimeInSeconds','desc').limit(300).get();
+      // Un import precedente può aver salvato la sessione sotto 'health-connect'
+      // prima che la selezione HONOR fosse ripristinata. Conta l'origine reale
+      // firmata nel record, non soltanto l'etichetta impostata dalla pagina.
+      const honorPackage=source=>/(^|\.)honor(\.|$)|(^|\.)hihonor(\.|$)/i.test(String(source||''));
+      const activities=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}))
+        .filter(a=>(a.source==='honor'||(a.source==='health-connect'&&honorPackage(a.sourcePackage)))&&!a.duplicateOfGarminId);
       return json(res,200,{success:true,activities});
     }catch(error){console.error('HONOR activity list',error.message);return json(res,503,{success:false,message:'Attività HONOR non disponibili'});}
   }
