@@ -1573,6 +1573,11 @@ http.createServer(async(req,res)=>{
         if(revision!==input.expectedRevision){const e=Error('Il piano è cambiato in un’altra sessione. Ricaricalo prima di salvarlo.');e.status=409;throw e;}
         if(req.method==='DELETE')tx.delete(ref);
         else tx.set(ref,{sessions,revision:revision+1,updatedAt:new Date().toISOString(),ownerUid:user.uid});
+        // Approvazione e cancellazione del piano rimuovono la bozza nello stesso
+        // commit: al successivo accesso non riappare una vecchia proposta.
+        if(pathname==='/api/training-plan'){
+          tx.delete(getFirestore().collection('users').doc(user.uid).collection('trainingPlans').doc('draft'));
+        }
         return req.method==='DELETE'?0:revision+1;
       });
       return json(res,200,{success:true,sessions:sessions||[],revision:next});
