@@ -5,10 +5,13 @@ const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(
 const el=id=>document.getElementById(id);
 let generation=0;
 const honorSelected=()=>{const uid=auth.currentUser?.uid;if(!uid)return false;try{return localStorage.getItem('runnerpulse-active-source:'+uid)==='honor';}catch{return false;}};
+const todayRome=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const activeSource=()=>honorSelected()?(window.runnerPulseConnectedService==='honor'?'honor':null):(window.runnerPulseConnectedService==='garmin'?'garmin':null);
+
 let nativeSleep=null,lastSynced='';
 async function saveHealthSleep(data){
  const user=auth.currentUser;
- if(!user||!honorSelected()||!Array.isArray(data?.days)||data.days.length!==7)return;
+ if(!user||activeSource()!=='honor'||!Array.isArray(data?.days)||data.days.length!==7)return;
  const k=user.uid+':'+JSON.stringify(data.days);
  if(k===lastSynced)return;
  nativeSleep=data;
@@ -21,28 +24,29 @@ async function saveHealthSleep(data){
  }catch(e){console.warn('Sincronizzazione sonno Health Connect:',e.message);}
 }
 window.addEventListener('runnerpulse:health-sleep',e=>{if(e.detail?.days)void saveHealthSleep(e.detail);});
-const requestNative=()=>{if(honorSelected()&&!window.RunnerPulseHealthNative?.requestHomeHealth&&window.RunnerPulseHealthNative?.requestSleep)try{window.RunnerPulseHealthNative.requestSleep();}catch(e){console.warn('Sonno Health Connect:',e.message);}};
+const requestNative=()=>{if(activeSource()==='honor'&&!window.RunnerPulseHealthNative?.requestHomeHealth&&window.RunnerPulseHealthNative?.requestSleep)try{window.RunnerPulseHealthNative.requestSleep();}catch(e){console.warn('Sonno Health Connect:',e.message);}};
 
 const duration=seconds=>`${Math.floor(seconds/3600)}h ${String(Math.floor((seconds%3600)/60)).padStart(2,'0')}m`;
 function reset(message){el('rp-sleep-duration').textContent='—';el('rp-sleep-date').textContent='Dati non disponibili';el('rp-sleep-score').textContent='—';el('rp-sleep-judgement').textContent='Non disponibile';el('rp-sleep-coach-comment').textContent='';el('rp-sleep-ring').style.setProperty('--ring-color','#64748b');el('rp-sleep-bars').replaceChildren();el('rp-sleep-note').textContent=message;}
 async function load(){
- const current=++generation,user=auth.currentUser;
+ const current=++generation,user=auth.currentUser,source=activeSource();
  if(!user){reset('Accedi per visualizzare il sonno.');return;}
+ if(!source){reset('Seleziona e autorizza un dispositivo nel Profilo.');return;}
  requestNative();
  try{
   const token=await user.getIdToken(),response=await fetch('/api/sleep/week'+(honorSelected()?'?source=health-connect':''),{headers:{Authorization:'Bearer '+token},cache:'no-store'});
   if(!response.ok)throw new Error('HTTP '+response.status);
   const payload=await response.json();
-  if(current!==generation||auth.currentUser?.uid!==user.uid)return;
-  const days=Array.isArray(payload.days)?payload.days:[],available=days.filter(d=>Number.isFinite(d.seconds)&&d.seconds>=0),latest=available.at(-1);
+  if(current!==generation||auth.currentUser?.uid!==user.uid||activeSource()!==source)return;
+  const days=Array.isArray(payload.days)?payload.days:[],available=days.filter(d=>Number.isFinite(d.seconds)&&d.seconds>=0),latest=available.find(d=>d.date===todayRome());
   el('rp-sleep-duration').textContent=latest?duration(latest.seconds):'—';
-  el('rp-sleep-date').textContent=latest?new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(latest.date+'T12:00:00Z')):'Dati non disponibili';
+  el('rp-sleep-date').textContent=latest?new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(latest.date+'T12:00:00Z')):'Dati non disponibili oggi';
   const judgement=latest?.coachJudgement||'Non disponibile';
   const colors={'Ottimo':'#22c55e','Buono':'#38bdf8','Discreto':'#f59e0b','Scarso':'#ef4444','Da migliorare':'#ef4444'};
   el('rp-sleep-score').textContent=Number.isInteger(latest?.coachScore)?String(latest.coachScore):'—';
   el('rp-sleep-judgement').textContent=judgement;
   el('rp-sleep-ring').style.setProperty('--ring-color',colors[judgement]||'#64748b');
-  el('rp-sleep-coach-comment').textContent=latest?.coachComment||'La valutazione richiede durata, fasi del sonno e periodi di veglia disponibili.';
+  el('rp-sleep-coach-comment').textContent=latest?(latest.coachComment||'La valutazione richiede durata, fasi del sonno e periodi di veglia disponibili.'):'Nessun dato del sonno registrato per oggi.';
   const bars=el('rp-sleep-bars');bars.replaceChildren();
   const max=Math.max(1,...days.map(d=>Number.isFinite(d.seconds)?d.seconds:0));
   for(const day of days){
@@ -54,7 +58,7 @@ async function load(){
    cell.append(bar,label);bars.append(cell);
   }
   el('rp-sleep-note').textContent=available.length?`${honorSelected()?'Health Connect':'Garmin'}: ${available.length} giorni con dati su 7.`:'Nessun riepilogo del sonno disponibile negli ultimi 7 giorni.';
- }catch(error){if(current===generation)reset('Impossibile leggere il sonno dal server ('+error.message+').');}
+ }catch(error){if(current===generation&&activeSource()===source)reset('Impossibile leggere il sonno dal server ('+error.message+').');}
 }
 onAuthStateChanged(auth,()=>{lastSynced='';nativeSleep=null;load();});
 window.addEventListener('runnerpulse:garmin-connection',load);window.addEventListener('runnerpulse:device-status',load);

@@ -31,6 +31,8 @@ let connectionState='unknown';
 let garminConnected=false;
 function publishConnection(service){
  const name=service==='honor'?'HONOR Health':service==='garmin'?'Garmin Connect':service==='polar'?'Polar Flow':service==='suunto'?'Suunto App':service==='samsung'?'Samsung Health':'';
+ const previousService=window.runnerPulseConnectedService;
+ const changed=previousService!==(service||null);
  window.runnerPulseConnectedService=service||null;
  if(caption)caption.textContent=name||'';
  if(watchHint)watchHint.textContent='Tocca per gestire';
@@ -39,7 +41,7 @@ function publishConnection(service){
  if(connectionDot){const connected=Boolean(service);connectionDot.dataset.connected=String(connected);connectionDot.dataset.checking=String(connectionState==='unknown');connectionDot.dataset.status=connectionState;connectionDot.title=connectionState==='unknown'?'Connessione temporaneamente non verificabile':connected?'Orologio collegato':'Orologio non collegato';connectionDot.setAttribute('aria-label','Stato connessione orologio: '+(connectionState==='unknown'?'non verificabile':connected?'collegato':'non collegato'));}
  if(!service){if(watchText){watchText.textContent='';watchText.hidden=true;}if(watchPercent){watchPercent.textContent='';watchPercent.hidden=true;}}
  else {if(watchText)watchText.hidden=false;if(watchPercent)watchPercent.hidden=service!=='garmin';if(service!=='garmin'&&watchText)watchText.textContent='Orologio collegato';}
- window.dispatchEvent(new CustomEvent('runnerpulse:device-status',{detail:{service:service||null}}));
+ if(changed)window.dispatchEvent(new CustomEvent('runnerpulse:device-status',{detail:{service:service||null}}));
 }
 watchButton?.addEventListener('click',event=>{event.stopImmediatePropagation();document.querySelector('nav button[data-page="settings"]')?.click();requestAnimationFrame(()=>section.scrollIntoView({behavior:'smooth',block:'start'}));},true);
 publishConnection(null);
@@ -72,7 +74,7 @@ function honorRestore(){
  try{honorSelected=Boolean(key&&localStorage.getItem(key)==='honor');}
  catch(error){console.warn('Preferenza HONOR non leggibile',error);honorSelected=false;}
  renderHonor();
- if(honorSelected&&!garminConnected&&honorPermission==='authorized')syncHonor();
+ if(honorSelected&&honorPermission==='authorized')syncHonor();
 }
 function honorSave(selected){
  const key=honorStoreKey();if(!key)return;
@@ -113,7 +115,7 @@ async function loadHonorActivities(){
 }
 function syncAuthorizedHealth(){
  // HONOR e altri produttori condividono Health Connect e lo stesso archivio per UID.
- if(honorSyncBusy||garminConnected||honorPermission!=="authorized"||!auth.currentUser)return;
+ if(honorSyncBusy||!honorSelected||honorPermission!=="authorized"||!auth.currentUser)return;
  if(!window.RunnerPulseHealthNative?.requestExerciseSync)return;
  honorSyncBusy=true;
  message.textContent='Lettura allenamenti da Health Connect…';
@@ -126,33 +128,49 @@ let honorBusy=false;
 let honorPermission='unknown';
 function renderHonor(){
  honorButton.disabled=!auth.currentUser||honorBusy;
- const active=honorSelected&&!garminConnected;
+ const active=honorSelected;
  honorButton.setAttribute('aria-checked',String(active));
  honorButton.dataset.status=active?(honorPermission==='authorized'?'connected':'unknown'):'disconnected';
  if(active){
   connectionState=honorPermission==='authorized'?'connected':'unknown';
   publishConnection(honorPermission==='authorized'?'honor':null);
- }else if(!garminConnected){
-  connectionState='disconnected';publishConnection(null);
+ }else{
+  connectionState=garminConnected?'connected':'disconnected';
+  publishConnection(garminConnected?'garmin':null);
  }
- honorLabel.textContent=honorBusy?'Autorizzazione in corso…':active?(honorPermission==='authorized'?'Collegato via Health Connect':'Verifica autorizzazione necessaria'):honorSelected?'Garmin attivo · HONOR in attesa':'Non collegato';
+ honorLabel.textContent=honorBusy?'Autorizzazione in corso…':active?(honorPermission==='authorized'?'Collegato via Health Connect':'Verifica autorizzazione necessaria'):'Non collegato';
  honorButton.title='HONOR Health tramite Health Connect';
 }
 window.addEventListener('runnerpulse:health-permission-status',event=>{
  honorPermission=event.detail?.status||'unknown';
  // Non cancellare la scelta salvata durante un controllo permessi transitorio.
- if(honorSelected&&honorPermission!=='authorized'&&!garminConnected){connectionState='unknown';publishConnection(null);}
- if(honorPermission==='authorized')syncAuthorizedHealth();
+ if(honorSelected&&honorPermission!=='authorized'){connectionState='unknown';publishConnection(null);}
+ if(honorSelected&&honorPermission==='authorized')syncAuthorizedHealth();
  renderHonor();
 });
+function stopHonorHealthAccess(){
+ // Cambia subito la fonte dati dell'account. La revoca Android viene richiesta
+ // soltanto a seguito di un clic dell'utente; Health Connect la conferma a parte.
+ if(window.RunnerPulseHealthNative?.requestHealthRevocation){
+  try{window.RunnerPulseHealthNative.requestHealthRevocation();return true;}
+  catch(error){console.warn('Revoca Health Connect non avviata:',error);}
+ }
+ return false;
+}
+function activateGarminSource(){
+ honorSelected=false;
+ honorSave(false);
+ renderHonor();
+ return stopHonorHealthAccess();
+}
 honorButton.addEventListener('click',async()=>{
  if(honorBusy)return;
- if(honorSelected){honorSelected=false;honorSave(false);renderHonor();message.textContent='HONOR deselezionato. I permessi Health Connect non sono stati revocati.';return;}
+ if(honorSelected){const requested=activateGarminSource();message.textContent=requested?'HONOR disattivato. Revoca dei permessi Health Connect richiesta ad Android.':'HONOR disattivato. Per revocare anche i permessi Android apri Google Health Connect nel Profilo.';return;}
  if(!auth.currentUser){message.textContent='Accedi prima con Google.';return;}
  if(!window.RunnerPulseHealthNative?.requestHealthAuthorization){
   message.textContent='Aggiorna Runner Pulse Connect su Android per autorizzare Health Connect direttamente.';return;
  }
- if(!window.confirm(garminConnected?'Passare da Garmin a HONOR Health? Dopo la verifica dei permessi, Garmin verrà scollegato da Runner Pulse. Gli allenamenti salvati rimarranno.':'Selezionare HONOR Health tramite Health Connect?'))return;
+ if(!window.confirm(garminConnected?'Passare da Garmin a HONOR Health? Garmin resterà autorizzato ma sarà in pausa, così potrai ripristinarlo senza riconnetterlo.':'Selezionare HONOR Health tramite Health Connect?'))return;
  honorBusy=true;renderHonor();
  try{
   const status=await new Promise((resolve,reject)=>{
@@ -162,14 +180,7 @@ honorButton.addEventListener('click',async()=>{
    try{window.RunnerPulseHealthNative.requestHealthAuthorization();}catch(e){clearTimeout(timer);window.removeEventListener('runnerpulse:health-permission-status',handler);reject(e);}
   });
   if(status!=='authorized')throw Error('Non sono stati concessi tutti i permessi richiesti. Garmin è rimasto collegato.');
-  if(garminConnected){
-   const token=await auth.currentUser.getIdToken();
-   const response=await fetch('/api/garmin/disconnect',{method:'POST',headers:{Authorization:'Bearer '+token}});
-   const result=await response.json();
-   if(!response.ok)throw Error(result.message||'Impossibile scollegare Garmin.');
-   await refresh();
-   if(garminConnected)throw Error('Garmin risulta ancora collegato: HONOR non è stato selezionato.');
-  }
+  // Manteniamo il token Garmin: soltanto la fonte della Home cambia.
   honorSelected=true;honorSave(true);renderHonor();
   message.textContent='HONOR selezionato. Avvio sincronizzazione delle sessioni HONOR disponibili…';
   syncHonor();
@@ -232,7 +243,7 @@ if(healthButton&&healthLabel){
   syncButton.disabled=true;syncButton.textContent='Salvataggio allenamenti…';
   try{
    const data=event.detail||{};
-    if(honorSelected&&garminConnected)throw Error('Garmin è collegato: sincronizzazione HONOR sospesa.');
+    if(!honorSelected)throw Error('Health Connect è in pausa. Seleziona HONOR nel Profilo.');
    if(data.error)throw Error(data.error);
    if(!auth.currentUser)throw Error('Accesso Google non disponibile');
    const token=await auth.currentUser.getIdToken();
@@ -298,12 +309,14 @@ let garminConnectUrl='';
 function setGarminUI(connected,available){
  connectionState=connected?'connected':'disconnected';
  garminConnected=connected;garminOAuthAvailable=available;
- // Non cancellare una scelta HONOR salvata durante la verifica Garmin.
- // Finché Garmin è collegato, HONOR non viene però dichiarato connesso.
- if(!connected&&honorSelected){connectionState=honorPermission==='authorized'?'connected':'unknown';publishConnection(honorPermission==='authorized'?'honor':null);}
- else publishConnection(connected?'garmin':null);renderHonor();
- const btn=switches.get('garmin');btn.dataset.status=connectionState;btn.setAttribute('aria-checked',String(connected));btn.disabled=!auth.currentUser||(!available&&!connected);
- labels.get('garmin').dataset.status=connectionState;labels.get('garmin').textContent=connected?'Collegato':available?'Non collegato':'In preparazione';
+ // Garmin e HONOR possono conservare credenziali distinte, ma UNA SOLA
+ // fonte è attiva. Non passare a Garmin solo perché il suo OAuth è presente.
+ renderHonor();
+ const btn=switches.get('garmin');btn.dataset.status=connected?(honorSelected?'disconnected':'connected'):connectionState;
+ btn.setAttribute('aria-checked',String(connected&&!honorSelected));
+ btn.disabled=!auth.currentUser||(!available&&!connected);
+ labels.get('garmin').dataset.status=btn.dataset.status;
+ labels.get('garmin').textContent=connected?(honorSelected?'Collegato · in pausa':'Collegato'):available?'Non collegato':'In preparazione';
  enforceExclusive();
 }
 function showUnknown(reason){
@@ -327,7 +340,7 @@ async function refresh(){
   if(!response.ok)throw new Error(data.message||'Stato Garmin non disponibile');
   garminConnectUrl=typeof data.connectUrl==='string'&&data.connectUrl.startsWith('/')?data.connectUrl:'';
   setGarminUI(data.connected===true,data.oauthAvailable===true&&Boolean(garminConnectUrl));
-  message.textContent=data.connected===true?'':'Nessun dispositivo collegato. Scegli un servizio dall’elenco per iniziare.';
+  message.textContent=data.connected===true?'':honorSelected?'HONOR Health selezionato.':'Nessun dispositivo collegato. Scegli un servizio dall’elenco per iniziare.';
   if(data.connected===true){
    try{
     const statusResponse=await fetch('/api/garmin/official-sync-status',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
@@ -346,10 +359,33 @@ async function refresh(){
  }catch(error){if(id===generation)showUnknown(error.message||'impossibile verificare lo stato');}
 }
 switches.get('garmin').addEventListener('click',()=>{
- if(garminConnected){if(!window.confirm('Vuoi scollegare il tuo account Garmin da Runner Pulse?'))return;void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch('/api/garmin/disconnect',{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok)throw new Error(data.message||'Scollegamento non riuscito');await refresh();}catch(error){message.textContent=error.message||'Scollegamento non riuscito';}})();return;}
+ if(!auth.currentUser){message.textContent='Accedi prima con Google.';return;}
+ // Se HONOR è attivo e Garmin è già autorizzato, il cambio è immediato;
+ // non eliminare le credenziali OAuth Garmin e non leggere dati HONOR.
+ if(honorSelected&&garminConnected){
+  const requested=activateGarminSource();
+  setGarminUI(true,garminOAuthAvailable);
+  message.textContent=requested?'Garmin ripristinato. Revoca dei permessi HONOR/Health Connect richiesta ad Android.':'Garmin ripristinato. Per revocare i permessi Android apri Google Health Connect nel Profilo.';
+  return;
+ }
+ if(garminConnected){
+  if(!window.confirm('Vuoi scollegare il tuo account Garmin da Runner Pulse?'))return;
+  void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch('/api/garmin/disconnect',{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok)throw new Error(data.message||'Scollegamento non riuscito');await refresh();}catch(error){message.textContent=error.message||'Scollegamento non riuscito';}})();
+  return;
+ }
  if(!garminOAuthAvailable||!garminConnectUrl){message.textContent='Autorizzazione Garmin non ancora disponibile.';return;}
- void (async()=>{try{const token=await auth.currentUser.getIdToken();const response=await fetch(garminConnectUrl,{method:'POST',headers:{Authorization:`Bearer ${token}`}});const data=await response.json();if(!response.ok||!data.authorizationUrl)throw new Error(data.message||'Autorizzazione Garmin non disponibile');window.location.assign(data.authorizationUrl);}catch(error){message.textContent=error.message||'Connessione non riuscita';}})();
+ // La vecchia connessione potrebbe essere stata davvero revocata: in quel
+ // caso Garmin richiede una nuova autorizzazione OAuth, non simulare il verde.
+ const switching=honorSelected;
+ void (async()=>{try{
+  const user=auth.currentUser,token=await user.getIdToken();
+  const response=await fetch(garminConnectUrl,{method:'POST',headers:{Authorization:`Bearer ${token}`}});
+  const data=await response.json();if(!response.ok||!data.authorizationUrl)throw new Error(data.message||'Autorizzazione Garmin non disponibile');
+  if(switching)localStorage.setItem('runnerpulse-garmin-switch:'+user.uid,'1');
+  window.location.assign(data.authorizationUrl);
+ }catch(error){message.textContent=error.message||'Connessione non riuscita';}})();
 });
+const garminReturn=new URLSearchParams(window.location.search).get('garmin');
 let honorStatusRetry=null;
 onAuthStateChanged(auth,user=>{
  if(honorStatusRetry){clearTimeout(honorStatusRetry);honorStatusRetry=null;}
@@ -358,6 +394,11 @@ onAuthStateChanged(auth,user=>{
  honorPermission='unknown';
  honorSyncBusy=false;
  honorRestore();
+ // Solo il ritorno OAuth confermato consente di mettere HONOR in pausa.
+ if(user&&garminReturn==='connected'&&localStorage.getItem('runnerpulse-garmin-switch:'+user.uid)==='1'){
+  localStorage.removeItem('runnerpulse-garmin-switch:'+user.uid);
+  activateGarminSource();
+ }
  void refresh();
  if(user){
   void loadHonorActivities();
@@ -388,7 +429,6 @@ document.querySelector('body > nav button[data-page="activities"]')?.addEventLis
 window.addEventListener('focus',()=>{if(auth.currentUser)void refresh();});
 window.addEventListener('runnerpulse:device-refresh',()=>void refresh());
 
-const garminReturn=new URLSearchParams(window.location.search).get('garmin');
 if(garminReturn){message.textContent=garminReturn==='connected'?'Garmin autorizzato! Verifica in corso…':garminReturn==='denied'?'Autorizzazione Garmin annullata.':'Collegamento Garmin non completato: '+garminReturn;history.replaceState(null,'',window.location.pathname);}
 
 // Il riepilogo tecnico della sincronizzazione resta disponibile sul server,
