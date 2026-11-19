@@ -1285,12 +1285,16 @@ http.createServer(async(req,res)=>{
       const body=await readJsonBody(req,4096);
       const vo2=body.vo2max===null||body.vo2max===undefined?null:Number(body.vo2max);
       const resting=body.restingHeartRate===null||body.restingHeartRate===undefined?null:Number(body.restingHeartRate);
+      const now=Date.now();
+      const validObservedAt=value=>{const t=Number(value);return Number.isFinite(t)&&t>now-31*86400000&&t<=now+60000?t:null;};
       const result={vo2max:vo2!==null&&Number.isFinite(vo2)&&vo2>=10&&vo2<=95?vo2:null,restingHeartRate:resting!==null&&Number.isInteger(resting)&&resting>=25&&resting<=180?resting:null,
-       vo2SourcePackage:String(body.vo2SourcePackage||'').slice(0,150),heartSourcePackage:String(body.heartSourcePackage||'').slice(0,150),updatedAt:Date.now()};
-      // Null significa 'non disponibile' e non deve cancellare una lettura valida precedente.
+       vo2SourcePackage:String(body.vo2SourcePackage||'').slice(0,150),heartSourcePackage:String(body.heartSourcePackage||'').slice(0,150),updatedAt:now,
+       vo2ObservedAt:validObservedAt(body.vo2ObservedAt),heartObservedAt:validObservedAt(body.heartObservedAt)};
+      // Tempi dei campioni effettivi, NON dell'importazione: non trasformare un
+      // VO2 vecchio in un valore di oggi solo perché è stato risincronizzato.
       const update={updatedAt:result.updatedAt};
-      if(result.vo2max!==null){update.vo2max=result.vo2max;update.vo2SourcePackage=result.vo2SourcePackage;}
-      if(result.restingHeartRate!==null){update.restingHeartRate=result.restingHeartRate;update.heartSourcePackage=result.heartSourcePackage;}
+      if(result.vo2max!==null&&result.vo2ObservedAt!==null){update.vo2max=result.vo2max;update.vo2SourcePackage=result.vo2SourcePackage;update.vo2ObservedAt=result.vo2ObservedAt;}
+      if(result.restingHeartRate!==null&&result.heartObservedAt!==null){update.restingHeartRate=result.restingHeartRate;update.heartSourcePackage=result.heartSourcePackage;update.heartObservedAt=result.heartObservedAt;}
       if(Object.keys(update).length>1)await getFirestore().collection('runnerPulseHealthConnectVitals').doc(user.uid).set(update,{merge:true});
       return json(res,200,{success:true});
     }catch(error){console.warn('Health Connect vitali:',error.message);return json(res,400,{success:false,message:'Dati non validi'});}
@@ -1302,7 +1306,7 @@ http.createServer(async(req,res)=>{
     try{
       const snap=await getFirestore().collection('runnerPulseHealthConnectVitals').doc(user.uid).get();
       const d=snap.data()||{};
-      return json(res,200,{success:true,vo2max:d.vo2max??null,restingHeartRate:d.restingHeartRate??null,vo2SourcePackage:d.vo2SourcePackage||null,heartSourcePackage:d.heartSourcePackage||null,updatedAt:d.updatedAt||null});
+      return json(res,200,{success:true,vo2max:d.vo2max??null,restingHeartRate:d.restingHeartRate??null,vo2ObservedAt:d.vo2ObservedAt||null,heartObservedAt:d.heartObservedAt||null,vo2SourcePackage:d.vo2SourcePackage||null,heartSourcePackage:d.heartSourcePackage||null,updatedAt:d.updatedAt||null});
     }catch(error){return json(res,503,{success:false,message:'Dati Health Connect non disponibili'});}
   }
   if(pathname==='/api/steps/week'){
