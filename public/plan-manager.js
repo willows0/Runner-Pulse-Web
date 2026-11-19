@@ -8,15 +8,15 @@ const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(
 const auth=getAuth(app);
 const $=id=>document.getElementById(id);
 const form=$('rp-program-form'), approvedBox=$('rp-program-approved');
-const proposal=$('rp-program-proposal'), sessionsBox=$('rp-program-sessions');
-const status=$('rp-program-status'), result=$('rp-program-result');
+const status=$('rp-program-status');
 const controls=document.createElement('div');controls.className='rp-program-actions';
 const notice=document.createElement('p');notice.id='rp-plan-save-status';notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
-const edit=document.createElement('button');edit.type='button';edit.textContent='Modifica con il Coach';
+const approve=document.createElement('button');approve.type='button';approve.textContent='Approva e salva';approve.className='rp-plan-approve';approve.hidden=true;
+const edit=document.createElement('button');edit.type='button';edit.className='rp-plan-edit';edit.textContent='Modifica con il Coach';
 const erase=document.createElement('button');erase.type='button';erase.className='rp-plan-delete';erase.textContent='Elimina piano';
 const retry=document.createElement('button');retry.type='button';retry.textContent='Riprova salvataggio';retry.hidden=true;
 const restore=document.createElement('button');restore.type='button';restore.textContent='Recupera vecchio piano';restore.hidden=true;
-controls.append(edit,erase,retry,restore);approvedBox?.parentElement?.append(controls,notice);
+controls.append(approve,edit,erase,retry,restore);approvedBox?.parentElement?.append(controls,notice);
 const state={uid:null,approved:[],draft:[],revision:0,draftRevision:0,online:false,busy:false,draftPending:false,approvedLocalOnly:false,epoch:0};
 let draftWrites=Promise.resolve();
 const approvedKey=uid=>'runnerpulse:program:approved:'+uid;
@@ -42,23 +42,13 @@ function addText(tag,text,parent,cls){const e=document.createElement(tag);if(cls
 function render(){
  if(!approvedBox)return;
  approvedBox.replaceChildren();
- if(!valid(state.approved))approvedBox.textContent='Nessun programma approvato.';
- else for(const s of state.approved){const d=document.createElement('div');d.className='rp-program-session';d.textContent=[s.date,s.time,s.title,`${s.minutes} min`].filter(Boolean).join(' · ');approvedBox.appendChild(d);}
  const showDraft=valid(state.draft);
- if(proposal){proposal.hidden=!showDraft;proposal.style.display=showDraft?'block':'none';}
- if(showDraft&&sessionsBox){
-  sessionsBox.replaceChildren();
-  for(const [i,s] of state.draft.entries()){
-   const item=document.createElement('div');item.className='rp-program-session';
-   addText('strong',s.title,item);if(s.details)addText('p',s.details,item);
-   for(const [field,label,type] of [['date','Data','date'],['time','Ora','time'],['minutes','Durata (minuti)','number']]){
-    const wrapper=document.createElement('label');wrapper.textContent=label+' ';
-    const input=document.createElement('input');input.type=type;input.value=String(s[field]??'');input.dataset.index=String(i);input.dataset.field=field;
-    if(field==='minutes'){input.min='10';input.max='300';input.step='1';}
-    wrapper.appendChild(input);item.appendChild(wrapper);
-   }
-   sessionsBox.appendChild(item);
-  }
+ const visible=valid(state.approved)?state.approved:state.draft;
+ if(!valid(visible))approvedBox.textContent='Non hai ancora creato un programma.';
+ else{
+  if(!valid(state.approved))addText('p','Programma in bozza, salvato nel tuo account. Premi “Approva e salva” per confermarlo.',approvedBox);
+  for(const s of visible){const d=document.createElement('div');d.className='rp-program-session';d.textContent=[s.date,s.time,s.title,`${s.minutes} min`].filter(Boolean).join(' · ');approvedBox.appendChild(d);}
+  if(valid(state.approved)&&showDraft)addText('p','Hai una nuova bozza in sospeso. Controllala nel calendario e premi “Approva e salva” per sostituire il programma.',approvedBox);
  }
  edit.disabled=noAccount()||state.busy||(!valid(state.approved)&&!showDraft);
  erase.disabled=noAccount()||state.busy||(!valid(state.approved)&&!showDraft);
@@ -66,7 +56,7 @@ function render(){
  retry.disabled=noAccount()||state.busy;
  restore.hidden=noAccount()||(!state.approvedLocalOnly && valid(state.approved)) || (!state.approvedLocalOnly&&!valid(getBackup(legacyKey)?.sessions)&&!valid(getBackup(pendingApprovalKey(state.uid))?.sessions));
  restore.disabled=noAccount()||state.busy;
- const btn=$('rp-program-approve');if(btn)btn.disabled=noAccount()||state.busy||!showDraft;
+ approve.hidden=!showDraft;approve.disabled=noAccount()||state.busy||!showDraft;
 }
 async function api(method,payload,asDraft=false){
  const user=auth.currentUser;
@@ -239,32 +229,22 @@ async function generate(){
  if(noAccount())return status.textContent='Accedi con Google prima di creare un programma.';
  if(state.busy)return;
  const button=$('rp-create-proposal');button.disabled=true;
- status.textContent='Preparazione e salvataggio della proposta…';
+ status.textContent='Generazione e salvataggio del programma…';
  try{
   const values=Object.fromEntries(new FormData(form).entries());validateObjective(values);
   write(objectiveKey(state.uid),values);
   const sessions=createDraft(values);
-  const desc=$('rp-program-description');if(desc)desc.textContent='Proposta indicativa di quattro settimane. Controlla date, intensità e recupero con il Coach prima di approvare.';
-  result.textContent='La proposta diventa un piano approvato soltanto dopo “Approva e salva”.';
   await persistDraft(sessions);
-  status.textContent='Proposta salvata sul tuo account Google. Puoi modificarla o approvarla.';
+  status.textContent='Programma in bozza salvato nel tuo account Google. Visualizzalo nel calendario e premi “Approva e salva” in “Il tuo programma”.';
  }catch(err){status.textContent='Attenzione: '+err.message;}
  finally{button.disabled=false;}
 }
 $('rp-create-proposal')?.addEventListener('click',()=>void generate());
 form?.addEventListener('submit',e=>{e.preventDefault();void generate();});
-$('rp-program-replan')?.addEventListener('click',()=>void generate());
-$('rp-program-approve')?.addEventListener('click',async()=>{
- if(!valid(state.draft))return result.textContent='Genera prima una bozza.';
- try{await saveApproved(state.draft);result.textContent='Programma approvato e salvato nel tuo account Google.';}
- catch(err){result.textContent='Programma non ancora salvato: '+err.message;}
-});
-sessionsBox?.addEventListener('change',e=>{
- const input=e.target.closest?.('input[data-field]');if(!input||noAccount())return;
- const i=Number(input.dataset.index),field=input.dataset.field;
- if(!state.draft[i]||!['date','time','minutes'].includes(field))return;
- const changed=state.draft.map(s=>({...s}));changed[i][field]=field==='minutes'?Number(input.value):input.value;
- try{const checked=normalizeSessions(changed);void persistDraft(checked).catch(()=>{});}catch(err){msg('Correzione non valida: '+err.message);render();}
+approve.addEventListener('click',async()=>{
+ if(!valid(state.draft))return msg('Genera prima un programma.');
+ try{await saveApproved(state.draft);msg('Programma approvato e salvato nel tuo account Google.');}
+ catch(err){msg('Programma non ancora approvato: '+err.message);}
 });
 $('rp-calendar-connect')?.addEventListener('click',()=>{$('rp-calendar-status').textContent='Google Calendar non è ancora collegato. Nessun evento è stato creato.';});
 onAuthStateChanged(auth,async user=>{

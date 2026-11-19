@@ -124,7 +124,7 @@
     </section>
     <section id="plan" class="page rp-program-page">
 <h1>Il tuo programma</h1>
-<div class="card rp-program-card"><span class="rp-program-kicker">RUNNER PULSE · COACH AI</span><h2>Prepariamo il tuo prossimo obiettivo</h2><p>Il Coach ti propone il programma. Sei tu a decidere se approvarlo.</p>
+<div class="card rp-program-card"><span class="rp-program-kicker">RUNNER PULSE · COACH AI</span><h2>Prepariamo il tuo prossimo obiettivo</h2><p>Crea il tuo programma, salvalo e modificalo quando vuoi con l’allenatore.</p>
 <form id="rp-program-form" onsubmit="return false;" novalidate>
 <label>Stai preparando una gara?<select name="race"><option value="yes">Sì, preparo una gara</option><option value="no">No, voglio migliorare</option></select></label>
 <div class="rp-program-grid"><label>Distanza obiettivo<select name="distance"><option value="5">5 km</option><option value="10">10 km</option><option value="21.0975" selected>Mezza maratona · 21,1 km</option><option value="42.195">Maratona · 42,2 km</option><option value="other">Altra distanza</option></select></label>
@@ -134,11 +134,10 @@
 <label>Livello<select name="level"><option value="beginner">Principiante</option><option value="intermediate">Intermedio</option><option value="advanced" selected>Avanzato</option></select></label>
 <label>Durata massima nei giorni feriali (minuti)<input name="weekdayMinutes" type="number" min="20" max="240" value="70"></label>
 <label>Fascia oraria preferita<select name="timePreference"><option value="evening">Sera</option><option value="morning">Mattina</option><option value="afternoon">Pomeriggio</option></select></label></div>
-<button type="button" id="rp-create-proposal">Prepara proposta con il Coach</button></form>
+<button type="button" id="rp-create-proposal">Genera programma con il Coach</button></form>
 <p id="rp-program-status" role="status" aria-live="polite"></p></div>
 <div class="card rp-program-card"><h2>Google Calendar</h2><p>Con il tuo consenso Runner Pulse potrà cercare orari liberi e, dopo la tua approvazione, aggiungere gli allenamenti.</p><button id="rp-calendar-connect" type="button">Collega Google Calendar</button><p id="rp-calendar-status" class="note" role="status">Non collegato</p></div>
-<div id="rp-program-proposal" class="card rp-program-card" hidden><h2>Proposta del Coach</h2><p id="rp-program-description"></p><div id="rp-program-sessions"></div><div class="rp-program-actions"><button id="rp-program-replan" type="button">Ricalcola proposta</button><button id="rp-program-approve" type="button">Approva e salva</button></div><p id="rp-program-result" role="status"></p></div>
-<div class="card rp-program-card"><h2>Programma approvato</h2><div id="rp-program-approved">Non hai ancora approvato un programma.</div></div>
+<div class="card rp-program-card"><h2>Il tuo programma</h2><div id="rp-program-approved">Non hai ancora creato un programma.</div></div>
 </section>
     <section id="coach" class="page rp-coach-page" aria-label="Chat con l’allenatore Runner Pulse">
       <div class="rp-coach-intro"><img class="rp-coach-mascot" src="/coach-robot.png" alt="Robottino allenatore con fascia arancione e calzoncini da corsa"><div class="rp-coach-intro-text"><span class="rp-coach-tag">Il tuo allenatore</span><h1>Runner Pulse</h1><span class="rp-coach-presence"><i></i> Allenatore AI</span></div></div>
@@ -224,7 +223,7 @@
     card.append(heading,detail,retry);gate.replaceChildren(card);document.body.append(gate);
   }
 </script>
-  <script type="module" src="/plan-manager.js?v=plan-durable-20261119-v2"></script>
+  <script type="module" src="/plan-manager.js?v=plan-no-proposal-20261119"></script>
   <script type="module" src="/coach-memory.js?v=coach-plan-20261119"></script>
   <script>window.RUNNER_PULSE_VAPID_KEY = "BImx7Smy2xK7i2J_o5bCvC2Q4pzx8I0nIYQQCy93mYCRmo2vl7fE08sc-phyPvEiHs_Q33PIkJfNJDjJamP2ojk"; /* Inserire la chiave Web Push pubblica Firebase */</script>
   <script type="module" src="/weekly-push.js"></script>
@@ -302,13 +301,13 @@
   b.append(date,main,icon);b.addEventListener('click',()=>openDetail(session,index));return b;
  }
  function render(){sessions=getSessions();calendar.replaceChildren();overview.replaceChildren();
-  if(!sessions.length){const p=document.createElement('p');p.textContent='Non hai ancora una proposta. Apri Obiettivo e premi “Prepara proposta con il Coach”.';calendar.appendChild(p);const b=document.createElement('button');b.textContent='Configura obiettivo';b.addEventListener('click',()=>show('settings'));calendar.appendChild(b);overview.appendChild(p.cloneNode(true));return;}
+  if(!sessions.length){const p=document.createElement('p');p.textContent='Non hai ancora un programma. Apri Obiettivo e premi “Genera programma con il Coach”.';calendar.appendChild(p);const b=document.createElement('button');b.textContent='Configura obiettivo';b.addEventListener('click',()=>show('settings'));calendar.appendChild(b);overview.appendChild(p.cloneNode(true));return;}
   const sorted=sessions.map((s,i)=>({s,i})).sort((a,b)=>(a.s.date||'').localeCompare(b.s.date||''));
   let week='';sorted.forEach(({s,i})=>{const d=safeDate(s.date);if(!d)return;const monday=new Date(d);monday.setDate(d.getDate()-(d.getDay()+6)%7);const key=monday.toISOString().slice(0,10);if(key!==week){week=key;const h=document.createElement('h3');h.className='rp-week-head';h.textContent='Settimana del '+monday.toLocaleDateString('it-IT',{day:'numeric',month:'long'});calendar.appendChild(h);}calendar.appendChild(makeButton(s,i));});
   const h=document.createElement('h2');h.textContent='Programma di allenamento';overview.appendChild(h);
   const intro=document.createElement('p');intro.textContent='Tocca un allenamento per vedere la struttura della seduta.';overview.appendChild(intro);
   sorted.forEach(({s,i})=>overview.appendChild(makeButton(s,i)));
-  const actions=document.createElement('div');actions.className='rp-program-actions';const edit=document.createElement('button');edit.type='button';edit.textContent='Modifica con il Coach';edit.addEventListener('click',()=>{document.querySelector('#rp-program-approved')?.parentElement?.querySelector('.rp-program-actions button')?.click();});actions.appendChild(edit);
+  const actions=document.createElement('div');actions.className='rp-program-actions';const edit=document.createElement('button');edit.type='button';edit.textContent='Modifica con il Coach';edit.addEventListener('click',()=>{document.querySelector('#rp-program-approved')?.parentElement?.querySelector('.rp-plan-edit')?.click();});actions.appendChild(edit);
   const erase=document.createElement('button');erase.type='button';erase.textContent='Elimina piano';erase.className='rp-plan-delete';
   erase.addEventListener('click',()=>document.querySelector('#rp-program-approved')?.parentElement?.querySelector('.rp-plan-delete')?.click());
   actions.appendChild(erase);overview.appendChild(actions);
@@ -325,9 +324,6 @@
   const note=document.createElement('p');note.className='rp-detail-note';note.textContent=guidance.note;detail.appendChild(note);
   detail.scrollIntoView({behavior:'smooth',block:'start'});
  }
- // Observe new drafts without replacing the already working generator.
- const observer=new MutationObserver(()=>{if(window.rpCurrentDraft?.length){const next=window.rpCurrentDraft;if(sessions!==next){sessions=next;show('calendar');}}});
- const target=document.getElementById('rp-program-sessions');if(target)observer.observe(target,{childList:true});
  window.addEventListener('rp-plan-updated',()=>{if(!detail.hidden){detail.hidden=true;show(currentTab);}else render();});
  const btn=document.getElementById('rp-create-proposal');btn?.addEventListener('click',()=>{queueMicrotask(()=>{if(window.rpCurrentDraft?.length){sessions=window.rpCurrentDraft;show('calendar');}})});
  show('calendar');
