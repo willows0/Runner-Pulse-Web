@@ -1048,6 +1048,27 @@ async function weeklyPushRoute(req,res,pathname){
 }
 
 http.createServer(async(req,res)=>{
+  if(req.url?.split('?')[0]==='/api/health-connect/delete-activity'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
+    try{
+      const body=await readJsonBody(req);
+      const id=String(body?.activityId||'');
+      if(!/^[a-f0-9]{64}$/.test(id))return json(res,400,{success:false,message:'ID attività non valido'});
+      const db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
+      const ref=root.collection('healthConnectActivities').doc(id);
+      const tombstone=root.collection('deletedHealthConnectActivities').doc(id);
+      await db.runTransaction(async tx=>{
+        const current=await tx.get(ref);
+        if(!current.exists)throw Object.assign(new Error('Attività non più presente'),{status:404});
+        tx.set(tombstone,{deletedAt:Date.now(),deletedBy:user.uid});
+        tx.delete(ref);
+      });
+      // Evita che un job di analisi già programmato ritrovi questa attività.
+      return json(res,200,{success:true,deleted:true});
+    }catch(error){console.error('Eliminazione Health Connect',error.message);return json(res,error.status||500,{success:false,message:error.status===404?error.message:'Eliminazione non riuscita'});}
+  }
   if(req.url?.split('?')[0]==='/api/health-connect/activities'){
     if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
     const user=await garminGoogleUser(req);
@@ -1080,7 +1101,15 @@ http.createServer(async(req,res)=>{
         if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||end<=start||end-start>86400000||start>Date.now()+3600000||start<Date.now()-35*86400000||!Number.isInteger(kind)){skipped++;continue;}
         const key=createHash('sha256').update(r.sourcePackage+'\0'+r.id).digest('hex');
         const ref=health.doc(key);
-        if((await ref.get()).exists){duplicates++;continue;}
+        if((await root.collection('deletedHealthConnectActivities').doc(key).get()).exists){skipped++;continue;}
+        const stored=await ref.get();
+        if(stored.exists){
+          const d=Number(r.distanceMeters);
+          if(r.distanceMeters!==null&&r.distanceMeters!==undefined&&Number.isFinite(d)&&d>=0&&d<=500000 && stored.data().distanceMeters==null){
+            await ref.update({distanceMeters:d});
+          }
+          duplicates++;continue;
+        }
         // Compare Garmin activity timestamps; never overwrite Garmin records.
         const sec=Math.floor(start/1000),duration=(end-start)/1000;
         const near=await root.collection('activities').where('summary.startTimeInSeconds','>=',sec-90).where('summary.startTimeInSeconds','<=',sec+90).limit(30).get();
@@ -1092,7 +1121,20 @@ http.createServer(async(req,res)=>{
             Math.abs(Number(old.durationInSeconds)-duration)<Math.max(30,duration*.03);
         });
         const recordSource=isHonorPackage(r.sourcePackage)?'honor':'health-connect';
-        await ref.create({source:recordSource,sourcePackage:r.sourcePackage,recordId:r.id,startTimeInSeconds:sec,durationInSeconds:duration,exerciseType:kind,title:String(r.title||'').slice(0,120),duplicateOfGarminId:match?.id||null,duplicateOfHealthId:matchingHealth?.id||null,createdAt:Date.now()});
+        const meters = r.distanceMeters===null||r.distanceMeters===undefined?null:Number(r.distanceMeters);
+        const distanceMeters=meters!==null&&Number.isFinite(meters)&&meters>=0&&meters<=500000?meters:null;
+        // Controllo tombstone e creazione atomici: una sincronizzazione simultanea
+        // alla cancellazione non deve far ricomparire un'attività rimossa.
+        const result=await db.runTransaction(async tx=>{
+          const deleted=await tx.get(root.collection('deletedHealthConnectActivities').doc(key));
+          if(deleted.exists)return 'deleted';
+          const current=await tx.get(ref);
+          if(current.exists)return 'existing';
+          tx.create(ref,{source:recordSource,sourcePackage:r.sourcePackage,recordId:r.id,startTimeInSeconds:sec,durationInSeconds:duration,distanceMeters,exerciseType:kind,title:String(r.title||'').slice(0,120),duplicateOfGarminId:match?.id||null,duplicateOfHealthId:matchingHealth?.id||null,createdAt:Date.now()});
+          return 'created';
+        });
+        if(result==='deleted'){skipped++;continue;}
+        if(result==='existing'){duplicates++;continue;}
         if(match||matchingHealth)duplicates++;else{
           imported++;
           if(recentEnoughForAutomaticCoach(sec)){scheduleActivityCoach(user.uid,healthCoachId(key));analysisQueued++;}
@@ -1114,6 +1156,29 @@ http.createServer(async(req,res)=>{
     const user=await garminGoogleUser(req);
     if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
     try{
+      if(new URL(req.url,'http://localhost').searchParams.get('source')==='health-connect'){
+        const stored=(await getFirestore().collection('runnerPulseHealthConnectSleep').doc(user.uid).get()).data()||{};
+        const days=Date.now()-Number(stored.updatedAt||0)<9*86400000&&Array.isArray(stored.days)?stored.days:[];
+        const results=days.map(d=>{
+          let coachScore=null,coachJudgement=null,coachComment=null;
+          const deep=d.deepSeconds,rem=d.remSeconds,light=d.lightSeconds,awake=d.awakeSeconds;
+          // Un giudizio numerico solo se il provider ha scritto le fasi: nessun punteggio inventato.
+          if(d.seconds>0&&Number.isFinite(deep)&&Number.isFinite(rem)&&Number.isFinite(light)&&Number.isFinite(awake)&&deep+rem+light>0){
+            const asleep=deep+rem+light,total=asleep+awake;
+            if(asleep<=86400&&total>0&&Math.abs(asleep-d.seconds)<5400){
+              const durationScore=Math.min(100,100*Math.min(asleep/3600,8)/8);
+              const deepScore=Math.min(100,deep/asleep*100/0.2);
+              const remScore=Math.min(100,rem/asleep*100/0.25);
+              const efficiencyScore=Math.min(100,asleep/total*100);
+              coachScore=Math.round(Math.max(0,Math.min(100,durationScore*.5+deepScore*.2+remScore*.15+efficiencyScore*.15)));
+              coachJudgement=coachScore>=85?'Ottimo':coachScore>=70?'Buono':coachScore>=55?'Discreto':'Scarso';
+              coachComment='Stima Runner Pulse dalle fasi del sonno registrate in Health Connect, non un punteggio HONOR né una diagnosi.';
+            }
+          }
+          return {date:d.date,seconds:d.seconds,score:null,coachScore,coachJudgement,coachComment};
+        });
+        return json(res,200,{success:true,days:results,source:'health-connect-native'});
+      }
       const snapshot=await getFirestore().collection('runnerPulseGarminHealth').doc(user.uid).collection('sleeps').orderBy('receivedAt','desc').limit(100).get();
       const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'});
       const localDate=value=>{const x=Object.fromEntries(formatter.formatToParts(value).map(p=>[p.type,p.value]));return `${x.year}-${x.month}-${x.day}`;};
@@ -1186,11 +1251,73 @@ http.createServer(async(req,res)=>{
       return json(res,200,{success:true});
     }catch(error){console.error('Health Connect steps sync:',error.message);return json(res,503,{success:false,message:'Sincronizzazione passi non disponibile'});}
   }
+  // HONOR/Health Connect: dati reali salvati dalla app Android per lo stesso UID.
+  // Richiesti esplicitamente, cosi' Garmin e Health Connect non vengono mischiati.
+  if(pathname==='/api/health-connect/sleep-sync'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
+    try{
+      const body=await readJsonBody(req,30000);
+      if(!Array.isArray(body.days)||body.days.length!==7)return json(res,400,{success:false,message:'Settimana non valida'});
+      const validNumber=(v,max)=>v===null||(Number.isSafeInteger(v)&&v>=0&&v<=max);
+      const days=body.days.map(item=>{
+        if(!item||typeof item.date!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(item.date)||!validNumber(item.seconds,86400))throw Error('Durata del sonno non valida');
+        const out={date:item.date,seconds:item.seconds};
+        for(const k of ['deepSeconds','remSeconds','lightSeconds','awakeSeconds']){
+          if(!validNumber(item[k]??null,86400))throw Error('Fasi sonno non valide');
+          out[k]=item[k]??null;
+        }
+        out.sourcePackage=typeof item.sourcePackage==='string'?item.sourcePackage.slice(0,150):'';
+        return out;
+      });
+      const unique=new Set(days.map(x=>x.date));if(unique.size!==7)throw Error('Date duplicate');
+      const now=Date.now();if(days.some(x=>Math.abs(now-Date.parse(x.date+'T12:00:00Z'))>9*86400000))throw Error('Settimana non recente');
+      await getFirestore().collection('runnerPulseHealthConnectSleep').doc(user.uid).set({days,updatedAt:now,source:'health-connect-native'});
+      return json(res,200,{success:true});
+    }catch(error){console.warn('Health Connect sonno sync:',error.message);return json(res,400,{success:false,message:'Dati sonno non accettati'});}
+  }
+  if(pathname==='/api/health-connect/vitals-sync'){
+    if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
+    try{
+      const body=await readJsonBody(req,4096);
+      const vo2=body.vo2max===null||body.vo2max===undefined?null:Number(body.vo2max);
+      const resting=body.restingHeartRate===null||body.restingHeartRate===undefined?null:Number(body.restingHeartRate);
+      const result={vo2max:vo2!==null&&Number.isFinite(vo2)&&vo2>=10&&vo2<=95?vo2:null,restingHeartRate:resting!==null&&Number.isInteger(resting)&&resting>=25&&resting<=180?resting:null,
+       vo2SourcePackage:String(body.vo2SourcePackage||'').slice(0,150),heartSourcePackage:String(body.heartSourcePackage||'').slice(0,150),updatedAt:Date.now()};
+      // Null significa 'non disponibile' e non deve cancellare una lettura valida precedente.
+      const update={updatedAt:result.updatedAt};
+      if(result.vo2max!==null){update.vo2max=result.vo2max;update.vo2SourcePackage=result.vo2SourcePackage;}
+      if(result.restingHeartRate!==null){update.restingHeartRate=result.restingHeartRate;update.heartSourcePackage=result.heartSourcePackage;}
+      if(Object.keys(update).length>1)await getFirestore().collection('runnerPulseHealthConnectVitals').doc(user.uid).set(update,{merge:true});
+      return json(res,200,{success:true});
+    }catch(error){console.warn('Health Connect vitali:',error.message);return json(res,400,{success:false,message:'Dati non validi'});}
+  }
+  if(pathname==='/api/health-connect/vitals'){
+    if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+    const user=await garminGoogleUser(req);
+    if(!user)return json(res,401,{success:false,message:'Accesso Google richiesto'});
+    try{
+      const snap=await getFirestore().collection('runnerPulseHealthConnectVitals').doc(user.uid).get();
+      const d=snap.data()||{};
+      return json(res,200,{success:true,vo2max:d.vo2max??null,restingHeartRate:d.restingHeartRate??null,vo2SourcePackage:d.vo2SourcePackage||null,heartSourcePackage:d.heartSourcePackage||null,updatedAt:d.updatedAt||null});
+    }catch(error){return json(res,503,{success:false,message:'Dati Health Connect non disponibili'});}
+  }
   if(pathname==='/api/steps/week'){
     if(req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
     const user=await garminGoogleUser(req);
     if(!user)return json(res,401,{success:false,message:'Accesso richiesto'});
     try{
+      if(new URL(req.url,'http://localhost').searchParams.get('source')==='health-connect'){
+        const snap=await getFirestore().collection('runnerPulseHealthConnectSteps').doc(user.uid).get();
+        const stored=snap.data()||{};
+        // Non servire dati di un vecchio accesso che non sono stati aggiornati da settimane.
+        const fresh=Date.now()-Number(stored.updatedAt||0)<9*86400000;
+        const days=fresh&&Array.isArray(stored.days)?stored.days:[];
+        return json(res,200,{success:true,days,source:'health-connect-native',updatedAt:fresh?stored.updatedAt:null,recordsWithSteps:days.filter(x=>Number.isInteger(x.steps)).length});
+      }
       // Cache breve per utente: evita riletture di 250 documenti ad ogni ritorno nella Home.
       const cached=stepsWeekCache.get(user.uid);
       if(cached&&cached.expires>Date.now()&&cached.payload.recordsWithSteps>0)return json(res,200,cached.payload);
@@ -1324,7 +1451,15 @@ http.createServer(async(req,res)=>{
           // L'importazione manuale esplicita può ripristinare attività eliminate.
           // Il tombstone resta attivo per i webhook automatici.
           const tombstone=root.collection('deletedActivities').doc(id);
-          if((await ref.get()).exists){duplicates++;continue;}
+          if((await root.collection('deletedHealthConnectActivities').doc(key).get()).exists){skipped++;continue;}
+        const stored=await ref.get();
+        if(stored.exists){
+          const d=Number(r.distanceMeters);
+          if(r.distanceMeters!==null&&r.distanceMeters!==undefined&&Number.isFinite(d)&&d>=0&&d<=500000 && stored.data().distanceMeters==null){
+            await ref.update({distanceMeters:d});
+          }
+          duplicates++;continue;
+        }
           // Evita duplicati con lo storico importato da Garmin via webhook.
           const near=await root.collection('activities').where('summary.startTimeInSeconds','==',summary.startTimeInSeconds).limit(15).get();
           const same=near.docs.some(d=>{const old=d.data()?.summary||{};return Math.abs(Number(old.distanceInMeters)-Number(summary.distanceInMeters))<2&&Math.abs(Number(old.durationInSeconds)-Number(summary.durationInSeconds))<3;});
