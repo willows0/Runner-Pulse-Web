@@ -246,7 +246,7 @@ approve.addEventListener('click',async()=>{
  try{await saveApproved(state.draft);msg('Programma approvato e salvato nel tuo account Google.');}
  catch(err){msg('Programma non ancora approvato: '+err.message);}
 });
-$('rp-calendar-connect')?.addEventListener('click',()=>{$('rp-calendar-status').textContent='Google Calendar non è ancora collegato. Nessun evento è stato creato.';});
+// Il collegamento Google Calendar è gestito dal modulo /google-calendar.js.
 onAuthStateChanged(auth,async user=>{
  // Ogni login recupera il proprio Piano. Nessun dato può migrare verso un altro UID.
  draftWrites=Promise.resolve();

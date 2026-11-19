@@ -136,7 +136,17 @@
 <label>Fascia oraria preferita<select name="timePreference"><option value="evening">Sera</option><option value="morning">Mattina</option><option value="afternoon">Pomeriggio</option></select></label></div>
 <button type="button" id="rp-create-proposal">Genera programma con il Coach</button></form>
 <p id="rp-program-status" role="status" aria-live="polite"></p></div>
-<div class="card rp-program-card"><h2>Google Calendar</h2><p>Con il tuo consenso Runner Pulse potrà cercare orari liberi e, dopo la tua approvazione, aggiungere gli allenamenti.</p><button id="rp-calendar-connect" type="button">Collega Google Calendar</button><p id="rp-calendar-status" class="note" role="status">Non collegato</p></div>
+<div class="card rp-program-card" aria-label="Collegamento Google Calendar">
+<h2>Google Calendar</h2>
+<p>Collega il tuo calendario personale. Runner Pulse aggiunge solo gli allenamenti del <strong>piano approvato</strong>, dopo che premi «Sincronizza piano». Se cambi il programma, premi di nuovo «Sincronizza» per aggiornare gli eventi.</p>
+<div class="rp-program-actions">
+<button id="rp-calendar-connect" type="button">Collega Google Calendar</button>
+<button id="rp-calendar-sync" type="button" hidden>Sincronizza piano</button>
+<button id="rp-calendar-disconnect" type="button" hidden>Scollega Calendar</button>
+</div>
+<p id="rp-calendar-status" class="note" role="status" aria-live="polite">Verifico collegamento…</p>
+<p class="note">L’accesso è personale. Lo scollegamento non elimina gli eventi già presenti su Google Calendar. Per la prima autorizzazione usa Chrome, non il browser interno dell’app Android.</p>
+</div>
 <div class="card rp-program-card"><h2>Il tuo programma</h2><div id="rp-program-approved">Non hai ancora creato un programma.</div></div>
 </section>
     <section id="coach" class="page rp-coach-page" aria-label="Chat con l’allenatore Runner Pulse">
@@ -224,6 +234,7 @@
   }
 </script>
   <script type="module" src="/plan-manager.js?v=plan-no-proposal-20261119"></script>
+  <script type="module" src="/google-calendar.js?v=calendar-oauth-20261119"></script>
   <script type="module" src="/coach-memory.js?v=coach-plan-20261119"></script>
   <script>window.RUNNER_PULSE_VAPID_KEY = "BImx7Smy2xK7i2J_o5bCvC2Q4pzx8I0nIYQQCy93mYCRmo2vl7fE08sc-phyPvEiHs_Q33PIkJfNJDjJamP2ojk"; /* Inserire la chiave Web Push pubblica Firebase */</script>
   <script type="module" src="/weekly-push.js"></script>
