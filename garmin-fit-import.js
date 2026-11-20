@@ -1,6 +1,7 @@
 // Importazione locale di file FIT Garmin, senza servizi esterni o dati sintetici.
 import {inflateRawSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
+import {parseTcx} from './garmin-tcx-import.js';
 const FIT_EPOCH=631065600;
 const num=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
 function unzip(buffer){
@@ -14,7 +15,7 @@ function unzip(buffer){
   if(p+46>buffer.length||buffer.readUInt32LE(p)!==0x02014b50)throw Error('Indice ZIP non valido');
   const flags=buffer.readUInt16LE(p+8),method=buffer.readUInt16LE(p+10),compressed=buffer.readUInt32LE(p+20),uncompressed=buffer.readUInt32LE(p+24),nl=buffer.readUInt16LE(p+28),ex=buffer.readUInt16LE(p+30),comment=buffer.readUInt16LE(p+32),offset=buffer.readUInt32LE(p+42);
   const name=buffer.subarray(p+46,p+46+nl).toString('utf8');p+=46+nl+ex+comment;
-  if(!/\.(fit|zip)$/i.test(name)||name.endsWith('/'))continue;
+  if(!/\.(fit|tcx|zip)$/i.test(name)||name.endsWith('/'))continue;
   if(flags&1)throw Error('ZIP cifrato non supportato');
   if(uncompressed>32*1024*1024||compressed>48*1024*1024||total+uncompressed>512*1024*1024)throw Error('Archivio FIT troppo grande');
   if(offset+30>buffer.length||buffer.readUInt32LE(offset)!==0x04034b50)throw Error('File ZIP danneggiato');
@@ -85,5 +86,13 @@ export function parseGarminArchive(buffer,filename){
  const files=/\.fit$/i.test(filename)?[{name:filename,data:buffer}]:/\.zip$/i.test(filename)?unzip(buffer):null;
  if(!files)throw Error('Seleziona un file .FIT o .ZIP');
  const expanded=[];for(const f of files){if(/\.zip$/i.test(f.name)){try{for(const child of unzip(f.data))expanded.push({name:f.name+'/'+child.name,data:child.data});}catch(error){expanded.push({name:f.name,error:error.message});}}else expanded.push(f);}
- return expanded.map(f=>{if(f.error)return {name:f.name,error:f.error};try{return {name:f.name,activity:parseFit(f.data)}}catch(error){return {name:f.name,error:error.message}}});
+ return expanded.flatMap(f=>{
+  if(f.error)return [{name:f.name,error:f.error}];
+  try{
+   // Gli ZIP possono contenere anche TCX oltre ai FIT; alcuni esportatori
+   // restituiscono più allenamenti nello stesso file TCX.
+   if(/\.tcx$/i.test(f.name))return parseTcx(f.data).map((activity,i)=>({name:f.name+(i?' #'+(i+1):''),activity}));
+   return [{name:f.name,activity:parseFit(f.data)}];
+  }catch(error){return [{name:f.name,error:error.message}];}
+ });
 }

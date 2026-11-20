@@ -1447,7 +1447,10 @@ http.createServer(async(req,res)=>{
       const max=85*1024*1024;let size=0;const chunks=[];
       for await(const chunk of req){size+=chunk.length;if(size>max)throw Object.assign(new Error('File troppo grande (limite 85 MB). Dividi lo ZIP in archivi più piccoli.'),{status:413});chunks.push(chunk);}
       const buffer=Buffer.concat(chunks);
+      if(!buffer.length)return json(res,400,{success:false,message:'Il file selezionato è vuoto.'});
       const parsed=/\.tcx$/i.test(filename)?parseTcx(buffer).map((activity,i)=>({name:filename+(i?' #'+(i+1):''),activity})):parseGarminArchive(buffer,filename);
+      if(!parsed.length)return json(res,422,{success:false,imported:0,duplicates:0,failed:0,total:0,
+        message:'Il file ZIP non contiene attività FIT o TCX. Controlla il contenuto dell’archivio.'});
       const user=importingUser,db=getFirestore(),root=db.collection('runnerPulseGarmin').doc(user.uid);
       let imported=0,duplicates=0,failed=0;const errors=[];
       for(const {name,activity,error} of parsed){
@@ -1458,15 +1461,11 @@ http.createServer(async(req,res)=>{
           // L'importazione manuale esplicita può ripristinare attività eliminate.
           // Il tombstone resta attivo per i webhook automatici.
           const tombstone=root.collection('deletedActivities').doc(id);
-          if((await root.collection('deletedHealthConnectActivities').doc(key).get()).exists){skipped++;continue;}
-        const stored=await ref.get();
-        if(stored.exists){
-          const d=Number(r.distanceMeters);
-          if(r.distanceMeters!==null&&r.distanceMeters!==undefined&&Number.isFinite(d)&&d>=0&&d<=500000 && stored.data().distanceMeters==null){
-            await ref.update({distanceMeters:d});
-          }
-          duplicates++;continue;
-        }
+          // Nessun filtro Health Connect qui: si sta importando un file manuale.
+          // Le variabili di quel flusso (key, r, skipped) non esistono in questo endpoint
+          // e impedivano di salvare QUALSIASI attività FIT/TCX.
+          const stored=await ref.get();
+          if(stored.exists){duplicates++;continue;}
           // Evita duplicati con lo storico importato da Garmin via webhook.
           const near=await root.collection('activities').where('summary.startTimeInSeconds','==',summary.startTimeInSeconds).limit(15).get();
           const same=near.docs.some(d=>{const old=d.data()?.summary||{};return Math.abs(Number(old.distanceInMeters)-Number(summary.distanceInMeters))<2&&Math.abs(Number(old.durationInSeconds)-Number(summary.durationInSeconds))<3;});
@@ -1474,7 +1473,7 @@ http.createServer(async(req,res)=>{
           const batch=db.batch();
           // Ripristino atomico: cancellare il tombstone solo se il nuovo record viene scritto.
           batch.delete(tombstone);
-          batch.set(ref,{summary,garminId:id,source:/\.tcx$/i.test(filename)?'manual-tcx':'manual-fit',seenAt:Date.now(),officialActivityDetails:{activityId:id,laps:detail.laps},fitSampleChunks:Math.ceil(detail.samples.length/300)});
+          batch.set(ref,{summary,garminId:id,source:/\.tcx(?:\s*#\d+)?$/i.test(name)?'manual-tcx':'manual-fit',seenAt:Date.now(),officialActivityDetails:{activityId:id,laps:detail.laps},fitSampleChunks:Math.ceil(detail.samples.length/300)});
           for(let j=0;j<detail.samples.length;j+=300)batch.set(ref.collection('fitSamples').doc(String(j/300).padStart(5,'0')),{samples:detail.samples.slice(j,j+300)});
           // Firestore batch limit: 500 writes. Avoid partial imports.
           if(detail.samples.length>120000)throw Error('Attività troppo grande per importazione singola');
@@ -1483,7 +1482,15 @@ http.createServer(async(req,res)=>{
           if(recentEnoughForAutomaticCoach(Number(summary.startTimeInSeconds)))scheduleActivityCoach(user.uid,id);
         }catch(err){failed++;if(errors.length<8)errors.push(name+': '+err.message);}
       }
-      return json(res,200,{success:true,imported,duplicates,failed,total:parsed.length,errors});
+      // HTTP 200 solo se almeno una attività è stata importata o riconosciuta
+      // come già presente. Se falliscono tutte, non mostrare '100% completata'.
+      const successful=imported+duplicates>0;
+      const result={success:successful,imported,duplicates,failed,total:parsed.length,errors};
+      if(!successful){
+        result.message=failed?`Nessuna attività importata. ${failed} file non elaborati. ${errors[0]||'Controlla il formato dei file.'}`
+          :'Nessuna attività valida trovata nel file.';
+      }
+      return json(res,successful?200:422,result);
     }catch(error){console.error('Importazione FIT:',error.message);return json(res,error.status||400,{success:false,message:error.message});}
   }
   if(pathname==='/api/garmin/delete-activity'){
