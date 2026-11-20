@@ -172,11 +172,43 @@ async function saveApproved(rows,expectedRevision=null){
 window.runnerPulseSavePlan=saveApproved;
 window.runnerPulseSaveDraft=persistDraft;
 window.runnerPulseReloadPlan=load;
+// Le singole sedute possono essere eliminate dal Calendario con lo stesso
+// cestino degli impegni, ma restano intatte le corse effettivamente registrate.
+window.runnerPulseRemovePlannedSession=async(session,index)=>{
+ if(noAccount()||state.busy||state.draftPending)throw Error('Accedi e attendi che il piano sia aggiornato.');
+ const draft=state.draft.length>0,rows=draft?state.draft:state.approved;
+ if(!Array.isArray(rows)||index<0||index>=rows.length)throw Error('Seduta non trovata. Aggiorna la pagina.');
+ const current=rows[index];
+ if(!current||current.date!==session.date||current.time!==session.time||current.title!==session.title)
+  throw Error('Il Piano è cambiato. Riapri il calendario prima di eliminare.');
+ if(!window.confirm(`Eliminare dal Piano la seduta “${current.title}” del ${current.date} alle ${current.time}?${draft?' Sarà rimossa dalla bozza.':' Se già presente su Google Calendar, verrà rimossa anche da lì.'}\n\nLe corse già registrate nelle Attività rimangono intatte.`))return false;
+ if(rows.length===1){
+  if(!draft)return window.runnerPulseDeletePlan({skipConfirm:true});
+  state.busy=true;render();msg('Elimino l’ultima seduta della bozza…');
+  try{
+   await draftWrites.catch(()=>{});
+   await api('DELETE',{expectedRevision:state.draftRevision},true);
+   const uid=state.uid;state.draft=[];state.draftRevision=0;state.draftPending=false;remove(draftKey(uid));
+   publish();msg('Ultima seduta eliminata dalla bozza. Gli allenamenti registrati rimangono intatti.');return true;
+  }finally{state.busy=false;render();}
+ }
+ const remaining=rows.filter((_,i)=>i!==index);
+ if(draft){await persistDraft(remaining);msg('Seduta eliminata dalla bozza del Piano.');}
+ else{
+  await saveApproved(remaining);
+  if(typeof window.runnerPulseSyncPlanAfterEdit==='function'){
+   try{await window.runnerPulseSyncPlanAfterEdit();}
+   catch(error){msg('Seduta rimossa dal Piano, ma Google Calendar non è stato aggiornato: '+error.message+' Premi “Sincronizza piano” per completare.');throw error;}
+  }
+  msg('Seduta eliminata dal Piano. Lo storico delle corse non è stato modificato.');
+ }
+ return true;
+};
 function openCoach(){window.rpCoachEditingPlan=true;document.querySelector('nav button[data-page="coach"]')?.click();const input=$('rp-ai-question');if(input){input.placeholder='Chiedi al Coach come modificare il programma…';input.focus();}}
 edit.addEventListener('click',openCoach);
-window.runnerPulseDeletePlan=async()=>{
+window.runnerPulseDeletePlan=async({skipConfirm=false}={})=>{
  if(noAccount()||state.busy)return false;
- if(!window.confirm('Eliminare il piano e tutte le bozze? Verranno rimossi anche gli allenamenti del Piano sincronizzati su Google Calendar. Gare, impegni personali e attività registrate resteranno intatti.'))return false;
+ if(!skipConfirm&&!window.confirm('Eliminare il piano e tutte le bozze? Verranno rimossi anche gli allenamenti del Piano sincronizzati su Google Calendar. Gare, impegni personali e attività registrate resteranno intatti.'))return false;
  state.busy=true;render();msg('Eliminazione delle sedute del Piano da Google Calendar, poi del programma…');
  try{
   await draftWrites.catch(()=>{});

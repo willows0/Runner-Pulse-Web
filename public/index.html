@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/runner-pulse-icon-192.png?v=20261109b">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/login.css">
-  <link rel="stylesheet" href="/orange.css?v=calendar-trash-left-20261120-c">
+  <link rel="stylesheet" href="/orange.css?v=calendar-corse-trash-20261120-v1">
   <style>
     /* Intestazione definitiva: prevale anche su CSS memorizzati dal browser. */
     body > header.rp-global-banner { display:flex !important; position:relative !important; top:auto !important; width:100% !important; min-height:0 !important; height:auto !important; margin:0 !important; padding:19px 16px 24px !important; align-items:center !important; justify-content:center !important; background:linear-gradient(120deg,#0d1b32,#182b4a) !important; border:0 !important; border-bottom:6px solid #ff7900 !important; border-radius:0 0 45% 9% !important; box-shadow:none !important; color:#fff !important; }
@@ -278,7 +278,7 @@
     card.append(heading,detail,retry);gate.replaceChildren(card);document.body.append(gate);
   }
 </script>
-  <script type="module" src="/plan-manager.js?v=calendar-plan-delete-20261120-v1"></script>
+  <script type="module" src="/plan-manager.js?v=calendar-sedute-delete-20261120-v1"></script>
   <script type="module" src="/google-calendar.js?v=calendar-swiper-20261120"></script>
   <script type="module" src="/coach-memory.js?v=coach-composer-20261120"></script>
   <script>window.RUNNER_PULSE_VAPID_KEY = "BImx7Smy2xK7i2J_o5bCvC2Q4pzx8I0nIYQQCy93mYCRmo2vl7fE08sc-phyPvEiHs_Q33PIkJfNJDjJamP2ojk"; /* Inserire la chiave Web Push pubblica Firebase */</script>
@@ -454,24 +454,42 @@
    const key=monday.toISOString().slice(0,10);
    if(key!==week){week=key;const h=document.createElement('h3');h.className='rp-week-head';h.textContent='Settimana del '+monday.toLocaleDateString('it-IT',{day:'numeric',month:'long'});calendar.appendChild(h);}
    if(entry.kind==='training'){
-    const card=makeButton(entry.s,entry.i);
+    const card=makeButton(entry.s,entry.i);card.classList.add('rp-planned-event');
     const a=new Date(entry.s.date+'T'+entry.s.time+':00Z').getTime(),b=a+Number(entry.s.minutes)*60000;
     const conflict=events.some(x=>x.busy&&a<Date.parse(x.endLocal+':00Z')&&b>Date.parse(x.startLocal+':00Z'));
     if(conflict){const notice=document.createElement('small');notice.textContent='⚠ Conflitto con un impegno Google';notice.className='rp-agenda-conflict';card.querySelector('.rp-day-main')?.appendChild(notice);}
-    calendar.appendChild(card);
+    const row=document.createElement('div');row.className='rp-swipe-row';
+    row.setAttribute('aria-label',entry.s.title+'; scorri a destra per rimuovere la seduta dal Piano');
+    const trash=document.createElement('button');trash.type='button';trash.className='rp-swipe-delete';
+    trash.setAttribute('aria-label','Elimina dal Piano '+entry.s.title);
+    trash.innerHTML='<span aria-hidden="true">🗑️</span><small>Elimina</small>';
+    let blockClick=false;
+    card.addEventListener('click',event=>{if(blockClick||row.classList.contains('rp-swipe-revealed')){
+      event.preventDefault();event.stopImmediatePropagation();blockClick=false;
+      row.classList.remove('rp-swipe-revealed');
+    }},true);
+    trash.addEventListener('click',async()=>{
+      trash.disabled=true;
+      try{if(!window.runnerPulseRemovePlannedSession)throw Error('Piano non ancora caricato.');
+       await window.runnerPulseRemovePlannedSession(entry.s,entry.i);
+      }catch(error){alert(error.message||'Impossibile modificare il Piano.');}
+      finally{trash.disabled=false;}
+    });
+    attachSwipeDelete(card,row,()=>{blockClick=true;setTimeout(()=>blockClick=false,1000);});
+    row.append(trash,card);calendar.appendChild(row);
    }else{
     const e=entry.e,info=eventCategoryInfo(e.category),card=document.createElement('button');card.type='button';card.className='rp-day-card rp-agenda-event '+info.className;
     const date=document.createElement('span');date.className='rp-day-date';date.textContent=dayNames[d.getDay()];const num=document.createElement('b');num.textContent=d.getDate();date.appendChild(num);
     const body=document.createElement('span');body.className='rp-day-main';
     const title=document.createElement('strong');title.textContent=e.title;
-    const meta=document.createElement('small');meta.textContent=eventTimeLabel(e)+' · '+info.label+' · '+e.calendar+(e.busy?'':' · Libero');
+    const meta=document.createElement('small');meta.textContent=eventTimeLabel(e)+' · '+info.label+' · '+e.calendar+(e.busy?'':' · Libero')+(e.calendarWritable===false?' · Sola lettura':'');
     const icon=document.createElement('span');icon.className='rp-day-icon';icon.textContent=info.icon;
     body.append(title,meta);card.append(date,body,icon);
     // Gli impegni modificabili scorrono a destra scoprendo il cestino rosso a sinistra.
     // Il cestino richiede sempre un secondo tocco con conferma esplicita.
     const row=document.createElement('div');row.className='rp-swipe-row';
-    row.setAttribute('aria-label',e.title+'; scorri verso destra per mostrare il cestino rosso a sinistra');
     const canDelete=e.calendarWritable===true&&Boolean(e.calendarId)&&Boolean(e.id);
+    row.setAttribute('aria-label',canDelete?e.title+'; scorri verso destra per mostrare il cestino rosso a sinistra':e.title+'; calendario in sola lettura');
     let blockClick=false;
     card.addEventListener('click',event=>{if(blockClick){blockClick=false;event.preventDefault();return;}if(row.classList.contains('rp-swipe-revealed')){row.classList.remove('rp-swipe-revealed');event.preventDefault();return;}openAgendaDetail(e);});
     if(canDelete){
@@ -507,6 +525,13 @@
   const guidance=paceGuidance(s);const steps=[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',guidance.text],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
   steps.forEach(([name,duration,description],i)=>{const item=document.createElement('div');item.className='rp-step';const n=document.createElement('span');n.className='rp-step-num';n.textContent=i+1;const body=document.createElement('div');const strong=document.createElement('strong');strong.textContent=name;const p=document.createElement('p');p.textContent=duration+' · '+description;body.append(strong,p);item.append(n,body);detail.appendChild(item)});
   const note=document.createElement('p');note.className='rp-detail-note';note.textContent=guidance.note;detail.appendChild(note);
+  const eraseSession=document.createElement('button');eraseSession.type='button';eraseSession.className='rp-detail-delete-event';
+  eraseSession.textContent='🗑 Elimina questa seduta dal Piano';
+  eraseSession.addEventListener('click',async()=>{eraseSession.disabled=true;try{
+   const ok=await window.runnerPulseRemovePlannedSession(s,index);
+   if(ok)show('calendar');
+  }catch(error){alert(error.message||'Impossibile eliminare questa seduta.');}finally{eraseSession.disabled=false;}});
+  detail.appendChild(eraseSession);
   detail.scrollIntoView({behavior:'smooth',block:'start'});
  }
  function openAgendaDetail(e){calendar.hidden=true;overview.hidden=true;settings.hidden=true;tabs.hidden=true;heading.hidden=true;detail.hidden=false;detail.replaceChildren();

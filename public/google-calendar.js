@@ -163,12 +163,14 @@ if(connect&&sync&&disconnect&&status){
   if(!event?.id||!event?.calendarId||event.calendarWritable!==true)
    throw Error('Questo impegno non può essere eliminato da Runner Pulse.');
   const when=event.allDay?'tutto il giorno':event.startLocal?.slice(11,16)||'';
-  if(!window.confirm(`Eliminare da Google Calendar “${event.title}” (${event.startLocal?.slice(0,10)||''}, ${when})?\n\nL’eliminazione riguarda questo evento${event.allDay?'':' o questa occorrenza'} e non il piano di allenamento.`))return false;
+  const completed=event.eventKind==='completed-workout';
+  const reason=completed?'Scomparirà soltanto dal calendario: la corsa e i relativi dettagli rimarranno nelle Attività e non verrà ricreata automaticamente.':`L’eliminazione riguarda questo evento${event.allDay?'':' o questa occorrenza'} e non il piano di allenamento.`;
+  if(!window.confirm(`Eliminare da Google Calendar “${event.title}” (${event.startLocal?.slice(0,10)||''}, ${when})?\n\n${reason}`))return false;
   deletingEvent=true;
   if(agendaStatus)agendaStatus.textContent='Eliminazione impegno da Google Calendar…';
   try{
    const result=await call('delete-event','POST',{eventId:event.id,calendarId:event.calendarId});
-   msg('Impegno eliminato da Google Calendar.');
+   msg(result.calendarOnly?'Corsa rimossa dal calendario. La registrazione originale rimane nelle Attività.':'Impegno eliminato da Google Calendar.');
    try{await refreshAgenda({force:true});}catch(error){
     if(agendaStatus)agendaStatus.textContent='Impegno eliminato, ma la lista non si è aggiornata: '+error.message;
    }
@@ -227,20 +229,29 @@ if(connect&&sync&&disconnect&&status){
   }catch(e){msg('Resoconti non aggiornati: '+e.message);}
   finally{busy=false;paint();}
  });
+ // Quando si elimina una singola seduta già sincronizzata, aggiornare anche
+ // Calendar. Un piano mai sincronizzato resta invece non sincronizzato.
+ window.runnerPulseSyncPlanAfterEdit=async()=>{
+  if(!current?.connected||!current.count)return {skipped:true};
+  if(busy)throw Error('Google Calendar sta completando un’altra operazione.');
+  busy=true;paint();msg('Aggiorno gli allenamenti programmati su Google Calendar…');
+  try{
+   const result=await call('sync','POST');
+   current={...current,count:result.count,lastSyncedAt:Date.now(),lastSyncedRevision:result.revision};
+   msg(`Piano aggiornato su Google Calendar: ${result.deleted} eventi eliminati, ${result.updated} aggiornati.`);
+   await refreshAgenda({force:true}).catch(()=>{});
+   return result;
+  }catch(error){msg('Piano modificato, ma Google Calendar non è aggiornato: '+error.message);throw error;}
+  finally{busy=false;paint();}
+ };
  sync.addEventListener('click',async()=>{
   if(!current?.connected)return;
   const approved=Array.isArray(window.rpSavedApproved)?window.rpSavedApproved:[];
   if(!approved.length&&!current.count)return msg('Approva prima un programma nella scheda Piano.');
   const question=approved.length?`Sincronizzare ${approved.length} allenamenti approvati su Google Calendar? Gli eventi Runner Pulse esistenti saranno aggiornati.`:'Hai eliminato il piano. Vuoi rimuovere da Google Calendar soltanto gli eventi creati da Runner Pulse?';
   if(!window.confirm(question))return;
-  busy=true;paint();msg('Aggiornamento Google Calendar in corso…');
-  try{
-   const result=await call('sync','POST');
-   current={...current,count:result.count,lastSyncedAt:Date.now(),lastSyncedRevision:result.revision};
-   msg(`Google Calendar aggiornato: ${result.created} aggiunti, ${result.updated} modificati, ${result.deleted} rimossi. Eventi totali: ${result.count}.`);
-   void refreshAgenda({force:true}).catch(()=>{});
-  }catch(e){msg('Sincronizzazione incompleta: '+e.message+' Puoi riprovare senza creare duplicati.');}
-  finally{busy=false;paint();}
+  try{await window.runnerPulseSyncPlanAfterEdit();}
+  catch{/* Il messaggio è già mostrato dal gestore. */}
  });
  disconnect.addEventListener('click',async()=>{
   if(!window.confirm('Scollegare Google Calendar? Gli allenamenti già inseriti resteranno su Google Calendar.'))return;

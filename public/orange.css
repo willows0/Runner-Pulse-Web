@@ -899,3 +899,23 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 #plan .rp-plan-panel .rp-swipe-row.rp-swipe-dragging > button.rp-agenda-event{
  box-shadow:0 0 0 2px #ff9b50!important;
 }
+
+/* Le sedute del Piano usano lo stesso cestino a sinistra degli impegni Google.
+   Il gesto scopre l'azione, ma non elimina senza tocco e conferma. */
+#plan .rp-plan-panel .rp-swipe-row > button.rp-planned-event{
+ position:relative;display:flex;width:100%!important;box-sizing:border-box;
+ margin:0!important;z-index:1;min-width:0!important;
+ transform:translate3d(0,0,0);transition:transform .2s ease;
+ touch-action:pan-y!important;user-select:none!important;-webkit-user-select:none!important;
+ -webkit-touch-callout:none!important;
+}
+#plan .rp-plan-panel .rp-swipe-row > button.rp-planned-event *{
+ user-select:none!important;-webkit-user-select:none!important;pointer-events:none;
+}
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-revealed > button.rp-planned-event{
+ transform:translate3d(94px,0,0)!important;
+}
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-arming > button.rp-planned-event,
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-ready > button.rp-planned-event{
+ box-shadow:0 0 0 3px #ffae65!important;
+}
