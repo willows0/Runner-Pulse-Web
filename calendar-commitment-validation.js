@@ -2,7 +2,7 @@
 // Non dedurre date, ore o durata mancanti dai dati degli allenamenti.
 const fail=(message)=>Object.assign(new Error(message),{status:400});
 const fit=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
-const cleanCategory=value=>{const v=fit(value,16).toLowerCase();return ['work','sport','race','school','health','other'].includes(v)?v:'other';};
+const cleanCategory=value=>{const v=fit(value,16).toLowerCase();return ['work','sport','race','school','health','expense','food','other'].includes(v)?v:'other';};
 export function dateValid(s){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
  const d=new Date(s+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===s;
