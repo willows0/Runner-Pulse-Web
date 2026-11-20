@@ -11,8 +11,11 @@ if(coach){
  const quick=coach.querySelector('#rp-coach-quick');
  const suggestions=coach.querySelector('#rp-coach-suggestions');
  const mic=coach.querySelector('#rp-coach-mic');
- const screenshot=coach.querySelector('#rp-coach-screenshot');
  const screenshotFile=coach.querySelector('#rp-coach-screenshot-file');
+ const attachmentFile=coach.querySelector('#rp-coach-attachment-file');
+ const attachmentsMenu=coach.querySelector('#rp-coach-attachments');
+ const attachPhotoButton=coach.querySelector('#rp-coach-attach-photo');
+ const attachFileButton=coach.querySelector('#rp-coach-attach-file');
  // Cancella esclusivamente i messaggi Coach dell'utente autenticato.
  const resetCoach=document.createElement('button');
  resetCoach.type='button';
@@ -73,12 +76,18 @@ if(coach){
    }
  }catch(err){status.textContent=err.message;}finally{busy=false;send.disabled=false;}});
  question.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
- quick.addEventListener('click',()=>{suggestions.hidden=!suggestions.hidden;});
  suggestions.querySelectorAll('[data-prompt]').forEach(b=>b.addEventListener('click',()=>{question.value=b.dataset.prompt;suggestions.hidden=true;question.focus();}));
- screenshot?.addEventListener('click',()=>screenshotFile?.click());
- screenshotFile?.addEventListener('change',async()=>{
-  const file=screenshotFile.files?.[0];screenshotFile.value='';if(!file)return;
-  screenshot.disabled=true;status.textContent='Leggo data e orari nello screenshot…';
+ const closeAttachments=()=>{if(attachmentsMenu)attachmentsMenu.hidden=true;if(quick)quick.setAttribute('aria-expanded','false');};
+ const openAttachments=()=>{if(attachmentsMenu)attachmentsMenu.hidden=false;if(quick)quick.setAttribute('aria-expanded','true');};
+ quick?.addEventListener('click',()=>{if(!attachmentsMenu)return;attachmentsMenu.hidden?openAttachments():closeAttachments();suggestions.hidden=true;});
+ document.addEventListener('click',event=>{if(!attachmentsMenu||attachmentsMenu.hidden)return;const target=event.target;if(attachmentsMenu.contains(target)||quick?.contains(target))return;closeAttachments();});
+ attachPhotoButton?.addEventListener('click',()=>{closeAttachments();screenshotFile?.click();});
+ attachFileButton?.addEventListener('click',()=>{closeAttachments();attachmentFile?.click();});
+ async function importScreenshotFile(file){
+  if(!file)return;
+  if(attachPhotoButton)attachPhotoButton.disabled=true;
+  if(attachFileButton)attachFileButton.disabled=true;
+  status.textContent='Leggo data e orari nello screenshot…';
   try{
    if(!window.runnerPulseImportCalendarScreenshot)throw Error('Google Calendar non pronto. Apri Piano prima di riprovare.');
    const result=await window.runnerPulseImportCalendarScreenshot(file);
@@ -89,8 +98,42 @@ if(coach){
    bubble('assistant',lines.join('\n'));
    status.textContent=created.length?'Screenshot elaborato: controlla gli eventi sul calendario.':'Non ho riconosciuto appuntamenti completi; nessun evento è stato creato.';
   }catch(err){status.textContent='Screenshot non importato: '+err.message;}
-  finally{screenshot.disabled=false;}
- });
+  finally{if(attachPhotoButton)attachPhotoButton.disabled=false;if(attachFileButton)attachFileButton.disabled=false;}
+ }
+ async function handleGenericAttachment(file){
+  if(!file)return;
+  const name=String(file.name||'file');
+  const lower=name.toLowerCase();
+  if((file.type||'').startsWith('image/')||/\.(png|jpe?g|webp|gif)$/i.test(lower))return importScreenshotFile(file);
+  if(/\.(fit|zip)$/i.test(lower)){
+    bubble('assistant','Per i file FIT o ZIP usa Attività → Importa attività. Qui nel Coach posso leggere soprattutto screenshot, immagini o file di testo brevi.');
+    status.textContent='Per FIT o ZIP usa la pagina Attività.';
+    return;
+  }
+  if(/\.pdf$/i.test(lower)){
+    bubble('assistant',`Ho ricevuto “${name}”. Per ora il Coach non legge direttamente i PDF: se vuoi, fai uno screenshot oppure copia qui il testo principale.`);
+    status.textContent='PDF selezionato: usa screenshot o copia il testo.';
+    return;
+  }
+  const textLike=(file.type||'').startsWith('text/')||/\.(txt|md|csv|json|ics|xml|tcx)$/i.test(lower);
+  if(textLike){
+    if(file.size>350000)throw Error('File troppo grande per la chat del Coach.');
+    const raw=await file.text();
+    const prefix=[question.value.trim(),`[File allegato: ${name.slice(0,80)}]`].filter(Boolean).join('\n');
+    const available=Math.max(0,Math.min(1100,1500-prefix.length-2));
+    const snippet=raw.trim().slice(0,available);
+    if(!snippet)throw Error('La casella del messaggio è piena: cancella parte del testo e riprova.');
+    question.value=[prefix,snippet].filter(Boolean).join('\n');
+    question.focus();
+    status.textContent='File aggiunto al messaggio. Ora puoi scrivere o inviare.';
+    bubble('assistant',`Ho allegato “${name}” al messaggio come testo. Aggiungi pure la tua richiesta e poi invia.`);
+    return;
+  }
+  bubble('assistant',`Ho ricevuto “${name}”, ma in questa chat posso usare direttamente soprattutto foto, screenshot e file di testo brevi.`);
+  status.textContent='Tipo di file non supportato in chat.';
+ }
+ screenshotFile?.addEventListener('change',async()=>{const file=screenshotFile.files?.[0];screenshotFile.value='';await importScreenshotFile(file);});
+ attachmentFile?.addEventListener('change',async()=>{const file=attachmentFile.files?.[0];attachmentFile.value='';try{await handleGenericAttachment(file);}catch(err){status.textContent=err.message;}});
  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
- if(SpeechRecognition){const recognizer=new SpeechRecognition();recognizer.lang='it-IT';recognizer.interimResults=false;recognizer.addEventListener('result',e=>{const t=e.results?.[0]?.[0]?.transcript;if(t)question.value=[question.value.trim(),t].filter(Boolean).join(' ');question.focus();});recognizer.addEventListener('error',()=>{status.textContent='Dettatura non disponibile. Puoi scrivere il messaggio.';});mic.addEventListener('click',()=>{try{recognizer.start();status.textContent='Ti ascolto…';}catch{status.textContent='Dettatura non disponibile.';}});}else{mic.addEventListener('click',()=>{status.textContent='La dettatura non è supportata da questo browser. Usa il microfono della tastiera.';question.focus();});}
+ if(SpeechRecognition){const recognizer=new SpeechRecognition();recognizer.lang='it-IT';recognizer.interimResults=false;recognizer.addEventListener('result',e=>{const t=e.results?.[0]?.[0]?.transcript;if(t)question.value=[question.value.trim(),t].filter(Boolean).join(' ').slice(0,1500);question.focus();});recognizer.addEventListener('error',()=>{status.textContent='Dettatura non disponibile. Puoi scrivere il messaggio.';});mic.addEventListener('click',()=>{try{recognizer.start();status.textContent='Ti ascolto…';}catch{status.textContent='Dettatura non disponibile.';}});}else{mic.addEventListener('click',()=>{status.textContent='La dettatura non è supportata da questo browser. Usa il microfono della tastiera.';question.focus();});}
 }

@@ -651,4 +651,22 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 
 /* Coach: input file aperto esclusivamente dall’icona fotocamera.
    Evita che la regola globale input{display:block;width:100%} copra la chat. */
-#coach #rp-ai-form input#rp-coach-screenshot-file, #coach input#rp-coach-screenshot-file[hidden] {display:none!important;position:absolute!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important;}
+#coach #rp-ai-form input#rp-coach-screenshot-file, #coach input#rp-coach-screenshot-file[hidden], #coach #rp-ai-form input#rp-coach-attachment-file, #coach input#rp-coach-attachment-file[hidden] {display:none!important;position:absolute!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important;}
+
+
+/* Chat Coach: barra in stile messaggi con menu allegati dal + */
+#coach .rp-coach-composer{position:fixed!important;}
+#coach .rp-coach-form{gap:8px!important;align-items:flex-end!important;}
+#coach .rp-coach-form textarea{background:transparent!important;border:0!important;border-radius:20px!important;padding:12px 10px!important;min-height:48px!important;}
+#coach .rp-coach-round{display:grid!important;place-items:center!important;font-size:22px!important;}
+#coach .rp-coach-plus{font-size:30px!important;font-weight:300!important;}
+#coach .rp-coach-mic{font-size:20px!important;}
+#coach .rp-coach-attachments{position:absolute;left:14px;bottom:calc(100% + 10px);display:flex;flex-direction:column;gap:10px;background:#17314f;border:1px solid #3f5873;border-radius:18px;padding:12px;box-shadow:0 16px 32px rgba(10,26,46,.28);width:min(270px,calc(100vw - 44px));z-index:2;}
+#coach .rp-coach-attachments[hidden]{display:none!important;}
+#coach .rp-coach-attachment-option{display:grid;grid-template-columns:30px 1fr;grid-template-areas:"icon title" "icon note";align-items:center;column-gap:10px;row-gap:2px;padding:10px 12px;border-radius:14px;border:1px solid #4f6881;background:#203c5c;color:#fff;text-align:left;}
+#coach .rp-coach-attachment-option span{grid-area:icon;font-size:20px;line-height:1;}
+#coach .rp-coach-attachment-option strong{grid-area:title;font-size:14px;}
+#coach .rp-coach-attachment-option small{grid-area:note;color:#c8d6e4;font-size:11px;}
+#coach .rp-coach-attachment-option:active{transform:translateY(1px);}
+#coach .rp-coach-status{margin-top:6px!important;}
+@media(max-width:390px){#coach .rp-coach-attachment-option small{font-size:10px;}}
