@@ -122,10 +122,12 @@ async function calendarEvents(access,calendar,range){
    if(endLocal<=range.fromDate+'T00:00'||startLocal>=range.endDate+'T00:00')continue;
    const busy=item.transparency!=='transparent';
    const runnerPulse=item.extendedProperties?.private?.runnerPulse==='training-plan';
+   const title=String(item.visibility==='private'?'Impegno privato':(item.summary||'Impegno')).slice(0,150);
+   const description=item.visibility==='private'?'':String(item.description||'').slice(0,1000);
+   const category=normalizeCategory(item.extendedProperties?.private?.category||inferCategory((item.summary||'')+' '+(item.description||'')));
    events.push({
     id:String(item.id||'').slice(0,180),
-    title:String(item.visibility==='private'?'Impegno privato':(item.summary||'Impegno')).slice(0,150),
-    startLocal,endLocal,allDay,busy,runnerPulse,
+    title,startLocal,endLocal,allDay,busy,runnerPulse,description,category,categoryLabel:categoryLabel(category),
     calendar:calendar.name
    });
    if(events.length>1000)throw Object.assign(Error('Troppi eventi: restringi il periodo del calendario.'),{status:409});
@@ -256,7 +258,7 @@ async function addCommitment(uid,request){
  const access=await accessToken(uid);
  const requestId=input.requestId||randomBytes(16).toString('hex');
  const id='rp'+sha(uid+':manual:'+requestId).slice(0,38);
- const marker={runnerPulse:'manual-commitment',ownerHash:sha(uid).slice(0,24)};
+ const marker={runnerPulse:'manual-commitment',ownerHash:sha(uid).slice(0,24),category:input.category};
  const body={summary:input.title,description:input.description,
    start:input.allDay?{date:input.date}:{dateTime:input.date+'T'+input.startTime+':00',timeZone:TZ},
    end:input.allDay?{date:new Date(Date.parse(input.date+'T12:00:00Z')+86400000).toISOString().slice(0,10)}:{dateTime:input.date+'T'+input.endTime+':00',timeZone:TZ},
