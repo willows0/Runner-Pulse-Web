@@ -148,6 +148,18 @@ if(connect&&sync&&disconnect&&status){
   // Dati incompleti: sarà il Coach a chiedere la singola informazione mancante.
   return {created:false,...data.proposal,missing:data.missing||[],message:data.message||'Dimmi i dati mancanti per completare l’appuntamento.'};
  };
+ // Spostamento di un allenamento già esistente nel calendario personale,
+ // anche quando non esiste un Piano salvato in Firestore.
+ window.runnerPulseProposeCalendarMove=async message=>{
+  if(!current?.connected)throw Error('Collega prima Google Calendar nella scheda Piano.');
+  return call('move-preview','POST',{message});
+ };
+ window.runnerPulseApplyCalendarMove=async ticket=>{
+  if(!current?.connected)throw Error('Collega prima Google Calendar nella scheda Piano.');
+  const result=await call('move-apply','POST',{ticket});
+  await refreshAgenda({force:true}).catch(()=>{});
+  return result;
+ };
  window.runnerPulseImportCalendarScreenshot=async(file)=>{
   if(!current?.connected)throw Error('Collega prima Google Calendar nella scheda Piano.');
   if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>2_250_000)throw Error('Usa uno screenshot JPG, PNG o WebP di massimo 2,2 MB.');

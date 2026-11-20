@@ -53,6 +53,7 @@ if(coach){
 
  let version=0, busy=false;
  let pendingCalendarText=''; // appuntamento incompleto: completamento nella chat senza aprire modali
+ let pendingCalendarMoveText=''; // richiesta di spostamento ambigua: chiarimento in chat
  resizeMessageBox();
  function scrollToLatest(){requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;});}
  function showAnswerStart(row){requestAnimationFrame(()=>{history.scrollTop=Math.max(0,row.offsetTop-history.offsetTop-10);});}
@@ -73,15 +74,49 @@ if(coach){
    catch(e){status.textContent='Cancellazione non riuscita: '+e.message;}
    finally{busy=false;resetCoach.disabled=false;send.disabled=false;}
  });
+ async function handleCalendarMove(message){
+  if(!window.runnerPulseProposeCalendarMove||!window.runnerPulseApplyCalendarMove)throw Error('Il collegamento tra Coach e Google Calendar non è disponibile. Ricarica Runner Pulse.');
+  const completeMessage=pendingCalendarMoveText?pendingCalendarMoveText+'\nDettaglio aggiunto: '+message:message;
+  const result=await window.runnerPulseProposeCalendarMove(completeMessage);
+  bubble('user',message,{scroll:false});question.value='';question.blur();resizeMessageBox();
+  if(result.needsClarification){
+   pendingCalendarMoveText=completeMessage;
+   bubble('assistant',result.summary||'Indicami la data esatta e l’ora dell’allenamento da spostare.');
+   status.textContent='In attesa dei dettagli per lo spostamento su Google Calendar.';
+   return;
+  }
+  pendingCalendarMoveText='';
+  const row=bubble('assistant',result.summary+'\n\nNon modifico nulla finché non confermi.');
+  const button=document.createElement('button');button.type='button';button.className='rp-plan-chat-approve';button.textContent='Conferma spostamento su Calendar';
+  row.querySelector('.rp-chat-bubble')?.append(button);
+  button.addEventListener('click',async()=>{
+   button.disabled=true;status.textContent='Sposto l’allenamento su Google Calendar…';
+   try{
+    const updated=await window.runnerPulseApplyCalendarMove(result.ticket);
+    button.textContent=updated.alreadyMoved?'Già spostato ✓':'Spostamento completato ✓';
+    status.textContent='Allenamento aggiornato su Google Calendar.';
+    bubble('assistant','Fatto: “'+(updated.eventTitle||result.eventTitle||'Allenamento')+'” è sul calendario il '+(updated.newDate||result.newDate)+' alle '+(updated.newTime||result.newTime)+'. La durata è rimasta invariata.');
+   }catch(error){
+    button.disabled=false;status.textContent='Spostamento non riuscito: '+error.message;
+    bubble('assistant','Non ho modificato il calendario: '+error.message);
+   }
+  });
+  status.textContent='Verifica il giorno e l’ora, poi conferma lo spostamento.';
+ }
  form.addEventListener('submit',async e=>{e.preventDefault();if(busy)return;const message=question.value.trim();if(!message)return;busy=true;send.disabled=true;status.textContent='Il Coach sta rispondendo…';suggestions.hidden=true;try{const simplified=message.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
    const deletePlan=/(?:elimin|cancell|rimuov|azzer)/.test(simplified)&&/\b(piano|programma)\b/.test(simplified)&&!/\b(?:seduta|allenamento)\s+(?:di|del|per)\s+(?:lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)/.test(simplified);
    // Le richieste esplicite di aggiunta appuntamenti vanno al modulo Calendar,
    // non al generatore di piani. La dettatura usa questo stesso percorso.
    const explicitPlanMove=/(?:spost|anticip|posticip|cambia|modifica)/.test(simplified)&&/\b(?:corsa|corse|correre|lungo|ripetut[ae]|allenament[oi]|sedut[ae]|piano|programma|ritmo controllato)\b/.test(simplified);
+   const explicitCalendarMove=explicitPlanMove&&/\b(?:su|nel|in)\s+(?:google\s+)?(?:calendar|calendario)\b/.test(simplified);
    const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,160}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista|turno|scuola|medico|spesa|spese|pagamento|pagare|bolletta|cena|pranzo|ristorante)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista|turno|lezione)\b|\b(?:lavoro|turno|scuola|lezione|visita|dentista|riunione|medico|ospedale|colloquio|pagare|affitto|bolletta|cena|pranzo|ristorante|spesa)\b.{0,130}\b(?:domani|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|dalle|alle|ore)\b/.test(simplified)&&!explicitPlanMove;
    // Un allenamento da registrare in calendario non è una modifica al Piano.
    const workoutCalendarIntent=/(?:salv|registr|inserisc|aggiung|segn|mett|crea).{0,100}\b(?:allenament[oi]|corsa|corse|lungo|ripetut[ae]|sedut[ae])\b/.test(simplified)&&!/(?:piano|programma)/.test(simplified);
-   if(((calendarIntent||workoutCalendarIntent)&&!explicitPlanMove) || pendingCalendarText){
+   if(pendingCalendarMoveText&&/^(annulla|lascia perdere|non importa|cancella richiesta)[.!\s]*$/i.test(message)){
+     pendingCalendarMoveText='';bubble('user',message,{scroll:false});question.value='';bubble('assistant','Va bene, non sposto alcun allenamento.');status.textContent='';
+   }else if(explicitCalendarMove||pendingCalendarMoveText){
+     await handleCalendarMove(message);
+   }else if(((calendarIntent||workoutCalendarIntent)&&!explicitPlanMove) || pendingCalendarText){
      if(!window.runnerPulseProposeCalendarCommitment)throw Error('Collegamento con il calendario non ancora disponibile.');
      if(pendingCalendarText&&/^(annulla|lascia perdere|non importa|cancella richiesta)[.!\s]*$/i.test(message)){
       pendingCalendarText='';bubble('user',message,{scroll:false});bubble('assistant','Va bene, non aggiungo alcun appuntamento.');question.value='';status.textContent='';
@@ -108,7 +143,16 @@ if(coach){
      status.textContent='Il piano non è stato ancora eliminato.';
    }else{
    const planIntent=explicitPlanMove||Boolean(window.rpCoachEditingPlan)||(/\b(piano|programma|sedut[ae]|allenament[oi]|corsa|lungo|ripetut[ae])\b/.test(simplified)&&/modific|spost|anticip|posticip|riduc|aument|cambi|sostituisc|aggiung|tog|elimin|riposo|data|orari|giorn|recuper/.test(simplified));
-   const data=await api({action:planIntent?'plan-edit':'chat',message});
+   let data;
+   try{data=await api({action:planIntent?'plan-edit':'chat',message});}
+   catch(error){
+    // Un allenamento esistente su Google Calendar può non appartenere a un Piano.
+    if(planIntent&&explicitPlanMove&&/non hai ancora un piano salvato/i.test(error.message)){
+     await handleCalendarMove(message);
+     return;
+    }
+    throw error;
+   }
    bubble('user',message,{scroll:false});question.value='';question.blur();
    if(planIntent){
      if(data.needsClarification){
