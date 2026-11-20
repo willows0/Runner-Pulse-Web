@@ -805,3 +805,38 @@ body.rp-coach-keyboard-open > nav[aria-label="Navigazione"] {display:none!import
   #coach .rp-coach-composer {width:calc(100% - 16px)!important;padding:8px 10px 8px!important;}
   #coach .rp-coach-toolbar {gap:6px!important;}
 }
+
+
+/* ===== Coach 2026-11-20: area chat bianca a tutta larghezza ===== */
+body:has(#coach.active){background:#ffffff!important;color:#17212e!important;}
+body:has(#coach.active) > main{max-width:none!important;width:100%!important;padding:0!important;background:#ffffff!important;}
+#coach.rp-coach-page{width:100%!important;max-width:none!important;margin:0!important;padding:0 0 160px!important;border-radius:0!important;background:#ffffff!important;min-height:calc(100dvh - 120px)!important;}
+/* Testata compatta: la conversazione resta protagonista, non la mascotte */
+#coach .rp-coach-intro{display:flex!important;align-items:center!important;gap:10px!important;min-height:56px!important;padding:8px 16px!important;margin:0!important;background:#ffffff!important;background-image:none!important;border:0!important;border-bottom:1px solid #ebeff2!important;border-radius:0!important;box-shadow:none!important;color:#17212e!important;}
+#coach .rp-coach-mascot{width:42px!important;height:42px!important;min-width:42px!important;max-width:42px!important;aspect-ratio:1!important;border-radius:50%!important;object-fit:cover!important;}
+#coach .rp-coach-tag{display:none!important;}
+#coach .rp-coach-intro-text h1{font-size:18px!important;margin:0 0 3px!important;color:#182232!important;font-style:normal!important;line-height:1.18!important;}
+#coach .rp-coach-presence{display:flex!important;align-items:center!important;font-size:12px!important;color:#687789!important;}
+#coach .rp-coach-presence i{width:8px!important;height:8px!important;margin:0 5px 0 0!important;}
+#coach .rp-coach-chat{display:flex!important;flex-direction:column!important;gap:20px!important;align-items:stretch!important;width:100%!important;max-width:none!important;height:calc(100dvh - 296px)!important;min-height:280px!important;max-height:none!important;margin:0!important;padding:18px 14px 160px!important;background:#ffffff!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;scroll-padding-bottom:160px!important;scrollbar-color:#d4dbe4 transparent!important;box-sizing:border-box!important;}
+#coach .rp-coach-chat .rp-chat-row{display:flex!important;width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;box-sizing:border-box!important;}
+#coach .rp-chat-assistant{gap:0!important;justify-content:stretch!important;align-items:stretch!important;}
+#coach .rp-chat-assistant .rp-chat-avatar{display:none!important;}
+#coach .rp-chat-assistant .rp-chat-bubble{display:block!important;flex:1 1 100%!important;max-width:100%!important;width:100%!important;min-width:0!important;padding:4px 3px 10px!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#ffffff!important;background-image:none!important;color:#17212e!important;line-height:1.58!important;}
+#coach .rp-chat-assistant .rp-chat-bubble p,#coach .rp-chat-assistant .rp-chat-bubble strong{font-size:clamp(15px,3.8vw,17px)!important;line-height:1.65!important;font-weight:400!important;color:#17212e!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important;}
+#coach .rp-chat-user{justify-content:flex-end!important;}
+#coach .rp-chat-user .rp-chat-bubble{flex:0 1 auto!important;max-width:87%!important;width:auto!important;padding:12px 15px!important;border-radius:20px!important;border-bottom-right-radius:7px!important;background:#f0f2f5!important;background-image:none!important;color:#1c2938!important;border:0!important;box-shadow:none!important;}
+#coach .rp-chat-user .rp-chat-bubble p{font-size:15px!important;color:#1c2938!important;line-height:1.48!important;}
+#coach .rp-coach-chat .rp-chat-row:last-child{margin-bottom:0!important;}
+#coach .rp-coach-composer{background:#ffffff!important;color:#152438!important;border:1px solid #d4dbe4!important;box-shadow:0 2px 18px rgba(17,31,47,.12)!important;}
+/* Rimuove l'arancione pieno degli allegati e forza contrasto anche sulle regole globali dei bottoni. */
+#coach .rp-coach-attachments{background:#ffffff!important;border:1px solid #d8e0ea!important;box-shadow:0 8px 32px rgba(17,31,47,.18)!important;}
+#coach #rp-coach-attach-photo,#coach #rp-coach-attach-file{background:#ffffff!important;background-image:none!important;border:1px solid #d9e1ea!important;color:#18273b!important;box-shadow:none!important;}
+#coach #rp-coach-attach-photo strong,#coach #rp-coach-attach-file strong{color:#172639!important;font-weight:750!important;}
+#coach #rp-coach-attach-photo small,#coach #rp-coach-attach-file small{color:#50637a!important;opacity:1!important;}
+#coach #rp-coach-attach-photo span,#coach #rp-coach-attach-file span{color:#e56e05!important;}
+#coach #rp-coach-attach-photo:active,#coach #rp-coach-attach-file:active{background:#fff2e8!important;}
+#coach .rp-coach-status{color:#516175!important;}
+/* Conserva il comando di cancellazione della memoria ma discreto, sopra la conversazione. */
+#coach button[aria-label="Cancella tutte le conversazioni salvate con il Coach"]{align-self:flex-end!important;display:block!important;margin:6px 14px 2px auto!important;padding:5px 9px!important;min-height:26px!important;border:1px solid #e0e6ed!important;border-radius:10px!important;background:#f9fafb!important;color:#66768a!important;font-size:11px!important;box-shadow:none!important;}
+@media (max-width:390px){#coach .rp-coach-chat{padding:14px 12px 155px!important;}#coach .rp-chat-assistant .rp-chat-bubble p{font-size:15.5px!important;}}

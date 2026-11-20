@@ -162,6 +162,48 @@ if(coach){
  }
  screenshotFile?.addEventListener('change',async()=>{const file=screenshotFile.files?.[0];screenshotFile.value='';await importScreenshotFile(file);});
  attachmentFile?.addEventListener('change',async()=>{const file=attachmentFile.files?.[0];attachmentFile.value='';try{await handleGenericAttachment(file);}catch(err){status.textContent=err.message;}});
+ // Nella WebView la Web Speech API può essere assente: qui c'è un ponte opzionale
+ // verso il riconoscimento vocale NATIVO Android. Il pulsante non invia mai il messaggio.
+ function insertDictation(transcript){
+  const words=String(transcript||'').trim();if(!words)return;
+  question.value=[question.value.trim(),words].filter(Boolean).join(' ').slice(0,1500);
+  resizeMessageBox();question.focus();status.textContent='Testo dettato: controllalo e premi Invia quando vuoi.';
+ }
+ window.addEventListener('runnerpulse:native-speech-result',event=>{
+  const data=event.detail||{};
+  if(data.text){insertDictation(data.text);return;}
+  if(data.cancelled){status.textContent='Dettatura annullata.';return;}
+  status.textContent=String(data.error||'Dettatura non disponibile. Usa il microfono della tastiera.');
+ });
+ const NativeBridge=window.RunnerPulseHealthNative;
  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
- if(SpeechRecognition){const recognizer=new SpeechRecognition();recognizer.lang='it-IT';recognizer.interimResults=false;recognizer.addEventListener('result',e=>{const t=e.results?.[0]?.[0]?.transcript;if(t){question.value=[question.value.trim(),t].filter(Boolean).join(' ').slice(0,1500);resizeMessageBox();}question.focus();});recognizer.addEventListener('error',()=>{status.textContent='Dettatura non disponibile. Puoi scrivere il messaggio.';});mic.addEventListener('click',()=>{try{recognizer.start();status.textContent='Ti ascolto…';}catch{status.textContent='Dettatura non disponibile.';}});}else{mic.addEventListener('click',()=>{status.textContent='La dettatura non è supportata da questo browser. Usa il microfono della tastiera.';question.focus();});}
+ let recognizer=null;
+ if(SpeechRecognition){
+  try{
+   recognizer=new SpeechRecognition();recognizer.lang='it-IT';recognizer.interimResults=false;recognizer.maxAlternatives=1;
+   recognizer.addEventListener('result',event=>insertDictation(event.results?.[0]?.[0]?.transcript));
+   recognizer.addEventListener('error',event=>{
+    const details=event.error==='not-allowed'?'Autorizza il microfono nelle impostazioni del browser.':'Dettatura Web non disponibile. Prova il microfono della tastiera.';
+    status.textContent=details;
+   });
+  }catch{recognizer=null;}
+ }
+ mic?.addEventListener('click',()=>{
+  closeAttachments();
+  // La nuova versione APK espone requestSpeechInput. Le versioni vecchie no.
+  if(typeof NativeBridge?.requestSpeechInput==='function'){
+   status.textContent='Avvio dettatura Android…';
+   try{NativeBridge.requestSpeechInput();}catch{status.textContent='Impossibile aprire la dettatura Android.';}
+   return;
+  }
+  if(recognizer){
+   try{recognizer.start();status.textContent='Ti ascolto…';}
+   catch{status.textContent='Dettatura non disponibile in questa versione. Usa il microfono della tastiera.';question.focus();}
+   return;
+  }
+  status.textContent=/RunnerPulseAndroidWebView\/1/.test(navigator.userAgent)?
+   'Per usare il microfono dalla chat devi aggiornare l’APK Runner Pulse Connect. Per ora usa la dettatura della tastiera.':
+   'Il browser non supporta questa dettatura. Tocca il campo e usa il microfono della tastiera.';
+  question.focus();
+ });
 }
