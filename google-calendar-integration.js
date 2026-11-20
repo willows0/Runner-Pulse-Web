@@ -111,16 +111,18 @@ async function calendarSources(access){
 // l'evento originale e i permessi non vengono mai modificati.
 function normalizeCategory(value){
  const category=String(value||'').trim().toLowerCase();
- return ['work','sport','other'].includes(category)?category:'other';
+ return ['work','sport','race','other'].includes(category)?category:'other';
 }
 function inferCategory(value){
  const text=String(value||'').toLocaleLowerCase('it-IT').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ // Prima le gare: non vanno classificate come normali appuntamenti sportivi.
+ if(/(?:\bgara\b|\bgare\b|maraton[ae]|half\s*marathon|\brace\b|mezza\s+maratona|triathlon|competizione\s+sportiva|trail\s+(?:running|race)|corsa\s+competitiva|torneo\s+sportivo)/.test(text))return 'race';
  if(/(?:lavor|uffic|riunion|meeting|call|client|turn[oi]|azienda|colloqu|conferenz|business|servizio)/.test(text))return 'work';
- if(/(?:allenament|palestr|sport|corsa|running|run\b|nuoto|bicicl|ciclism|yoga|pilates|tennis|calcett|calcio|partita|trekking|padel|maratona|fitness)/.test(text))return 'sport';
+ if(/(?:allenament|palestr|sport|corsa|running|run\b|nuoto|bicicl|ciclism|yoga|pilates|tennis|calcett|calcio|partita|trekking|padel|fitness)/.test(text))return 'sport';
  return 'other';
 }
 function categoryLabel(category){
- return category==='work'?'Lavoro':category==='sport'?'Sport':'Altro impegno';
+ return category==='race'?'Gara':category==='work'?'Lavoro':category==='sport'?'Sport':'Altro impegno';
 }
 async function calendarEvents(access,calendar,range){
  let cursor=null,pages=0;const events=[];
@@ -140,7 +142,9 @@ async function calendarEvents(access,calendar,range){
    const runnerPulse=item.extendedProperties?.private?.runnerPulse==='training-plan';
    const title=String(item.visibility==='private'?'Impegno privato':(item.summary||'Impegno')).slice(0,150);
    const description=item.visibility==='private'?'':String(item.description||'').slice(0,1000);
-   const category=normalizeCategory(item.extendedProperties?.private?.category||inferCategory((item.summary||'')+' '+(item.description||'')));
+   const detected=inferCategory((item.summary||'')+' '+(item.description||''));
+   // Una gara riconoscibile dal titolo prevale sulle vecchie etichette 'altro'.
+   const category=detected==='race'?'race':normalizeCategory(item.extendedProperties?.private?.category||detected);
    events.push({
     id:String(item.id||'').slice(0,180),
     title,startLocal,endLocal,allDay,busy,runnerPulse,description,category,categoryLabel:categoryLabel(category),
@@ -266,6 +270,42 @@ async function syncPlan(uid){
  }finally{
   await ref.set({syncLockUntil:0},{merge:true}).catch(()=>{});
  }
+}
+// Cancellazione sicura delle sole sedute create dal Piano Runner Pulse.
+// Se Google non conferma l'operazione, il piano rimane su Firestore e il comando
+// può essere riprovato: ogni evento rimosso è tolto subito dal registro.
+export async function removeSyncedPlanEvents(uid){
+ const ref=userDoc(uid),now=Date.now();
+ const lock=await getFirestore().runTransaction(async tx=>{
+  const snap=await tx.get(ref),data=snap.data()||{};
+  const events=data.syncedEvents&&typeof data.syncedEvents==='object'?data.syncedEvents:{};
+  if(!Object.keys(events).length)return {events:{},calendarGeneration:Number(data.calendarGeneration)||0,skip:true};
+  if(!data.token)throw Object.assign(Error('Ricollega Google Calendar per rimuovere gli allenamenti sincronizzati prima di eliminare il piano.'),{status:409});
+  if(Number(data.syncLockUntil)>now)throw Object.assign(Error('Un aggiornamento Calendar è in corso. Riprova tra poco.'),{status:409});
+  tx.set(ref,{syncLockUntil:now+180000},{merge:true});
+  return {events,calendarGeneration:Number(data.calendarGeneration)||0,skip:false};
+ });
+ if(lock.skip)return {deleted:0,calendarConnected:false};
+ let deleted=0;
+ try{
+  const access=await accessToken(uid),current={...lock.events};
+  for(const [index,stored] of Object.entries(lock.events)){
+   if(!stored?.id)throw Object.assign(Error('Registro Calendar incompleto: eliminazione non eseguita.'),{status:409});
+   const result=await googleEvent(access,'GET',stored.id);
+   if(result.ok){
+    const marker=result.data?.extendedProperties?.private;
+    if(marker?.runnerPulse!=='training-plan'||marker?.ownerHash!==sha(uid).slice(0,24))
+     throw Object.assign(Error('Trovato un evento che non appartiene al Piano. Eliminazione interrotta.'),{status:409});
+    const response=await googleEvent(access,'DELETE',stored.id);
+    if(!response.ok&&response.status!==404)throw apiError(response.status);
+   }else if(result.status!==404)throw apiError(result.status);
+   delete current[index];
+   await ref.update({syncedEvents:current});
+   deleted++;
+  }
+  await ref.update({lastSyncedAt:Date.now(),lastSyncedRevision:null,calendarGeneration:lock.calendarGeneration+1});
+  return {deleted,calendarConnected:true};
+ }finally{await ref.set({syncLockUntil:0},{merge:true}).catch(()=>{});}
 }
 // Eventi manuali: solo il calendario principale dell'account autorizzato.
 // L'ID derivato dalla richiesta impedisce duplicati nei retry di rete.

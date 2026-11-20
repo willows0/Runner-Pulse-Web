@@ -14,7 +14,7 @@ import { handleCoachAI, generateWeeklyCoachReport } from './coach-api.js';
 import {handleActivityCoach,activityCoachReport} from './activity-coach.js';
 import {isHonorPackage,healthCoachId} from './activity-data.js';
 import {normalizePlan,planRef,revisionOf} from './training-plan.js';
-import {handleGoogleCalendarRoute} from './google-calendar-integration.js';
+import {handleGoogleCalendarRoute,removeSyncedPlanEvents} from './google-calendar-integration.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -1577,6 +1577,16 @@ http.createServer(async(req,res)=>{
       const input=await readJsonBody(req,75000);
       if(!Number.isSafeInteger(input?.expectedRevision)||input.expectedRevision<0)return json(res,400,{success:false,message:'Versione del piano mancante. Ricarica prima di modificare.'});
       const sessions=req.method==='PUT'?normalizePlan(input.sessions):null;
+      // Elimina prima i soli eventi del Piano su Google Calendar. Se non riesce,
+      // non cancellare il piano da Firestore e non perdere la possibilità di riprovare.
+      let calendarCleanup=null;
+      if(req.method==='DELETE'&&pathname==='/api/training-plan'){
+        const check=await ref.get();
+        if(revisionOf(check)!==input.expectedRevision){
+          const e=Error('Il piano è cambiato. Ricaricalo prima di eliminarlo.');e.status=409;throw e;
+        }
+        calendarCleanup=await removeSyncedPlanEvents(user.uid);
+      }
       const next=await getFirestore().runTransaction(async tx=>{
         const snap=await tx.get(ref),revision=revisionOf(snap);
         if(revision!==input.expectedRevision){const e=Error('Il piano è cambiato in un’altra sessione. Ricaricalo prima di salvarlo.');e.status=409;throw e;}
@@ -1589,7 +1599,7 @@ http.createServer(async(req,res)=>{
         }
         return req.method==='DELETE'?0:revision+1;
       });
-      return json(res,200,{success:true,sessions:sessions||[],revision:next});
+      return json(res,200,{success:true,sessions:sessions||[],revision:next,calendarDeleted:calendarCleanup?.deleted??null});
     }catch(e){console.warn('Piano personale',e.code||e.message);return json(res,e.status||((e.code||'').includes('permission')?403:400),{success:false,message:e.message||'Errore nel salvataggio del piano.'});}
   }
   if(pathname==='/api/coach/activity'){await handleActivityCoach(req,res,authorized,readJsonBody,json);return;}
