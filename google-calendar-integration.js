@@ -100,10 +100,10 @@ async function googleList(access,url){
 async function calendarSources(access){
  const url='https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250';
  const list=await googleList(access,url);
- if(list.needsScope)return {calendars:[{id:'primary',name:'Principale'}],limitedToPrimary:true};
+ if(list.needsScope)return {calendars:[{id:'primary',name:'Principale',writable:true}],limitedToPrimary:true};
  if(list.nextPageToken)throw Object.assign(Error('Troppi calendari per una lettura completa.'),{status:409});
- const calendars=(list.items||[]).filter(c=>c.selected!==false&&c.hidden!==true).map(c=>({id:c.id,name:String(c.summaryOverride||c.summary||'Calendario').slice(0,90)}));
- if(!calendars.length)calendars.push({id:'primary',name:'Principale'});
+ const calendars=(list.items||[]).filter(c=>c.selected!==false&&c.hidden!==true).map(c=>({id:c.id,name:String(c.summaryOverride||c.summary||'Calendario').slice(0,90),writable:['owner','writer'].includes(c.accessRole)}));
+ if(!calendars.length)calendars.push({id:'primary',name:'Principale',writable:true});
  if(calendars.length>15)throw Object.assign(Error('Troppi calendari selezionati. Riduci i calendari visualizzati in Google Calendar.'),{status:409});
  return {calendars,limitedToPrimary:false};
 }
@@ -142,7 +142,8 @@ async function calendarEvents(access,calendar,range){
    const endLocal=allDay?String(item.end?.date)+'T00:00':romeWall(item.end?.dateTime);
    if(endLocal<=range.fromDate+'T00:00'||startLocal>=range.endDate+'T00:00')continue;
    const busy=item.transparency!=='transparent';
-   const runnerPulse=item.extendedProperties?.private?.runnerPulse==='training-plan';
+   const marker=item.extendedProperties?.private?.runnerPulse;
+   const runnerPulse=marker==='training-plan';
    const title=String(item.visibility==='private'?'Impegno privato':(item.summary||'Impegno')).slice(0,150);
    const description=item.visibility==='private'?'':String(item.description||'').slice(0,1000);
    const detected=inferCategory((item.summary||'')+' '+(item.description||''));
@@ -152,7 +153,7 @@ async function calendarEvents(access,calendar,range){
    events.push({
     id:String(item.id||'').slice(0,180),
     title,startLocal,endLocal,allDay,busy,runnerPulse,description,category,categoryLabel:categoryLabel(category),
-    calendar:calendar.name
+    calendar:calendar.name,calendarId:calendar.id,calendarWritable:calendar.writable===true&&!['training-plan','completed-workout'].includes(marker),
    });
    if(events.length>1000)throw Object.assign(Error('Troppi eventi: restringi il periodo del calendario.'),{status:409});
   }
@@ -160,6 +161,31 @@ async function calendarEvents(access,calendar,range){
   if(pages>8)throw Object.assign(Error('Calendario troppo grande per la verifica degli impegni.'),{status:409});
  }while(cursor);
  return events;
+}
+// Elimina soltanto la singola occorrenza richiesta da un calendario modificabile.
+// L'ID non viene usato per scegliere un calendario arbitrario: il server
+// ricontrolla accessRole e il tipo di evento presso Google prima di DELETE.
+async function deleteCalendarCommitment(uid,{eventId,calendarId}={}){
+ if(typeof eventId!=='string'||!eventId||eventId.length>180||/[\x00-\x1f]/.test(eventId))
+  throw Object.assign(Error('Impegno non valido. Ricarica il calendario.'),{status:400});
+ if(typeof calendarId!=='string'||!calendarId||calendarId.length>320||/[\x00-\x1f]/.test(calendarId))
+  throw Object.assign(Error('Calendario non valido. Ricarica il calendario.'),{status:400});
+ const access=await accessToken(uid);
+ const {calendars}=await calendarSources(access);
+ const calendar=calendars.find(x=>x.id===calendarId);
+ if(!calendar||calendar.writable!==true)
+  throw Object.assign(Error('Non hai il permesso di eliminare impegni da questo calendario.'),{status:403});
+ const url='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calendar.id)+'/events/'+encodeURIComponent(eventId);
+ const existing=await fetch(url,{headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});
+ if(existing.status===404)throw Object.assign(Error('Impegno già eliminato. Aggiorna il calendario.'),{status:404});
+ if(!existing.ok)throw apiError(existing.status);
+ const event=await existing.json();
+ const marker=event.extendedProperties?.private?.runnerPulse;
+ if(['training-plan','completed-workout'].includes(marker))
+  throw Object.assign(Error('Gli allenamenti del Piano e i resoconti delle attività si gestiscono dalle rispettive sezioni.'),{status:409});
+ const result=await fetch(url,{method:'DELETE',headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});
+ if(!result.ok&&result.status!==404)throw apiError(result.status);
+ return {deleted:true,recurringOccurrence:Boolean(event.recurringEventId)};
 }
 async function readAgenda(uid,{start=romeToday(),days=42,access=null}={}){
  const range=utcRange(start,days),token=access||await accessToken(uid);
@@ -568,6 +594,12 @@ export async function handleGoogleCalendarRoute(req,res,pathname){
    const input=await bodyJson(req);
    const created=await addCommitment(user.uid,input);
    return reply(res,200,{success:true,...created});
+  }
+  if(pathname==='/api/calendar/delete-event'){
+   if(req.method!=='POST')return reply(res,405,{success:false});
+   const request=await bodyJson(req);
+   const result=await deleteCalendarCommitment(user.uid,request);
+   return reply(res,200,{success:true,...result});
   }
   if(pathname==='/api/calendar/disconnect'){
    if(req.method!=='POST')return reply(res,405,{success:false});
