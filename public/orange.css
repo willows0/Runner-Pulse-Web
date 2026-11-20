@@ -630,7 +630,7 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 .rp-commitment-note{font-size:14px;color:#d6e0ec;line-height:1.4}
 .rp-commitment-form{display:grid;gap:13px}
 .rp-commitment-form label{display:grid;gap:6px;font-weight:700}
-.rp-commitment-form input[type=text],.rp-commitment-form input[type=date],.rp-commitment-form input[type=time],.rp-commitment-form textarea,.rp-commitment-form select{box-sizing:border-box;min-width:0;width:100%;border-radius:11px;border:1px solid #9dacc4;background:#fff;color:#152438;padding:12px;font:inherit}
+.rp-commitment-form input[type=text],.rp-commitment-form input[type=date],.rp-commitment-form input[type=time],.rp-commitment-form input[type=number],.rp-commitment-form textarea,.rp-commitment-form select{box-sizing:border-box;min-width:0;width:100%;border-radius:11px;border:1px solid #9dacc4;background:#fff;color:#152438;padding:12px;font:inherit}
 .rp-commitment-allday{display:flex!important;align-items:center;gap:10px!important}
 .rp-commitment-allday input{width:22px;height:22px;accent-color:#f4770b}
 .rp-commitment-times{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -946,3 +946,7 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 /* Conferma ben visibile delle modifiche proposte dal Coach */
 #coach .rp-plan-chat-approve,#coach .rp-plan-chat-delete{display:block;max-width:100%;margin-top:12px;border:0;border-radius:15px;padding:11px 15px;font-size:14px;font-weight:750;background:#f4770b;color:#fff;white-space:normal;text-align:center;cursor:pointer}
 #coach .rp-plan-chat-approve:disabled,#coach .rp-plan-chat-delete:disabled{opacity:.65;cursor:default}
+
+/* Nelle attività sportive basta l’orario iniziale e la durata. */
+.rp-commitment-times .rp-commitment-end-preview{grid-column:1/-1;margin:0;color:#dbeeff;font-size:13px;font-weight:600;}
+.rp-commitment-times .rp-commitment-end-label[hidden],.rp-commitment-times .rp-commitment-duration-label[hidden]{display:none!important;}

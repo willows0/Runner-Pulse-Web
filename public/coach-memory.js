@@ -79,7 +79,9 @@ if(coach){
    // non al generatore di piani. La dettatura usa questo stesso percorso.
    const explicitPlanMove=/(?:spost|anticip|posticip|cambia|modifica)/.test(simplified)&&/\b(?:corsa|corse|correre|lungo|ripetut[ae]|allenament[oi]|sedut[ae]|piano|programma|ritmo controllato)\b/.test(simplified);
    const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,160}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista|turno|scuola|medico|spesa|spese|pagamento|pagare|bolletta|cena|pranzo|ristorante)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista|turno|lezione)\b|\b(?:lavoro|turno|scuola|lezione|visita|dentista|riunione|medico|ospedale|colloquio|pagare|affitto|bolletta|cena|pranzo|ristorante|spesa)\b.{0,130}\b(?:domani|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|dalle|alle|ore)\b/.test(simplified)&&!explicitPlanMove;
-   if((calendarIntent&&!explicitPlanMove) || pendingCalendarText){
+   // Un allenamento da registrare in calendario non è una modifica al Piano.
+   const workoutCalendarIntent=/(?:salv|registr|inserisc|aggiung|segn|mett|crea).{0,100}\b(?:allenament[oi]|corsa|corse|lungo|ripetut[ae]|sedut[ae])\b/.test(simplified)&&!/(?:piano|programma)/.test(simplified);
+   if(((calendarIntent||workoutCalendarIntent)&&!explicitPlanMove) || pendingCalendarText){
      if(!window.runnerPulseProposeCalendarCommitment)throw Error('Collegamento con il calendario non ancora disponibile.');
      if(pendingCalendarText&&/^(annulla|lascia perdere|non importa|cancella richiesta)[.!\s]*$/i.test(message)){
       pendingCalendarText='';bubble('user',message,{scroll:false});bubble('assistant','Va bene, non aggiungo alcun appuntamento.');question.value='';status.textContent='';
@@ -89,7 +91,7 @@ if(coach){
       bubble('user',message,{scroll:false});question.value='';question.blur();
       if(proposal.created){
        pendingCalendarText='';
-       bubble('assistant','Impegno “'+proposal.title+'” '+(proposal.alreadyExists?'già presente':'salvato automaticamente')+' su Google Calendar.');
+       bubble('assistant',(proposal.category==='sport'||proposal.category==='race'?'Allenamento':'Impegno')+' “'+proposal.title+'” '+(proposal.alreadyExists?'già presente':'salvato automaticamente')+' su Google Calendar.'+(proposal.startTime&&proposal.endTime?' Dalle '+proposal.startTime+' alle '+proposal.endTime+(proposal.endDate&&proposal.endDate!==proposal.date?' del giorno successivo':'')+'.':''));
        status.textContent='Impegno registrato nel calendario.';
       }else{
        pendingCalendarText=fullText;

@@ -100,17 +100,42 @@ if(connect&&sync&&disconnect&&status){
   fields.allDay.checked=data.allDay===true;
   fields.startTime.value=data.startTime||'';
   fields.endTime.value=data.endTime||'';
+  fields.durationMinutes.value=data.durationMinutes??'';
   fields.description.value=data.description||'';
-  const times=form.querySelector('.rp-commitment-times');times.hidden=fields.allDay.checked;
-  fields.startTime.required=fields.endTime.required=!fields.allDay.checked;
+  updateCommitmentTimeUI();
   feedback.textContent='Verifica data, orari e descrizione prima di salvare.';
   modal.hidden=false;document.body.style.overflow='hidden';fields.title.focus();return true;
  }
- form?.elements.allDay?.addEventListener('change',()=>{
-  const all=form.elements.allDay.checked;
-  form.querySelector('.rp-commitment-times').hidden=all;
-  form.elements.startTime.required=form.elements.endTime.required=!all;
- });
+ function updateCommitmentTimeUI(){
+  if(!form)return;
+  const fields=form.elements,allDay=fields.allDay.checked;
+  const sports=fields.category.value==='sport'||fields.category.value==='race';
+  const minutes=fields.durationMinutes.value?Number(fields.durationMinutes.value):null;
+  const validDuration=Number.isInteger(minutes)&&minutes>=1&&minutes<=720;
+  const endLabel=form.querySelector('.rp-commitment-end-label');
+  const preview=$('rp-commitment-end-preview');
+  form.querySelector('.rp-commitment-times').hidden=allDay;
+  if(endLabel)endLabel.hidden=sports;
+  fields.startTime.required=!allDay;
+  fields.durationMinutes.required=!allDay&&sports;
+  fields.endTime.required=!allDay&&!sports&&!validDuration;
+  if(preview)preview.textContent='';
+  if(!allDay&&validDuration&&fields.date.value&&fields.startTime.value){
+   const start=new Date(fields.date.value+'T'+fields.startTime.value+':00Z');
+   if(!Number.isNaN(start.getTime())){
+    const finish=new Date(start.getTime()+minutes*60000);
+    const endTime=finish.toISOString().slice(11,16);
+    const endDate=finish.toISOString().slice(0,10);
+    fields.endTime.value=endTime;
+    if(preview)preview.textContent='Fine calcolata: '+endTime+(endDate!==fields.date.value?' del giorno successivo':'');
+   }
+  }
+ }
+ for(const name of ['allDay','category','durationMinutes','date','startTime']){
+  form?.elements[name]?.addEventListener('change',updateCommitmentTimeUI);
+  if(name==='durationMinutes')form?.elements[name]?.addEventListener('input',updateCommitmentTimeUI);
+ }
+
  window.runnerPulseOpenCommitment=showModal;
  window.runnerPulseProposeCalendarCommitment=async message=>{
   if(!current?.connected)throw Error('Collega prima Google Calendar nella scheda Piano.');
@@ -140,9 +165,9 @@ if(connect&&sync&&disconnect&&status){
   if(!current?.connected)return feedback.textContent='Collega Google Calendar prima di salvare.';
   const fields=form.elements;
   const payload={title:fields.title.value.trim(),category:fields.category.value||'other',date:fields.date.value,allDay:fields.allDay.checked,
-    startTime:fields.startTime.value,endTime:fields.endTime.value,description:fields.description.value.trim(),requestId};
-  if(!payload.title||!payload.date||(!payload.allDay&&(!payload.startTime||!payload.endTime)))return feedback.textContent='Completa titolo, tipo, data e orari.';
-  if(!payload.allDay&&payload.endTime<=payload.startTime)return feedback.textContent='L’orario di fine deve essere successivo all’inizio.';
+    startTime:fields.startTime.value,endTime:fields.endTime.value,durationMinutes:fields.durationMinutes.value||null,description:fields.description.value.trim(),requestId};
+  if(!payload.title||!payload.date||(!payload.allDay&&(!payload.startTime||(!payload.endTime&&!payload.durationMinutes))))return feedback.textContent='Completa titolo, data, orario iniziale e durata (o orario di fine).';
+  if(!payload.allDay&&!payload.durationMinutes&&payload.endTime<=payload.startTime)return feedback.textContent='L’orario di fine deve essere successivo all’inizio.';
   // Il pulsante Salva è già il consenso esplicito: nessuna seconda finestra di conferma.
   modalBusy=true;save.disabled=true;cancel.disabled=true;feedback.textContent='Salvataggio dell’impegno su Google Calendar…';
   try{
