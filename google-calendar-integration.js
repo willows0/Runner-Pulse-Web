@@ -127,7 +127,7 @@ function inferCategory(value){
 function categoryLabel(category){
  return category==='race'?'Gara':category==='work'?'Lavoro':category==='sport'?'Sport':category==='school'?'Scuola':category==='health'?'Salute':'Altro impegno';
 }
-async function calendarEvents(access,calendar,range){
+async function calendarEvents(access,calendar,range,ownerHash=null){
  let cursor=null,pages=0;const events=[];
  do{
   const url=new URL('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calendar.id)+'/events');
@@ -153,7 +153,11 @@ async function calendarEvents(access,calendar,range){
    events.push({
     id:String(item.id||'').slice(0,180),
     title,startLocal,endLocal,allDay,busy,runnerPulse,description,category,categoryLabel:categoryLabel(category),
-    calendar:calendar.name,calendarId:calendar.id,calendarWritable:calendar.writable===true&&!['training-plan','completed-workout'].includes(marker),
+    calendar:calendar.name,calendarId:calendar.id,
+    // La voce di una corsa completata può essere eliminata dal calendario senza
+    // toccare il diario dell'attività; solo dal proprietario Runner Pulse.
+    calendarWritable:calendar.writable===true&&marker!=='training-plan'&&(marker!=='completed-workout'||item.extendedProperties?.private?.ownerHash===ownerHash),
+    eventKind:marker==='completed-workout'?'completed-workout':marker==='training-plan'?'training-plan':'commitment',
    });
    if(events.length>1000)throw Object.assign(Error('Troppi eventi: restringi il periodo del calendario.'),{status:409});
   }
@@ -181,16 +185,29 @@ async function deleteCalendarCommitment(uid,{eventId,calendarId}={}){
  if(!existing.ok)throw apiError(existing.status);
  const event=await existing.json();
  const marker=event.extendedProperties?.private?.runnerPulse;
- if(['training-plan','completed-workout'].includes(marker))
-  throw Object.assign(Error('Gli allenamenti del Piano e i resoconti delle attività si gestiscono dalle rispettive sezioni.'),{status:409});
- const result=await fetch(url,{method:'DELETE',headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});
- if(!result.ok&&result.status!==404)throw apiError(result.status);
- return {deleted:true,recurringOccurrence:Boolean(event.recurringEventId)};
+ if(marker==='training-plan')
+  throw Object.assign(Error('Questa seduta va eliminata dal Piano di allenamento.'),{status:409});
+ let suppressedRef=null;
+ if(marker==='completed-workout'){
+  const props=event.extendedProperties?.private||{};
+  if(props.ownerHash!==sha(uid).slice(0,24)||!/^([a-f0-9]{24})$/.test(String(props.activityHash||'')))
+   throw Object.assign(Error('Non puoi modificare una corsa registrata da un altro utente.'),{status:403});
+  // Conserviamo la preferenza dell'utente: una successiva sincronizzazione
+  // automatica non deve ricreare la corsa appena rimossa dal calendario.
+  suppressedRef=userDoc(uid).collection('suppressedCompletedEvents').doc(eventId);
+  await suppressedRef.set({deletedAt:Date.now(),eventId,activityHash:props.activityHash});
+ }
+ let result;
+ try{result=await fetch(url,{method:'DELETE',headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});}
+ catch(error){if(suppressedRef)await suppressedRef.delete().catch(()=>{});throw error;}
+ if(!result.ok&&result.status!==404){if(suppressedRef)await suppressedRef.delete().catch(()=>{});throw apiError(result.status);}
+ return {deleted:true,recurringOccurrence:Boolean(event.recurringEventId),calendarOnly:marker==='completed-workout'};
 }
 async function readAgenda(uid,{start=romeToday(),days=42,access=null}={}){
  const range=utcRange(start,days),token=access||await accessToken(uid);
  const {calendars,limitedToPrimary}=await calendarSources(token);
- const groups=await Promise.all(calendars.map(c=>calendarEvents(token,c,range)));
+ const ownerHash=sha(uid).slice(0,24);
+ const groups=await Promise.all(calendars.map(c=>calendarEvents(token,c,range,ownerHash)));
  return {events:groups.flat().sort((a,b)=>a.startLocal.localeCompare(b.startLocal)),
   calendars:calendars.map(c=>c.name),limitedToPrimary,from:range.fromDate,to:range.endDate};
 }
@@ -399,6 +416,9 @@ export async function syncCompletedActivityToCalendar(uid,activityId){
  // Nessuna esportazione automatica di storico vecchio durante un primo accesso.
  if(workout.startMs>Date.now()+3600000||workout.startMs<Date.now()-72*3600000)return {status:'old'};
  const eventId='rp'+sha(uid+':completed:'+id).slice(0,40);
+ // Se l'utente ha eliminato questo resoconto dal calendario, non ricrearlo.
+ const suppressed=await userDoc(uid).collection('suppressedCompletedEvents').doc(eventId).get();
+ if(suppressed.exists)return {status:'suppressed'};
  const marker={runnerPulse:'completed-workout',ownerHash:sha(uid).slice(0,24),activityHash:sha(id).slice(0,24),category:'sport'};
  const endMs=workout.startMs+workout.durationSeconds*1000;
  const data={summary:'Runner Pulse · Eseguito: '+workout.title,description:workout.description,
