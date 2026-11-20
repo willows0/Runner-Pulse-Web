@@ -16,6 +16,32 @@ if(coach){
  const attachmentsMenu=coach.querySelector('#rp-coach-attachments');
  const attachPhotoButton=coach.querySelector('#rp-coach-attach-photo');
  const attachFileButton=coach.querySelector('#rp-coach-attach-file');
+ const nav=document.querySelector('body > nav[aria-label="Navigazione"]');
+ function updateNavigationHeight(){
+   if(nav&&!document.body.classList.contains('rp-coach-keyboard-open')){
+     const px=Math.ceil(nav.getBoundingClientRect().height);
+     if(px>0)coach.style.setProperty('--rp-coach-bottom-nav',px+'px');
+   }
+ }
+ updateNavigationHeight();
+ window.addEventListener('resize',updateNavigationHeight);
+ if(typeof ResizeObserver==='function'&&nav)new ResizeObserver(updateNavigationHeight).observe(nav);
+ function resizeMessageBox(){
+   if(!question)return;
+   question.style.height='43px';
+   question.style.height=Math.min(136,Math.max(43,question.scrollHeight))+'px';
+   if(send)send.disabled=busy||!question.value.trim();
+ }
+ question?.addEventListener('input',resizeMessageBox);
+ question?.addEventListener('focus',()=>{
+   coach.classList.add('rp-coach-writing');
+   document.body.classList.add('rp-coach-keyboard-open');
+ });
+ question?.addEventListener('blur',()=>{
+   coach.classList.remove('rp-coach-writing');
+   document.body.classList.remove('rp-coach-keyboard-open');
+   requestAnimationFrame(updateNavigationHeight);
+ });
  // Cancella esclusivamente i messaggi Coach dell'utente autenticato.
  const resetCoach=document.createElement('button');
  resetCoach.type='button';
@@ -25,6 +51,7 @@ if(coach){
  history.parentNode.insertBefore(resetCoach,history);
 
  let version=0, busy=false;
+ resizeMessageBox();
  function scrollToLatest(){requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;});}
  function showAnswerStart(row){requestAnimationFrame(()=>{history.scrollTop=Math.max(0,row.offsetTop-history.offsetTop-10);});}
  // Ricalcola la posizione quando cambia l'altezza del campo o della chat.
@@ -74,10 +101,11 @@ if(coach){
      status.textContent='Verifica la proposta e premi Approva modifica se sei soddisfatto.';
    } else {bubble('assistant',data.answer);status.textContent='';}
    }
- }catch(err){status.textContent=err.message;}finally{busy=false;send.disabled=false;}});
- question.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
- suggestions.querySelectorAll('[data-prompt]').forEach(b=>b.addEventListener('click',()=>{question.value=b.dataset.prompt;suggestions.hidden=true;question.focus();}));
+ }catch(err){status.textContent=err.message;}finally{busy=false;resizeMessageBox();}});
+ question.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(question.value.trim())form.requestSubmit();}});
+ suggestions.querySelectorAll('[data-prompt]').forEach(b=>b.addEventListener('click',()=>{question.value=b.dataset.prompt;suggestions.hidden=true;resizeMessageBox();question.focus();}));
  const closeAttachments=()=>{if(attachmentsMenu)attachmentsMenu.hidden=true;if(quick)quick.setAttribute('aria-expanded','false');};
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAttachments();});
  const openAttachments=()=>{if(attachmentsMenu)attachmentsMenu.hidden=false;if(quick)quick.setAttribute('aria-expanded','true');};
  quick?.addEventListener('click',()=>{if(!attachmentsMenu)return;attachmentsMenu.hidden?openAttachments():closeAttachments();suggestions.hidden=true;});
  document.addEventListener('click',event=>{if(!attachmentsMenu||attachmentsMenu.hidden)return;const target=event.target;if(attachmentsMenu.contains(target)||quick?.contains(target))return;closeAttachments();});
@@ -124,7 +152,7 @@ if(coach){
     const snippet=raw.trim().slice(0,available);
     if(!snippet)throw Error('La casella del messaggio è piena: cancella parte del testo e riprova.');
     question.value=[prefix,snippet].filter(Boolean).join('\n');
-    question.focus();
+    resizeMessageBox();question.focus();
     status.textContent='File aggiunto al messaggio. Ora puoi scrivere o inviare.';
     bubble('assistant',`Ho allegato “${name}” al messaggio come testo. Aggiungi pure la tua richiesta e poi invia.`);
     return;
@@ -135,5 +163,5 @@ if(coach){
  screenshotFile?.addEventListener('change',async()=>{const file=screenshotFile.files?.[0];screenshotFile.value='';await importScreenshotFile(file);});
  attachmentFile?.addEventListener('change',async()=>{const file=attachmentFile.files?.[0];attachmentFile.value='';try{await handleGenericAttachment(file);}catch(err){status.textContent=err.message;}});
  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
- if(SpeechRecognition){const recognizer=new SpeechRecognition();recognizer.lang='it-IT';recognizer.interimResults=false;recognizer.addEventListener('result',e=>{const t=e.results?.[0]?.[0]?.transcript;if(t)question.value=[question.value.trim(),t].filter(Boolean).join(' ').slice(0,1500);question.focus();});recognizer.addEventListener('error',()=>{status.textContent='Dettatura non disponibile. Puoi scrivere il messaggio.';});mic.addEventListener('click',()=>{try{recognizer.start();status.textContent='Ti ascolto…';}catch{status.textContent='Dettatura non disponibile.';}});}else{mic.addEventListener('click',()=>{status.textContent='La dettatura non è supportata da questo browser. Usa il microfono della tastiera.';question.focus();});}
+ if(SpeechRecognition){const recognizer=new SpeechRecognition();recognizer.lang='it-IT';recognizer.interimResults=false;recognizer.addEventListener('result',e=>{const t=e.results?.[0]?.[0]?.transcript;if(t){question.value=[question.value.trim(),t].filter(Boolean).join(' ').slice(0,1500);resizeMessageBox();}question.focus();});recognizer.addEventListener('error',()=>{status.textContent='Dettatura non disponibile. Puoi scrivere il messaggio.';});mic.addEventListener('click',()=>{try{recognizer.start();status.textContent='Ti ascolto…';}catch{status.textContent='Dettatura non disponibile.';}});}else{mic.addEventListener('click',()=>{status.textContent='La dettatura non è supportata da questo browser. Usa il microfono della tastiera.';question.focus();});}
 }

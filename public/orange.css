@@ -670,3 +670,138 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #coach .rp-coach-attachment-option:active{transform:translateY(1px);}
 #coach .rp-coach-status{margin-top:6px!important;}
 @media(max-width:390px){#coach .rp-coach-attachment-option small{font-size:10px;}}
+
+
+/* Barra Coach modello chat moderna: testo su prima riga, strumenti sotto */
+#coach .rp-coach-composer {
+  --rp-coach-bottom-nav: 88px;
+  position:fixed!important;
+  left:50%!important;
+  right:auto!important;
+  transform:translateX(-50%)!important;
+  bottom:calc(var(--rp-coach-bottom-nav) + 8px)!important;
+  margin:0!important;
+  width:min(calc(100% - 24px),620px)!important;
+  max-width:620px!important;
+  padding:10px 12px 9px!important;
+  background:#fff!important;
+  color:#152438!important;
+  border:1px solid #d9e0e9!important;
+  box-shadow:0 4px 23px rgba(13,31,54,.13)!important;
+  border-radius:28px!important;
+  z-index:400!important;
+  box-sizing:border-box!important;
+}
+#coach .rp-coach-form {
+  display:flex!important;
+  flex-direction:column!important;
+  gap:3px!important;
+  align-items:stretch!important;
+  width:100%!important;
+  margin:0!important;
+}
+#coach #rp-ai-form textarea#rp-ai-question {
+  display:block!important;
+  flex:none!important;
+  box-sizing:border-box!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:43px!important;
+  height:43px;
+  max-height:136px!important;
+  overflow-y:auto!important;
+  padding:10px 10px 3px!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:14px!important;
+  outline:0!important;
+  color:#1b2b40!important;
+  caret-color:#ff7900!important;
+  background:transparent!important;
+  font-family:inherit!important;
+  font-size:16px!important;
+  font-weight:400!important;
+  line-height:1.42!important;
+  text-align:left!important;
+  resize:none!important;
+}
+#coach #rp-ai-form textarea#rp-ai-question::placeholder {color:#77818e!important;opacity:1!important;}
+#coach .rp-coach-toolbar {
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  gap:9px!important;
+  justify-content:flex-start!important;
+  padding:3px 2px 0!important;
+  min-height:43px!important;
+  box-sizing:border-box!important;
+}
+#coach .rp-coach-toolbar-spacer {flex:1;min-width:8px;}
+#coach .rp-coach-toolbar button.rp-coach-round {
+  display:grid!important;
+  place-items:center!important;
+  width:40px!important;
+  min-width:40px!important;
+  max-width:40px!important;
+  height:40px!important;
+  min-height:40px!important;
+  max-height:40px!important;
+  padding:0!important;
+  margin:0!important;
+  line-height:1!important;
+  border-radius:50%!important;
+  flex:none!important;
+  box-shadow:none!important;
+  touch-action:manipulation;
+}
+#coach .rp-coach-toolbar .rp-coach-plus {
+  font-size:28px!important;
+  font-weight:400!important;
+  color:#223247!important;
+  background:#f0f2f5!important;
+  border:1px solid #e0e4eb!important;
+}
+#coach .rp-coach-toolbar .rp-coach-mic {
+  font-size:20px!important;
+  background:transparent!important;
+  border:1px solid transparent!important;
+  color:#243850!important;
+}
+#coach .rp-coach-toolbar .rp-coach-send {
+  background:#f4770b!important;
+  border:1px solid #f4770b!important;
+  color:#fff!important;
+}
+#coach .rp-coach-toolbar .rp-coach-send:disabled {
+  opacity:.36!important;
+  cursor:default!important;
+}
+#coach .rp-coach-toolbar button:focus-visible,
+#coach #rp-ai-form textarea:focus-visible {
+  outline:2px solid #f4770b!important;
+  outline-offset:2px!important;
+}
+#coach .rp-coach-attachments {
+  left:12px!important;
+  bottom:calc(100% + 8px)!important;
+  background:#fff!important;
+  border:1px solid #dde3ec!important;
+  color:#172b42!important;
+  box-shadow:0 12px 30px rgba(13,31,54,.19)!important;
+}
+#coach .rp-coach-attachment-option {
+  background:#f7f9fc!important;
+  border:1px solid #e6ebf1!important;
+  color:#162b41!important;
+}
+#coach .rp-coach-attachment-option small {color:#65768a!important;}
+#coach .rp-coach-status {margin:4px 8px 0!important;color:#56677b!important;max-height:58px;overflow:auto;}
+#coach.rp-coach-writing .rp-coach-composer {
+  bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;
+}
+body.rp-coach-keyboard-open > nav[aria-label="Navigazione"] {display:none!important;}
+#coach .rp-coach-chat {padding-bottom:155px!important;scroll-padding-bottom:160px!important;}
+@media (max-width:390px) {
+  #coach .rp-coach-composer {width:calc(100% - 16px)!important;padding:8px 10px 8px!important;}
+  #coach .rp-coach-toolbar {gap:6px!important;}
+}
