@@ -174,20 +174,27 @@ async function calendarEvents(access,calendar,range,ownerHash=null){
    const busy=item.transparency!=='transparent';
    const marker=item.extendedProperties?.private?.runnerPulse;
    const runnerPulse=marker==='training-plan';
-   const title=String(item.visibility==='private'?'Impegno privato':(item.summary||'Impegno')).slice(0,150);
+   // I compleanni sono eventi speciali ricorrenti di Google. Non esporre il
+   // cestino della singola occorrenza: può essere rifiutato o agire sulla serie.
+   const isBirthday=item.eventType==='birthday';
+   const title=String(item.visibility==='private'?(isBirthday?'Compleanno privato':'Impegno privato'):(item.summary||'Impegno')).slice(0,150);
    const description=item.visibility==='private'?'':String(item.description||'').slice(0,1000);
    const detected=inferCategory((item.summary||'')+' '+(item.description||''));
    // Una gara riconoscibile dal titolo prevale sulle vecchie etichette 'altro'.
    const explicit=normalizeCategory(item.extendedProperties?.private?.category);
    const category=detected==='race'?'race':explicit==='other'?detected:explicit;
+   let eventUrl='';
+   if(typeof item.htmlLink==='string'){
+    try{const u=new URL(item.htmlLink);if(u.protocol==='https:'&&(u.hostname==='calendar.google.com'||u.hostname==='www.google.com'&&u.pathname.startsWith('/calendar/')))eventUrl=u.toString();}catch{}
+   }
    events.push({
     // Non troncare gli identificativi Google: le occorrenze ricorrenti possono avere ID lunghi.
     id:String(item.id||'').slice(0,1024),
     title,startLocal,endLocal,allDay,busy,runnerPulse,description,category,categoryLabel:categoryLabel(category),
-    calendar:calendar.name,calendarId:calendar.id,
+    calendar:calendar.name,calendarId:calendar.id,eventType:String(item.eventType||'default').slice(0,40),eventUrl,
     // La voce di una corsa completata può essere eliminata dal calendario senza
     // toccare il diario dell'attività; solo dal proprietario Runner Pulse.
-    calendarWritable:calendar.writable===true&&marker!=='training-plan'&&(marker!=='completed-workout'||item.extendedProperties?.private?.ownerHash===ownerHash),
+    calendarWritable:calendar.writable===true&&!isBirthday&&marker!=='training-plan'&&(marker!=='completed-workout'||item.extendedProperties?.private?.ownerHash===ownerHash),
     eventKind:marker==='completed-workout'?'completed-workout':marker==='training-plan'?'training-plan':'commitment',
    });
    if(events.length>1000)throw Object.assign(Error('Troppi eventi: restringi il periodo del calendario.'),{status:409});
@@ -218,6 +225,8 @@ async function deleteCalendarCommitment(uid,{eventId,calendarId}={}){
  // Google mantiene leggibili anche le eccezioni già cancellate.
  if(event.status==='cancelled')return {deleted:true,alreadyDeleted:true,recurringOccurrence:Boolean(event.recurringEventId),calendarOnly:event.extendedProperties?.private?.runnerPulse==='completed-workout'};
  const marker=event.extendedProperties?.private?.runnerPulse;
+ if(event.eventType==='birthday')
+  throw Object.assign(Error('Questo è un compleanno ricorrente: aprilo in Google Calendar per gestire la serie. Runner Pulse non elimina singole ricorrenze dei compleanni.'),{status:409});
  if(marker==='training-plan')
   throw Object.assign(Error('Questa seduta va eliminata dal Piano di allenamento.'),{status:409});
  let suppressedRef=null;
