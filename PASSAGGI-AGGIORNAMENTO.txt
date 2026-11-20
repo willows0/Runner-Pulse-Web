@@ -1,0 +1,28 @@
+RUNNER PULSE — CHAT COACH BIANCA, ALLEGATI LEGGIBILI, DETTATURA
+
+Questa correzione è in DUE PARTI. Non cancellare il codice già presente.
+
+PARTE WEB (obbligatoria per il nuovo aspetto):
+Sostituisci sul repository Runner Pulse Web esattamente:
+  public/index.html
+  public/orange.css
+  public/coach-memory.js
+Carica in GitHub mantenendo gli stessi percorsi. Verifica che Render mostri Live.
+La chat usa sfondo bianco, le risposte occupano tutta la larghezza; il menu + contiene Foto / File con sfondo bianco e testo scuro.
+
+PARTE ANDROID (necessaria per il microfono nell'app WebView):
+Sostituisci nel repository Runner Pulse Connect:
+  app/src/main/java/com/runnerpulse/connect/WebViewLauncherActivity.java
+  app/build.gradle
+Ricompila in Android Studio o tramite il tuo workflow GitHub Actions, firmando con la STESSA chiave JKS usata per le versioni precedenti.
+Versione prevista: 2.9 (versionCode 29).
+Non puoi riparare il microfono dell'APK già installato con soli file Web.
+
+COMPORTAMENTO MICROFONO:
+Il tasto apre il riconoscimento vocale del telefono, se disponibile, e riporta il testo nella casella. Non invia automaticamente.
+Se il telefono non dispone di un servizio di riconoscimento vocale, il sistema lo segnala; si può usare il microfono della tastiera.
+Su Chrome, il sito usa la funzione Web Speech API solo dove il browser la supporta.
+
+LIMITI:
+I file PDF/FIT/ZIP selezionati nella chat non vengono automaticamente interpretati dall'allenatore: è invariata la gestione preesistente.
+La sintassi JavaScript è stata verificata; l'APK Android non è stato compilato né provato su un dispositivo reale.
