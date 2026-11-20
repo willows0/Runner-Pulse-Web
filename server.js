@@ -12,6 +12,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { handleCoachAI, generateWeeklyCoachReport } from './coach-api.js';
 import {handleActivityCoach,activityCoachReport} from './activity-coach.js';
+import {syncCompletedActivityToCalendar} from './google-calendar-integration.js';
 import {isHonorPackage,healthCoachId} from './activity-data.js';
 import {normalizePlan,planRef,revisionOf} from './training-plan.js';
 import {handleGoogleCalendarRoute,removeSyncedPlanEvents} from './google-calendar-integration.js';
@@ -312,6 +313,17 @@ async function processCoachJobs(){
      await ref.set({attempts,nextAttemptAt:Date.now()+Math.min(60*60*1000,5*60*1000*2**Math.min(attempts-1,4)),updatedAt:Date.now(),lastErrorStatus:error.status||null},{merge:true});
     }catch(saveError){console.warn('Garmin Coach: salvataggio tentativo non riuscito:',saveError.message);}
    }
+   // L'export del resoconto effettivo non dipende dalla riuscita del Coach AI.
+   // Non trasforma un fallimento Calendar in una seconda notifica Coach.
+   try{
+    const result=await syncCompletedActivityToCalendar(job.uid,job.id);
+    if(result.status==='created'||result.status==='updated'||result.status==='unchanged')
+      await getFirestore().collection('runnerPulseCalendarRetries').doc(job.uid).collection('activities').doc(job.id).delete().catch(()=>{});
+   }catch(error){
+    console.warn('Calendar allenamento: esportazione differita',error.status||error.name||'errore');
+    await getFirestore().collection('runnerPulseCalendarRetries').doc(job.uid).collection('activities').doc(job.id)
+     .set({nextAttemptAt:Date.now()+5*60*1000,updatedAt:Date.now(),attempts:1},{merge:true}).catch(()=>{});
+   }
    finally{queuedCoachIds.delete(job.key);}
   }
  }finally{coachWorkerRunning=false;}
@@ -401,7 +413,18 @@ async function importOfficialFit(uid,id,entry){
  const db=getFirestore(),batch=db.batch();
  batch.set(ref,{officialActivityDetails:{activityId:id,laps:detail.laps},fitSampleChunks:chunks,fitImportedAt:Date.now(),fitSource:'garmin-official-activity-files'},{merge:true});
  for(let j=0;j<chunks;j++)batch.set(ref.collection('fitSamples').doc(String(j).padStart(5,'0')),{samples:detail.samples.slice(j*300,(j+1)*300)});
- await batch.commit();return 'imported';
+ await batch.commit();
+ // Se i lap FIT arrivano dopo il riepilogo Garmin, aggiorna automaticamente
+ // lo stesso evento Calendar con il dettaglio effettivo appena disponibile.
+ setImmediate(async()=>{
+  try{await syncCompletedActivityToCalendar(uid,id);}
+  catch(err){
+   console.warn('Calendar FIT: aggiornamento differito',err.status||err.name);
+   await getFirestore().collection('runnerPulseCalendarRetries').doc(uid).collection('activities').doc(id)
+    .set({nextAttemptAt:Date.now()+5*60*1000,updatedAt:Date.now(),attempts:1},{merge:true}).catch(()=>{});
+  }
+ });
+ return 'imported';
 }
 
 // Garmin Connect push: dettagli e dati Health. Conserva solo eventi associati a utenti OAuth verificati.
@@ -540,6 +563,29 @@ async function retryPendingCoachJobs(){
 }
 setInterval(()=>{void retryPendingCoachJobs();},30*60*1000).unref?.();
 setTimeout(()=>{void retryPendingCoachJobs();},30*1000).unref?.();
+let calendarRetryRunning=false;
+async function retryCalendarExports(){
+ if(calendarRetryRunning)return;
+ calendarRetryRunning=true;
+ try{
+  const roots=await getFirestore().collection('runnerPulseCalendarRetries').listDocuments();
+  for(const u of roots.slice(0,30)){
+   const rows=await u.collection('activities').where('nextAttemptAt','<=',Date.now()).limit(20).get();
+   for(const row of rows.docs){
+    if(Number(row.data().attempts||0)>=12)continue;
+    await row.ref.set({nextAttemptAt:Date.now()+15*60*1000},{merge:true});
+    try{
+     const result=await syncCompletedActivityToCalendar(u.id,row.id);
+     if(['created','updated','unchanged','old','not_connected','not_found','no_valid_data'].includes(result.status))await row.ref.delete();
+    }catch(err){await row.ref.set({attempts:Number(row.data().attempts||0)+1,nextAttemptAt:Date.now()+30*60*1000},{merge:true}).catch(()=>{});}
+   }
+  }
+ }catch(err){console.warn('Calendar retry:',err.status||err.name);}
+ finally{calendarRetryRunning=false;}
+}
+setInterval(()=>{void retryCalendarExports();},30*60*1000).unref?.();
+setTimeout(()=>{void retryCalendarExports();},45*1000).unref?.();
+
 // Recupero non distruttivo degli eventi Garmin gia ricevuti: l'importazione e idempotente.
 // Il recupero non chiama Garmin, non crea dati fittizi e non cancella lo storico.
 let webhookRecoveryRunning=false;
