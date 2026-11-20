@@ -852,3 +852,23 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 #plan .rp-plan-panel .rp-swipe-delete:disabled{opacity:.55!important;}
 #plan .rp-detail-delete-event{display:block;margin:18px 0 12px;padding:12px 18px;border-radius:14px;border:0;background:#b8263b;color:white;font-weight:800;}
 @media(prefers-reduced-motion:reduce){#plan .rp-plan-panel .rp-swipe-row > button.rp-agenda-event,#plan .rp-plan-panel .rp-swipe-delete{transition:none;}}
+
+/* Riparazione gesture su Android: la pressione prolungata mostra il cestino
+   anche quando il sistema interrompe il trascinamento orizzontale. */
+#plan .rp-plan-panel .rp-swipe-row > button.rp-agenda-event{
+ touch-action:pan-y!important;
+ user-select:none!important;
+ -webkit-user-select:none!important;
+ -webkit-touch-callout:none!important;
+ -webkit-tap-highlight-color:transparent;
+}
+#plan .rp-plan-panel .rp-swipe-row > button.rp-agenda-event *{
+ user-select:none!important;-webkit-user-select:none!important;
+ pointer-events:none;
+}
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-dragging .rp-swipe-delete{
+ opacity:1!important;visibility:visible!important;
+}
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-dragging > button.rp-agenda-event{
+ box-shadow:0 0 0 2px #ff9b50!important;
+}
