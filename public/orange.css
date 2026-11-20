@@ -595,8 +595,15 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 
 /* Agenda Google: distinguere impegni reali da allenamenti */
 #plan .rp-agenda-legend{color:#213a51!important;font-size:14px;font-weight:700;padding:8px 4px;}
-#plan .rp-agenda-event{background:#324963!important;border:1px solid #72879d!important;color:#fff!important;cursor:default;}
-#plan .rp-agenda-event .rp-day-date,#plan .rp-agenda-event .rp-day-icon{color:#a9d3f5!important;}
+#plan .rp-agenda-event{color:#fff!important;cursor:pointer;transition:transform .12s ease,filter .12s ease;}
+#plan .rp-agenda-event:active{transform:scale(.99);filter:brightness(.98);}
+#plan .rp-agenda-event .rp-day-main strong,#plan .rp-agenda-event .rp-day-main small{color:#fff!important;}
+#plan .rp-agenda-event.rp-event-work{background:#2f4d70!important;border:1px solid #8ab7ea!important;}
+#plan .rp-agenda-event.rp-event-work .rp-day-date,#plan .rp-agenda-event.rp-event-work .rp-day-icon{color:#d5eaff!important;}
+#plan .rp-agenda-event.rp-event-sport{background:#265244!important;border:1px solid #7fd0ac!important;}
+#plan .rp-agenda-event.rp-event-sport .rp-day-date,#plan .rp-agenda-event.rp-event-sport .rp-day-icon{color:#d7ffee!important;}
+#plan .rp-agenda-event.rp-event-other{background:#5a4372!important;border:1px solid #cfb0ec!important;}
+#plan .rp-agenda-event.rp-event-other .rp-day-date,#plan .rp-agenda-event.rp-event-other .rp-day-icon{color:#f3e6ff!important;}
 #plan .rp-agenda-conflict{display:block;color:#ffd89d!important;font-weight:800;margin-top:4px;}
 
 /* Inserimento impegno personale - mobile first, schermata conferma obbligatoria */
@@ -608,7 +615,7 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 .rp-commitment-note{font-size:14px;color:#d6e0ec;line-height:1.4}
 .rp-commitment-form{display:grid;gap:13px}
 .rp-commitment-form label{display:grid;gap:6px;font-weight:700}
-.rp-commitment-form input[type=text],.rp-commitment-form input[type=date],.rp-commitment-form input[type=time],.rp-commitment-form textarea{box-sizing:border-box;min-width:0;width:100%;border-radius:11px;border:1px solid #9dacc4;background:#fff;color:#152438;padding:12px;font:inherit}
+.rp-commitment-form input[type=text],.rp-commitment-form input[type=date],.rp-commitment-form input[type=time],.rp-commitment-form textarea,.rp-commitment-form select{box-sizing:border-box;min-width:0;width:100%;border-radius:11px;border:1px solid #9dacc4;background:#fff;color:#152438;padding:12px;font:inherit}
 .rp-commitment-allday{display:flex!important;align-items:center;gap:10px!important}
 .rp-commitment-allday input{width:22px;height:22px;accent-color:#f4770b}
 .rp-commitment-times{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -618,3 +625,5 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #rp-commitment-message{margin:0;min-height:1.2em;color:#ffe8bb;font-size:14px}
 
 .rp-commitment-times[hidden]{display:none!important}
+
+.rp-agenda-legend{margin:0 0 12px;color:#33485f;font-size:14px;line-height:1.4}

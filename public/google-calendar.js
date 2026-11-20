@@ -93,6 +93,7 @@ if(connect&&sync&&disconnect&&status){
   requestId=(globalThis.crypto?.randomUUID?.()||'request-'+Date.now()+'-'+Math.random().toString(36).slice(2));
   const fields=form.elements;
   fields.title.value=data.title||'';
+  fields.category.value=data.category||'other';
   fields.date.value=data.date??(proposal===null?todayInRome():'');
   fields.allDay.checked=data.allDay===true;
   fields.startTime.value=data.startTime||'';
@@ -125,9 +126,9 @@ if(connect&&sync&&disconnect&&status){
   e.preventDefault();if(modalBusy)return;
   if(!current?.connected)return feedback.textContent='Collega Google Calendar prima di salvare.';
   const fields=form.elements;
-  const payload={title:fields.title.value.trim(),date:fields.date.value,allDay:fields.allDay.checked,
+  const payload={title:fields.title.value.trim(),category:fields.category.value||'other',date:fields.date.value,allDay:fields.allDay.checked,
     startTime:fields.startTime.value,endTime:fields.endTime.value,description:fields.description.value.trim(),requestId};
-  if(!payload.title||!payload.date||(!payload.allDay&&(!payload.startTime||!payload.endTime)))return feedback.textContent='Completa titolo, data e orari.';
+  if(!payload.title||!payload.date||(!payload.allDay&&(!payload.startTime||!payload.endTime)))return feedback.textContent='Completa titolo, tipo, data e orari.';
   if(!payload.allDay&&payload.endTime<=payload.startTime)return feedback.textContent='L’orario di fine deve essere successivo all’inizio.';
   if(!window.confirm(`Aggiungere su Google Calendar “${payload.title}” il ${payload.date}${payload.allDay?' (tutto il giorno)':` dalle ${payload.startTime} alle ${payload.endTime}`}?`))return;
   modalBusy=true;save.disabled=true;cancel.disabled=true;feedback.textContent='Salvataggio dell’impegno su Google Calendar…';

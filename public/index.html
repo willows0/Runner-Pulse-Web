@@ -158,6 +158,7 @@
   <p class="rp-commitment-note">Controlla i dettagli prima di aggiungere l’evento al tuo Google Calendar. I tuoi appuntamenti saranno considerati dal Coach.</p>
   <form id="rp-commitment-form" class="rp-commitment-form">
    <label>Titolo<input name="title" type="text" maxlength="120" placeholder="Es. Visita dal dentista" required></label>
+   <label>Tipo<select name="category"><option value="work">Lavoro</option><option value="sport">Sport</option><option value="other" selected>Altro impegno</option></select></label>
    <label>Data<input name="date" type="date" required></label>
    <label class="rp-commitment-allday"><input name="allDay" type="checkbox"> Tutto il giorno</label>
    <div class="rp-commitment-times"><label>Dalle<input name="startTime" type="time" required></label><label>Alle<input name="endTime" type="time" required></label></div>
@@ -312,6 +313,12 @@
  }
 
  function safeDate(date){const d=new Date(date+'T12:00:00');return Number.isNaN(d.getTime())?null:d}
+ function eventCategoryInfo(category){
+  if(category==='work')return {label:'Lavoro',icon:'💼',className:'rp-event-work'};
+  if(category==='sport')return {label:'Sport',icon:'🏅',className:'rp-event-sport'};
+  return {label:'Altro impegno',icon:'📌',className:'rp-event-other'};
+ }
+ function eventTimeLabel(e){return e.allDay?'Tutto il giorno':e.startLocal.slice(11,16)+'–'+e.endLocal.slice(11,16);}
  function getSessions(){
   if(window.rpCurrentDraft?.length)return window.rpCurrentDraft;
   if(Array.isArray(window.rpSavedApproved))return window.rpSavedApproved;
@@ -333,7 +340,7 @@
  function render(){sessions=getSessions();calendar.replaceChildren();overview.replaceChildren();
   const agenda=window.rpCalendarAgenda,events=Array.isArray(agenda?.events)?agenda.events.filter(e=>!e.runnerPulse):[];
   const legend=document.createElement('p');legend.className='rp-agenda-legend';
-  legend.textContent=agenda?'Arancione: allenamento · Blu/grigio: impegno Google Calendar'+(agenda.limitedToPrimary?' (solo calendario principale)':''):'Collega Google Calendar nella scheda Obiettivo per mostrare gli impegni.';
+  legend.textContent=agenda?'Arancione: allenamenti · Blu: lavoro · Verde: sport · Viola: altri impegni'+(agenda.limitedToPrimary?' (solo calendario principale)':''):'Collega Google Calendar nella scheda Obiettivo per mostrare gli impegni.';
   calendar.appendChild(legend);
   const addButton=document.createElement('button');addButton.type='button';addButton.className='rp-calendar-add-btn';addButton.textContent='+ Nuovo impegno';addButton.addEventListener('click',()=>{if(window.runnerPulseOpenCommitment)window.runnerPulseOpenCommitment();else alert('Collegamento Calendar non ancora pronto.');});calendar.appendChild(addButton);
   const sorted=sessions.map((s,i)=>({s,i})).sort((a,b)=>(a.s.date+a.s.time).localeCompare(b.s.date+b.s.time));
@@ -361,13 +368,13 @@
     if(conflict){const notice=document.createElement('small');notice.textContent='⚠ Conflitto con un impegno Google';notice.className='rp-agenda-conflict';card.querySelector('.rp-day-main')?.appendChild(notice);}
     calendar.appendChild(card);
    }else{
-    const e=entry.e,card=document.createElement('div');card.className='rp-day-card rp-agenda-event';
+    const e=entry.e,info=eventCategoryInfo(e.category),card=document.createElement('button');card.type='button';card.className='rp-day-card rp-agenda-event '+info.className;
     const date=document.createElement('span');date.className='rp-day-date';date.textContent=dayNames[d.getDay()];const num=document.createElement('b');num.textContent=d.getDate();date.appendChild(num);
     const body=document.createElement('span');body.className='rp-day-main';
     const title=document.createElement('strong');title.textContent=e.title;
-    const meta=document.createElement('small');meta.textContent=(e.allDay?'Tutto il giorno':e.startLocal.slice(11,16)+'–'+e.endLocal.slice(11,16))+' · '+e.calendar+(e.busy?'':' · Libero');
-    const icon=document.createElement('span');icon.className='rp-day-icon';icon.textContent='📅';
-    body.append(title,meta);card.append(date,body,icon);calendar.appendChild(card);
+    const meta=document.createElement('small');meta.textContent=eventTimeLabel(e)+' · '+info.label+' · '+e.calendar+(e.busy?'':' · Libero');
+    const icon=document.createElement('span');icon.className='rp-day-icon';icon.textContent=info.icon;
+    body.append(title,meta);card.append(date,body,icon);card.addEventListener('click',()=>openAgendaDetail(e));calendar.appendChild(card);
    }
   }
   if(!entries.length){const p=document.createElement('p');p.textContent=agenda?'Nessun impegno o allenamento in questo periodo.':'Gli impegni di Google Calendar non sono ancora stati caricati.';calendar.appendChild(p);}
@@ -390,6 +397,21 @@
   const guidance=paceGuidance(s);const steps=[['Riscaldamento',warm+' min','Corsa facile e progressiva, a sensazione.'],['Parte centrale',main+' min',guidance.text],['Defaticamento',cool+' min','Rallenta gradualmente e concludi con corsa molto facile o camminata.']];
   steps.forEach(([name,duration,description],i)=>{const item=document.createElement('div');item.className='rp-step';const n=document.createElement('span');n.className='rp-step-num';n.textContent=i+1;const body=document.createElement('div');const strong=document.createElement('strong');strong.textContent=name;const p=document.createElement('p');p.textContent=duration+' · '+description;body.append(strong,p);item.append(n,body);detail.appendChild(item)});
   const note=document.createElement('p');note.className='rp-detail-note';note.textContent=guidance.note;detail.appendChild(note);
+  detail.scrollIntoView({behavior:'smooth',block:'start'});
+ }
+ function openAgendaDetail(e){calendar.hidden=true;overview.hidden=true;settings.hidden=true;tabs.hidden=true;heading.hidden=true;detail.hidden=false;detail.replaceChildren();
+  const info=eventCategoryInfo(e.category);
+  const back=document.createElement('button');back.type='button';back.className='rp-detail-back';back.textContent='← Torna al calendario';back.addEventListener('click',()=>show('calendar'));detail.appendChild(back);
+  const h=document.createElement('h2');h.className='rp-detail-title';h.textContent=info.icon+' '+(e.title||'Impegno');detail.appendChild(h);
+  const meta=document.createElement('p');meta.className='rp-detail-meta';meta.textContent=[e.startLocal?.slice(0,10),eventTimeLabel(e),info.label,e.calendar,e.busy?'Occupato':'Libero'].filter(Boolean).join(' · ');detail.appendChild(meta);
+  const section=document.createElement('h3');section.textContent='Dettaglio impegno';detail.appendChild(section);
+  const block=document.createElement('div');block.className='rp-step';
+  const badge=document.createElement('span');badge.className='rp-step-num';badge.textContent=info.icon;
+  const body=document.createElement('div');
+  const strong=document.createElement('strong');strong.textContent=info.label;
+  const p=document.createElement('p');p.textContent=e.description?e.description:'Nessuna nota aggiunta per questo impegno.';
+  body.append(strong,p);block.append(badge,body);detail.appendChild(block);
+  const note=document.createElement('p');note.className='rp-detail-note';note.textContent='Questo impegno viene considerato dal Coach quando incastra i nuovi allenamenti negli spazi liberi.';detail.appendChild(note);
   detail.scrollIntoView({behavior:'smooth',block:'start'});
  }
  window.addEventListener('rp-calendar-agenda-updated',()=>{if(detail.hidden)render();});
