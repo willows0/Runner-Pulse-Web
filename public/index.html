@@ -143,6 +143,7 @@
 <button id="rp-calendar-connect" type="button">Collega Google Calendar</button>
 <button id="rp-calendar-sync" type="button" hidden>Sincronizza piano</button>
 <button id="rp-calendar-agenda-refresh" type="button" hidden>Aggiorna impegni</button>
+<button id="rp-calendar-new" type="button" hidden>+ Nuovo impegno</button>
 <button id="rp-calendar-consent-all" type="button" hidden>Autorizza tutti i calendari</button>
 <button id="rp-calendar-disconnect" type="button" hidden>Scollega Calendar</button>
 </div>
@@ -151,6 +152,21 @@
 <p class="note">L’accesso è personale. Lo scollegamento non elimina gli eventi già presenti su Google Calendar. Per la prima autorizzazione usa Chrome, non il browser interno dell’app Android.</p>
 </div>
 <div class="card rp-program-card"><h2>Il tuo programma</h2><div id="rp-program-approved">Non hai ancora creato un programma.</div></div>
+<div id="rp-commitment-modal" class="rp-commitment-modal" hidden role="presentation">
+ <div class="rp-commitment-dialog" role="dialog" aria-modal="true" aria-labelledby="rp-commitment-heading">
+  <h2 id="rp-commitment-heading">Nuovo impegno</h2>
+  <p class="rp-commitment-note">Controlla i dettagli prima di aggiungere l’evento al tuo Google Calendar. I tuoi appuntamenti saranno considerati dal Coach.</p>
+  <form id="rp-commitment-form" class="rp-commitment-form">
+   <label>Titolo<input name="title" type="text" maxlength="120" placeholder="Es. Visita dal dentista" required></label>
+   <label>Data<input name="date" type="date" required></label>
+   <label class="rp-commitment-allday"><input name="allDay" type="checkbox"> Tutto il giorno</label>
+   <div class="rp-commitment-times"><label>Dalle<input name="startTime" type="time" required></label><label>Alle<input name="endTime" type="time" required></label></div>
+   <label>Note (facoltative)<textarea name="description" rows="2" maxlength="1000" placeholder="Dettagli dell’impegno"></textarea></label>
+   <p id="rp-commitment-message" role="status" aria-live="polite"></p>
+   <div class="rp-commitment-buttons"><button id="rp-commitment-cancel" type="button" class="rp-commitment-secondary">Annulla</button><button id="rp-commitment-save" type="submit">Conferma e salva</button></div>
+  </form>
+ </div>
+</div>
 </section>
     <section id="coach" class="page rp-coach-page" aria-label="Chat con l’allenatore Runner Pulse">
       <div class="rp-coach-intro"><img class="rp-coach-mascot" src="/coach-robot.png" alt="Robottino allenatore con fascia arancione e calzoncini da corsa"><div class="rp-coach-intro-text"><span class="rp-coach-tag">Il tuo allenatore</span><h1>Runner Pulse</h1><span class="rp-coach-presence"><i></i> Allenatore AI</span></div></div>
@@ -319,6 +335,7 @@
   const legend=document.createElement('p');legend.className='rp-agenda-legend';
   legend.textContent=agenda?'Arancione: allenamento · Blu/grigio: impegno Google Calendar'+(agenda.limitedToPrimary?' (solo calendario principale)':''):'Collega Google Calendar nella scheda Obiettivo per mostrare gli impegni.';
   calendar.appendChild(legend);
+  const addButton=document.createElement('button');addButton.type='button';addButton.className='rp-calendar-add-btn';addButton.textContent='+ Nuovo impegno';addButton.addEventListener('click',()=>{if(window.runnerPulseOpenCommitment)window.runnerPulseOpenCommitment();else alert('Collegamento Calendar non ancora pronto.');});calendar.appendChild(addButton);
   const sorted=sessions.map((s,i)=>({s,i})).sort((a,b)=>(a.s.date+a.s.time).localeCompare(b.s.date+b.s.time));
   const entries=sorted.map(({s,i})=>({date:s.date,time:s.time,kind:'training',s,i}));
   for(const e of events){

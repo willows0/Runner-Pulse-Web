@@ -6,6 +6,7 @@ const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(
 const auth=getAuth(app),$=id=>document.getElementById(id);
 const connect=$('rp-calendar-connect'),sync=$('rp-calendar-sync'),disconnect=$('rp-calendar-disconnect'),status=$('rp-calendar-status');
 const agendaBtn=$('rp-calendar-agenda-refresh'),reauthorize=$('rp-calendar-consent-all'),agendaStatus=$('rp-calendar-agenda-status');
+ const newEventBtn=$('rp-calendar-new');
 if(connect&&sync&&disconnect&&status){
  let current=null,busy=false,loading=false,loadedAt=0;
  let agenda=null,agendaUid=null,agendaFetchedAt=0,agendaRequest=null;
@@ -37,6 +38,7 @@ if(connect&&sync&&disconnect&&status){
   connect.hidden=linked;sync.hidden=!linked;disconnect.hidden=!linked;
   connect.disabled=busy||!signed||!ready;sync.disabled=busy||!signed;disconnect.disabled=busy||!signed;
   if(agendaBtn){agendaBtn.hidden=!linked;agendaBtn.disabled=busy||!signed;}
+  if(newEventBtn){newEventBtn.hidden=!linked;newEventBtn.disabled=busy||!signed;}
   if(reauthorize){reauthorize.hidden=!linked||!agenda?.limitedToPrimary;reauthorize.disabled=busy||!signed;}
  }
  async function call(path,method='GET',body={}){
@@ -79,6 +81,65 @@ if(connect&&sync&&disconnect&&status){
   }).finally(()=>{if(agendaRequest===request)agendaRequest=null;});
   agendaRequest=request;return request;
  }
+ // Sia il modulo manuale sia la dettatura del Coach usano la stessa conferma.
+ const modal=$('rp-commitment-modal'),form=$('rp-commitment-form'),feedback=$('rp-commitment-message');
+ const save=$('rp-commitment-save'),cancel=$('rp-commitment-cancel');
+ if(modal)document.body.append(modal); // fuori dalla pagina Piano, anche quando si parla col Coach
+ let requestId=null,modalBusy=false;
+ function closeModal(){if(modalBusy)return;modal.hidden=true;document.body.style.overflow='';}
+ function showModal(proposal=null){
+  const data=proposal||{};
+  if(!current?.connected){msg('Collega Google Calendar prima di aggiungere impegni.');document.querySelector('nav button[data-page="plan"]')?.click();return false;}
+  requestId=(globalThis.crypto?.randomUUID?.()||'request-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+  const fields=form.elements;
+  fields.title.value=data.title||'';
+  fields.date.value=data.date??(proposal===null?todayInRome():'');
+  fields.allDay.checked=data.allDay===true;
+  fields.startTime.value=data.startTime||'';
+  fields.endTime.value=data.endTime||'';
+  fields.description.value=data.description||'';
+  const times=form.querySelector('.rp-commitment-times');times.hidden=fields.allDay.checked;
+  fields.startTime.required=fields.endTime.required=!fields.allDay.checked;
+  feedback.textContent='Verifica data, orari e descrizione prima di salvare.';
+  modal.hidden=false;document.body.style.overflow='hidden';fields.title.focus();return true;
+ }
+ form?.elements.allDay?.addEventListener('change',()=>{
+  const all=form.elements.allDay.checked;
+  form.querySelector('.rp-commitment-times').hidden=all;
+  form.elements.startTime.required=form.elements.endTime.required=!all;
+ });
+ window.runnerPulseOpenCommitment=showModal;
+ window.runnerPulseProposeCalendarCommitment=async message=>{
+  if(!current?.connected)throw Error('Collega prima Google Calendar nella scheda Piano.');
+  const data=await call('interpret','POST',{message});
+  if(!showModal(data.proposal))throw Error('Non è stato possibile aprire il modulo.');
+  if(!data.proposal.date||(!data.proposal.allDay&&(!data.proposal.startTime||!data.proposal.endTime)))
+   feedback.textContent='Il Coach non ha trovato tutti i dettagli. Completa la data e gli orari prima della conferma.';
+  return data.proposal;
+ };
+ newEventBtn?.addEventListener('click',()=>showModal());
+ cancel?.addEventListener('click',closeModal);
+ modal?.addEventListener('click',e=>{if(e.target===modal)closeModal();});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden){e.preventDefault();closeModal();}});
+ form?.addEventListener('submit',async e=>{
+  e.preventDefault();if(modalBusy)return;
+  if(!current?.connected)return feedback.textContent='Collega Google Calendar prima di salvare.';
+  const fields=form.elements;
+  const payload={title:fields.title.value.trim(),date:fields.date.value,allDay:fields.allDay.checked,
+    startTime:fields.startTime.value,endTime:fields.endTime.value,description:fields.description.value.trim(),requestId};
+  if(!payload.title||!payload.date||(!payload.allDay&&(!payload.startTime||!payload.endTime)))return feedback.textContent='Completa titolo, data e orari.';
+  if(!payload.allDay&&payload.endTime<=payload.startTime)return feedback.textContent='L’orario di fine deve essere successivo all’inizio.';
+  if(!window.confirm(`Aggiungere su Google Calendar “${payload.title}” il ${payload.date}${payload.allDay?' (tutto il giorno)':` dalle ${payload.startTime} alle ${payload.endTime}`}?`))return;
+  modalBusy=true;save.disabled=true;cancel.disabled=true;feedback.textContent='Salvataggio dell’impegno su Google Calendar…';
+  try{
+   const data=await call('commitment','POST',payload);
+   feedback.textContent=data.alreadyExists?'Impegno già presente.':'Impegno salvato su Google Calendar.';
+   await refreshAgenda({force:true}).catch(error=>{msg('Impegno salvato; aggiorna il calendario per visualizzarlo. '+error.message);});
+   requestId=null;modal.hidden=true;document.body.style.overflow='';
+   msg('Impegno personale salvato su Google Calendar. Il Coach lo considererà quando genera il piano.');
+  }catch(error){feedback.textContent='Non salvato: '+error.message+' Puoi correggere e riprovare.';}
+  finally{modalBusy=false;save.disabled=false;cancel.disabled=false;}
+ });
  // La generazione del piano forza sempre una lettura recente degli impegni.
  // Non si salva una bozza fingendo che Google Calendar sia vuoto.
  window.runnerPulseGetCalendarAgenda=refreshAgenda;

@@ -39,7 +39,37 @@ if(coach){
    catch(e){status.textContent='Cancellazione non riuscita: '+e.message;}
    finally{busy=false;resetCoach.disabled=false;send.disabled=false;}
  });
- form.addEventListener('submit',async e=>{e.preventDefault();if(busy)return;const message=question.value.trim();if(!message)return;busy=true;send.disabled=true;status.textContent='Il Coach sta rispondendo…';suggestions.hidden=true;try{const data=await api({action:'chat',message});bubble('user',message,{scroll:false});question.value='';question.blur();bubble('assistant',data.answer);status.textContent='';}catch(err){status.textContent=err.message;}finally{busy=false;send.disabled=false;}});
+ form.addEventListener('submit',async e=>{e.preventDefault();if(busy)return;const message=question.value.trim();if(!message)return;busy=true;send.disabled=true;status.textContent='Il Coach sta rispondendo…';suggestions.hidden=true;try{const simplified=message.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+   const deletePlan=/(?:elimin|cancell|rimuov|azzer)/.test(simplified)&&/\b(piano|programma)\b/.test(simplified)&&!/\b(?:seduta|allenamento)\s+(?:di|del|per)\s+(?:lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)/.test(simplified);
+   // Le richieste esplicite di aggiunta appuntamenti vanno al modulo Calendar,
+   // non al generatore di piani. La dettatura usa questo stesso percorso.
+   const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,120}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista)\b/.test(simplified);
+   if(calendarIntent){
+     if(!window.runnerPulseProposeCalendarCommitment)throw Error('Collegamento con il calendario non ancora disponibile.');
+     const proposal=await window.runnerPulseProposeCalendarCommitment(message);
+     bubble('user',message,{scroll:false});question.value='';question.blur();
+     bubble('assistant','Ho preparato il tuo impegno “'+(proposal.title||'Nuovo impegno')+'”. Controlla i campi nel modulo e premi “Conferma e salva” per aggiungerlo a Google Calendar. Non ho ancora salvato nulla.');
+     status.textContent='Conferma l’impegno nel modulo aperto.';
+   }else if(deletePlan){
+     bubble('user',message,{scroll:false});question.value='';question.blur();
+     const row=bubble('assistant','Vuoi eliminare il piano di allenamento salvato? Le attività registrate rimarranno intatte. La cancellazione richiede la tua conferma.');
+     const button=document.createElement('button');button.type='button';button.textContent='Conferma eliminazione piano';button.className='rp-plan-chat-delete';
+     row.querySelector('.rp-chat-bubble')?.appendChild(button);
+     button.addEventListener('click',async()=>{button.disabled=true;try{if(!window.runnerPulseDeletePlan)throw Error('Funzione Piano non disponibile.');const ok=await window.runnerPulseDeletePlan();if(ok){button.textContent='Piano eliminato ✓';window.rpCoachEditingPlan=false;status.textContent='Piano cancellato dal tuo account.';}else button.disabled=false;}catch(err){button.disabled=false;status.textContent=err.message;}});
+     status.textContent='Il piano non è stato ancora eliminato.';
+   }else{
+   const planIntent=Boolean(window.rpCoachEditingPlan)||(/\b(piano|programma|sedut[ae]|allenament[oi])\b/.test(simplified)&&/modific|spost|anticip|posticip|riduc|aument|cambi|sostituisc|aggiung|tog|elimin|riposo|data|orari|giorn|recuper/.test(simplified));
+   const data=await api({action:planIntent?'plan-edit':'chat',message});
+   bubble('user',message,{scroll:false});question.value='';question.blur();
+   if(planIntent){
+     const row=bubble('assistant',data.summary+'\n\nQuesta è una proposta. Il piano NON cambia finché non premi “Approva modifica”.');
+     const button=document.createElement('button');button.type='button';button.textContent='Approva modifica del piano';button.className='rp-plan-chat-approve';
+     row.querySelector('.rp-chat-bubble')?.appendChild(button);
+     button.addEventListener('click',async()=>{button.disabled=true;status.textContent='Salvataggio piano…';try{if(data.draft){if(!window.runnerPulseSaveDraft)throw Error('Apri Piano e riprova.');await window.runnerPulseSaveDraft(data.sessions,data.revision);button.textContent='Bozza modificata ✓';status.textContent='Bozza aggiornata. Puoi approvarla dalla scheda Piano.';}else{if(!window.runnerPulseSavePlan)throw Error('Apri Piano e riprova.');await window.runnerPulseSavePlan(data.sessions,data.revision);button.textContent='Modifica salvata ✓';status.textContent='Piano aggiornato nel tuo account Google.';}window.rpCoachEditingPlan=false;}catch(err){button.disabled=false;status.textContent='Modifica non salvata: '+err.message;}});
+     status.textContent='Verifica la proposta e premi Approva modifica se sei soddisfatto.';
+   } else {bubble('assistant',data.answer);status.textContent='';}
+   }
+ }catch(err){status.textContent=err.message;}finally{busy=false;send.disabled=false;}});
  question.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
  quick.addEventListener('click',()=>{suggestions.hidden=!suggestions.hidden;});
  suggestions.querySelectorAll('[data-prompt]').forEach(b=>b.addEventListener('click',()=>{question.value=b.dataset.prompt;suggestions.hidden=true;question.focus();}));

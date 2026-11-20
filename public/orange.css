@@ -598,3 +598,23 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #plan .rp-agenda-event{background:#324963!important;border:1px solid #72879d!important;color:#fff!important;cursor:default;}
 #plan .rp-agenda-event .rp-day-date,#plan .rp-agenda-event .rp-day-icon{color:#a9d3f5!important;}
 #plan .rp-agenda-conflict{display:block;color:#ffd89d!important;font-weight:800;margin-top:4px;}
+
+/* Inserimento impegno personale - mobile first, schermata conferma obbligatoria */
+.rp-calendar-add-btn{display:block;width:100%;margin:12px 0 18px;padding:14px;border:0;border-radius:16px;background:#f4770b;color:#fff;font:inherit;font-weight:800;cursor:pointer}
+.rp-commitment-modal[hidden]{display:none!important}
+.rp-commitment-modal{position:fixed;inset:0;z-index:30000;background:rgba(6,15,29,.78);display:flex;align-items:center;justify-content:center;padding:14px}
+.rp-commitment-dialog{box-sizing:border-box;width:min(100%,500px);max-height:calc(100dvh - 28px);overflow:auto;background:#19304b;color:#fff;border-radius:24px;padding:22px;box-shadow:0 20px 70px rgba(0,0,0,.4)}
+.rp-commitment-dialog h2{margin:0 0 12px;color:#ff9a47}
+.rp-commitment-note{font-size:14px;color:#d6e0ec;line-height:1.4}
+.rp-commitment-form{display:grid;gap:13px}
+.rp-commitment-form label{display:grid;gap:6px;font-weight:700}
+.rp-commitment-form input[type=text],.rp-commitment-form input[type=date],.rp-commitment-form input[type=time],.rp-commitment-form textarea{box-sizing:border-box;min-width:0;width:100%;border-radius:11px;border:1px solid #9dacc4;background:#fff;color:#152438;padding:12px;font:inherit}
+.rp-commitment-allday{display:flex!important;align-items:center;gap:10px!important}
+.rp-commitment-allday input{width:22px;height:22px;accent-color:#f4770b}
+.rp-commitment-times{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rp-commitment-buttons{display:flex;gap:10px;flex-wrap:wrap}
+.rp-commitment-buttons button{flex:1;min-width:120px;border:0;border-radius:13px;padding:12px 8px;background:#f4770b;color:#fff;font:inherit;font-weight:750}
+.rp-commitment-buttons .rp-commitment-secondary{background:#445a70}
+#rp-commitment-message{margin:0;min-height:1.2em;color:#ffe8bb;font-size:14px}
+
+.rp-commitment-times[hidden]{display:none!important}
