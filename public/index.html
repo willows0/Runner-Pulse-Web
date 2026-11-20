@@ -138,13 +138,16 @@
 <p id="rp-program-status" role="status" aria-live="polite"></p></div>
 <div class="card rp-program-card" aria-label="Collegamento Google Calendar">
 <h2>Google Calendar</h2>
-<p>Collega il tuo calendario personale. Runner Pulse aggiunge solo gli allenamenti del <strong>piano approvato</strong>, dopo che premi «Sincronizza piano». Se cambi il programma, premi di nuovo «Sincronizza» per aggiornare gli eventi.</p>
+<p>Vedi anche i tuoi impegni Google nella scheda <strong>Calendario</strong>. Quando generi un programma, il Coach cerca gli spazi liberi evitando sovrapposizioni. Gli appuntamenti personali non vengono modificati. Dopo aver approvato il piano, premi «Sincronizza piano» per aggiungere gli allenamenti.</p>
 <div class="rp-program-actions">
 <button id="rp-calendar-connect" type="button">Collega Google Calendar</button>
 <button id="rp-calendar-sync" type="button" hidden>Sincronizza piano</button>
+<button id="rp-calendar-agenda-refresh" type="button" hidden>Aggiorna impegni</button>
+<button id="rp-calendar-consent-all" type="button" hidden>Autorizza tutti i calendari</button>
 <button id="rp-calendar-disconnect" type="button" hidden>Scollega Calendar</button>
 </div>
 <p id="rp-calendar-status" class="note" role="status" aria-live="polite">Verifico collegamento…</p>
+<p id="rp-calendar-agenda-status" class="note" role="status" aria-live="polite"></p>
 <p class="note">L’accesso è personale. Lo scollegamento non elimina gli eventi già presenti su Google Calendar. Per la prima autorizzazione usa Chrome, non il browser interno dell’app Android.</p>
 </div>
 <div class="card rp-program-card"><h2>Il tuo programma</h2><div id="rp-program-approved">Non hai ancora creato un programma.</div></div>
@@ -234,7 +237,7 @@
   }
 </script>
   <script type="module" src="/plan-manager.js?v=plan-no-proposal-20261119"></script>
-  <script type="module" src="/google-calendar.js?v=calendar-oauth-diagnostica-20261119b"></script>
+  <script type="module" src="/google-calendar.js?v=calendar-agenda-20261120-v2"></script>
   <script type="module" src="/coach-memory.js?v=coach-plan-20261119"></script>
   <script>window.RUNNER_PULSE_VAPID_KEY = "BImx7Smy2xK7i2J_o5bCvC2Q4pzx8I0nIYQQCy93mYCRmo2vl7fE08sc-phyPvEiHs_Q33PIkJfNJDjJamP2ojk"; /* Inserire la chiave Web Push pubblica Firebase */</script>
   <script type="module" src="/weekly-push.js"></script>
@@ -312,9 +315,46 @@
   b.append(date,main,icon);b.addEventListener('click',()=>openDetail(session,index));return b;
  }
  function render(){sessions=getSessions();calendar.replaceChildren();overview.replaceChildren();
-  if(!sessions.length){const p=document.createElement('p');p.textContent='Non hai ancora un programma. Apri Obiettivo e premi “Genera programma con il Coach”.';calendar.appendChild(p);const b=document.createElement('button');b.textContent='Configura obiettivo';b.addEventListener('click',()=>show('settings'));calendar.appendChild(b);overview.appendChild(p.cloneNode(true));return;}
-  const sorted=sessions.map((s,i)=>({s,i})).sort((a,b)=>(a.s.date||'').localeCompare(b.s.date||''));
-  let week='';sorted.forEach(({s,i})=>{const d=safeDate(s.date);if(!d)return;const monday=new Date(d);monday.setDate(d.getDate()-(d.getDay()+6)%7);const key=monday.toISOString().slice(0,10);if(key!==week){week=key;const h=document.createElement('h3');h.className='rp-week-head';h.textContent='Settimana del '+monday.toLocaleDateString('it-IT',{day:'numeric',month:'long'});calendar.appendChild(h);}calendar.appendChild(makeButton(s,i));});
+  const agenda=window.rpCalendarAgenda,events=Array.isArray(agenda?.events)?agenda.events.filter(e=>!e.runnerPulse):[];
+  const legend=document.createElement('p');legend.className='rp-agenda-legend';
+  legend.textContent=agenda?'Arancione: allenamento · Blu/grigio: impegno Google Calendar'+(agenda.limitedToPrimary?' (solo calendario principale)':''):'Collega Google Calendar nella scheda Obiettivo per mostrare gli impegni.';
+  calendar.appendChild(legend);
+  const sorted=sessions.map((s,i)=>({s,i})).sort((a,b)=>(a.s.date+a.s.time).localeCompare(b.s.date+b.s.time));
+  const entries=sorted.map(({s,i})=>({date:s.date,time:s.time,kind:'training',s,i}));
+  for(const e of events){
+   if(e.allDay){
+    // Un evento che dura più giorni va mostrato in ogni giornata occupata.
+    const from=e.startLocal.slice(0,10)<(agenda.from||'')?agenda.from:e.startLocal.slice(0,10);
+    const through=e.endLocal.slice(0,10)>(agenda.to||'9999-12-31')?agenda.to:e.endLocal.slice(0,10);
+    const cursor=new Date(from+'T12:00:00Z');
+    for(let k=0;k<42&&cursor.toISOString().slice(0,10)<through;k++,cursor.setUTCDate(cursor.getUTCDate()+1))entries.push({date:cursor.toISOString().slice(0,10),time:'00:00',kind:'busy',e});
+   }else entries.push({date:e.startLocal.slice(0,10),time:e.startLocal.slice(11,16),kind:'busy',e});
+  }
+  entries.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)||a.kind.localeCompare(b.kind));
+  let week='';
+  for(const entry of entries){
+   const d=safeDate(entry.date);if(!d)continue;
+   const monday=new Date(d);monday.setDate(d.getDate()-(d.getDay()+6)%7);
+   const key=monday.toISOString().slice(0,10);
+   if(key!==week){week=key;const h=document.createElement('h3');h.className='rp-week-head';h.textContent='Settimana del '+monday.toLocaleDateString('it-IT',{day:'numeric',month:'long'});calendar.appendChild(h);}
+   if(entry.kind==='training'){
+    const card=makeButton(entry.s,entry.i);
+    const a=new Date(entry.s.date+'T'+entry.s.time+':00Z').getTime(),b=a+Number(entry.s.minutes)*60000;
+    const conflict=events.some(x=>x.busy&&a<Date.parse(x.endLocal+':00Z')&&b>Date.parse(x.startLocal+':00Z'));
+    if(conflict){const notice=document.createElement('small');notice.textContent='⚠ Conflitto con un impegno Google';notice.className='rp-agenda-conflict';card.querySelector('.rp-day-main')?.appendChild(notice);}
+    calendar.appendChild(card);
+   }else{
+    const e=entry.e,card=document.createElement('div');card.className='rp-day-card rp-agenda-event';
+    const date=document.createElement('span');date.className='rp-day-date';date.textContent=dayNames[d.getDay()];const num=document.createElement('b');num.textContent=d.getDate();date.appendChild(num);
+    const body=document.createElement('span');body.className='rp-day-main';
+    const title=document.createElement('strong');title.textContent=e.title;
+    const meta=document.createElement('small');meta.textContent=(e.allDay?'Tutto il giorno':e.startLocal.slice(11,16)+'–'+e.endLocal.slice(11,16))+' · '+e.calendar+(e.busy?'':' · Libero');
+    const icon=document.createElement('span');icon.className='rp-day-icon';icon.textContent='📅';
+    body.append(title,meta);card.append(date,body,icon);calendar.appendChild(card);
+   }
+  }
+  if(!entries.length){const p=document.createElement('p');p.textContent=agenda?'Nessun impegno o allenamento in questo periodo.':'Gli impegni di Google Calendar non sono ancora stati caricati.';calendar.appendChild(p);}
+  if(!sessions.length){const p=document.createElement('p');p.textContent='Non hai ancora un programma. Apri Obiettivo per generarlo negli spazi liberi.';overview.appendChild(p);const b=document.createElement('button');b.textContent='Configura obiettivo';b.addEventListener('click',()=>show('settings'));overview.appendChild(b);return;}
   const h=document.createElement('h2');h.textContent='Programma di allenamento';overview.appendChild(h);
   const intro=document.createElement('p');intro.textContent='Tocca un allenamento per vedere la struttura della seduta.';overview.appendChild(intro);
   sorted.forEach(({s,i})=>overview.appendChild(makeButton(s,i)));
@@ -335,6 +375,7 @@
   const note=document.createElement('p');note.className='rp-detail-note';note.textContent=guidance.note;detail.appendChild(note);
   detail.scrollIntoView({behavior:'smooth',block:'start'});
  }
+ window.addEventListener('rp-calendar-agenda-updated',()=>{if(detail.hidden)render();});
  window.addEventListener('rp-plan-updated',()=>{if(!detail.hidden){detail.hidden=true;show(currentTab);}else render();});
  const btn=document.getElementById('rp-create-proposal');btn?.addEventListener('click',()=>{queueMicrotask(()=>{if(window.rpCurrentDraft?.length){sessions=window.rpCurrentDraft;show('calendar');}})});
  show('calendar');

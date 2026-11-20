@@ -1,3 +1,4 @@
+import {fitTrainingAroundEvents} from './calendar-slot-planner.js';
 // Runner Pulse — un solo gestore del Piano. Le sedute appartengono all'UID Google,
 // restano visibili anche se la rete è indisponibile e NON si dichiarano salvate
 // finché il server non conferma la scrittura Firestore.
@@ -234,8 +235,27 @@ async function generate(){
   const values=Object.fromEntries(new FormData(form).entries());validateObjective(values);
   write(objectiveKey(state.uid),values);
   const sessions=createDraft(values);
-  await persistDraft(sessions);
-  status.textContent='Programma in bozza salvato nel tuo account Google. Visualizzalo nel calendario e premi “Approva e salva” in “Il tuo programma”.';
+  // La pianificazione funziona solo con gli appuntamenti reali scaricati
+  // adesso dal proprio account. Un errore di rete NON equivale a calendario vuoto.
+  if(typeof window.runnerPulseCalendarConnection!=='function')throw Error('La pagina Google Calendar non è pronta. Ricarica Runner Pulse e riprova.');
+  const calendarLinked=await window.runnerPulseCalendarConnection();
+  if(!calendarLinked){
+   // Manteniamo la generazione anche per gli utenti che non hanno collegato Calendar.
+   // Il messaggio dichiara esplicitamente che nessun conflitto è stato verificato.
+   await persistDraft(sessions);
+   status.textContent='Programma in bozza salvato. Google Calendar non è collegato: gli impegni non sono stati verificati. Collega Calendar per incastrare automaticamente le sedute.';
+  }else{
+   status.textContent='Controllo gli impegni su Google Calendar e cerco gli orari liberi…';
+   const agenda=await window.runnerPulseGetCalendarAgenda({force:true});
+   if(!agenda||!Array.isArray(agenda.events))throw Error('Impossibile verificare gli impegni del calendario. Riprova.');
+   const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
+   const today=`${parts.year}-${parts.month}-${parts.day}`;
+   const placed=fitTrainingAroundEvents(sessions,agenda.events,{timePreference:values.timePreference,today,bufferMinutes:15});
+   await persistDraft(placed.sessions);
+   status.textContent=`Programma salvato in bozza: ${placed.sessions.length} allenamenti, ${placed.rescheduled} riposizionati negli spazi liberi. `+
+    (agenda.limitedToPrimary?'Per ora sono stati controllati soltanto gli impegni del calendario principale; autorizza tutti i calendari per una pianificazione completa. ':'')+
+    'Controlla le date nella scheda Calendario e premi “Approva e salva” per confermare.';
+  }
  }catch(err){status.textContent='Attenzione: '+err.message;}
  finally{button.disabled=false;}
 }

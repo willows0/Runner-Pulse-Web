@@ -5,8 +5,10 @@ const config={apiKey:'AIzaSyBVTj9i4545kOmvx3H78_YliE54nPSFyLg',authDomain:'runne
 const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(config);
 const auth=getAuth(app),$=id=>document.getElementById(id);
 const connect=$('rp-calendar-connect'),sync=$('rp-calendar-sync'),disconnect=$('rp-calendar-disconnect'),status=$('rp-calendar-status');
+const agendaBtn=$('rp-calendar-agenda-refresh'),reauthorize=$('rp-calendar-consent-all'),agendaStatus=$('rp-calendar-agenda-status');
 if(connect&&sync&&disconnect&&status){
  let current=null,busy=false,loading=false,loadedAt=0;
+ let agenda=null,agendaUid=null,agendaFetchedAt=0,agendaRequest=null;
  const query=new URLSearchParams(window.location.search);
  const result=query.get('calendar');
  // Quando il callback ritorna dall'OAuth, conserviamo il risultato in memoria.
@@ -34,27 +36,65 @@ if(connect&&sync&&disconnect&&status){
   const signed=Boolean(auth.currentUser),linked=Boolean(current?.connected),ready=Boolean(current?.configured);
   connect.hidden=linked;sync.hidden=!linked;disconnect.hidden=!linked;
   connect.disabled=busy||!signed||!ready;sync.disabled=busy||!signed;disconnect.disabled=busy||!signed;
+  if(agendaBtn){agendaBtn.hidden=!linked;agendaBtn.disabled=busy||!signed;}
+  if(reauthorize){reauthorize.hidden=!linked||!agenda?.limitedToPrimary;reauthorize.disabled=busy||!signed;}
  }
- async function call(path,method='GET'){
+ async function call(path,method='GET',body={}){
   const user=auth.currentUser;
   if(!user)throw Error('Accedi con Google prima di collegare Calendar.');
   const token=await user.getIdToken();
-  const response=await fetch('/api/calendar/'+path,{method,headers:{Authorization:'Bearer '+token,...(method==='POST'?{'Content-Type':'application/json'}:{})},...(method==='POST'?{body:'{}'}:{}),cache:'no-store'});
+  const response=await fetch('/api/calendar/'+path,{method,headers:{Authorization:'Bearer '+token,...(method==='POST'?{'Content-Type':'application/json'}:{})},...(method==='POST'?{body:JSON.stringify(body)}:{}),cache:'no-store'});
   const payload=await response.json().catch(()=>({}));
   if(!response.ok||!payload.success)throw Error(payload.message||'Operazione Google Calendar non riuscita (HTTP '+response.status+').');
   if(auth.currentUser?.uid!==user.uid)throw Error('L’account è cambiato. Riprova.');
   return payload;
  }
+ function todayInRome(){
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+ }
+ function clearAgenda(){
+  agenda=null;agendaUid=null;agendaFetchedAt=0;agendaRequest=null;
+  window.rpCalendarAgenda=null;
+  window.dispatchEvent(new Event('rp-calendar-agenda-updated'));
+  if(agendaStatus)agendaStatus.textContent='';
+ }
+ async function refreshAgenda({force=false}={}){
+  const uid=auth.currentUser?.uid;
+  if(!uid||!current?.connected)throw Error('Collega prima Google Calendar per vedere gli impegni.');
+  if(!force&&agendaUid===uid&&agenda&&Date.now()-agendaFetchedAt<45000)return agenda;
+  if(agendaRequest&&agendaUid===uid)return agendaRequest;
+  agendaUid=uid;
+  if(agendaStatus)agendaStatus.textContent='Recupero impegni reali da Google Calendar…';
+  const request=call('agenda?start='+encodeURIComponent(todayInRome())+'&days=42').then(data=>{
+   if(auth.currentUser?.uid!==uid)throw Error('Account cambiato durante la lettura degli impegni.');
+   agenda=data;agendaFetchedAt=Date.now();window.rpCalendarAgenda=agenda;
+   window.dispatchEvent(new Event('rp-calendar-agenda-updated'));
+   if(agendaStatus)agendaStatus.textContent=`${data.events.length} impegni letti da ${data.calendars.length} calendario/i. `+
+     (data.limitedToPrimary?'Per vedere anche gli altri calendari premi “Autorizza tutti i calendari”.':'Allenamenti e impegni sono visibili nella scheda Calendario.');
+   paint();return data;
+  }).catch(error=>{
+   if(auth.currentUser?.uid===uid){agenda=null;window.rpCalendarAgenda=null;window.dispatchEvent(new Event('rp-calendar-agenda-updated'));if(agendaStatus)agendaStatus.textContent='Impegni non aggiornati: '+error.message;}
+   throw error;
+  }).finally(()=>{if(agendaRequest===request)agendaRequest=null;});
+  agendaRequest=request;return request;
+ }
+ // La generazione del piano forza sempre una lettura recente degli impegni.
+ // Non si salva una bozza fingendo che Google Calendar sia vuoto.
+ window.runnerPulseGetCalendarAgenda=refreshAgenda;
+ window.runnerPulseCalendarConnection=async()=>{if(!auth.currentUser)throw Error('Accedi prima con Google.');if(current)return Boolean(current.connected);current=await call('status');return Boolean(current.connected);};
  async function load(){
   if(loading)return;
-  if(!auth.currentUser){current=null;msg('Accedi con Google per collegare Calendar.');paint();return;}
+  if(!auth.currentUser){current=null;clearAgenda();msg('Accedi con Google per collegare Calendar.');paint();return;}
   loading=true;
   try{
    current=await call('status');
    if(!current.configured)msg('Collegamento non ancora configurato su Render: servono le credenziali OAuth.');
    else if(current.connected){
     msg('Google Calendar collegato. '+(current.lastSyncedAt?'Ultima sincronizzazione: '+new Date(current.lastSyncedAt).toLocaleString('it-IT')+'. ':'')+'Eventi collegati: '+current.count+'.');
+    void refreshAgenda().catch(()=>{});
    }else{
+    clearAgenda();
     const reason=current.oauthError||((result&&result!=='connected')?result:null);
     if(reason)msg(callbackErrors[reason]||callbackErrors.failed);
     else if(result==='connected')msg('Google ha ricevuto il consenso, ma questo account Runner Pulse non risulta collegato. Assicurati di usare lo stesso account Google, poi riprova.');
@@ -63,11 +103,21 @@ if(connect&&sync&&disconnect&&status){
   }catch(e){msg(e.message);current=null;}
   finally{loadedAt=Date.now();loading=false;paint();}
  }
- connect.addEventListener('click',async()=>{
+ async function startConnection(){
   busy=true;paint();msg('Richiesta autorizzazione Google in corso…');
-  try{const data=await call('connect','POST');window.location.assign(data.authorizationUrl);}
+  try{
+   const inAndroidApp=/RunnerPulseAndroidWebView\/1/.test(navigator.userAgent);
+   const data=await call('connect','POST',inAndroidApp?{returnToApp:true}:{});
+   if(inAndroidApp){
+    // Android apre Chrome Custom Tabs con il consenso Google. Nessun token passa nel deep link.
+    window.location.assign('runnerpulsecalendar://start?url='+encodeURIComponent(data.authorizationUrl));
+   }else window.location.assign(data.authorizationUrl);
+  }
   catch(e){msg(e.message);busy=false;paint();}
- });
+ }
+ connect.addEventListener('click',startConnection);
+ reauthorize?.addEventListener('click',startConnection);
+ agendaBtn?.addEventListener('click',()=>{void refreshAgenda({force:true}).catch(()=>{});});
  sync.addEventListener('click',async()=>{
   if(!current?.connected)return;
   const approved=Array.isArray(window.rpSavedApproved)?window.rpSavedApproved:[];
@@ -79,16 +129,17 @@ if(connect&&sync&&disconnect&&status){
    const result=await call('sync','POST');
    current={...current,count:result.count,lastSyncedAt:Date.now(),lastSyncedRevision:result.revision};
    msg(`Google Calendar aggiornato: ${result.created} aggiunti, ${result.updated} modificati, ${result.deleted} rimossi. Eventi totali: ${result.count}.`);
+   void refreshAgenda({force:true}).catch(()=>{});
   }catch(e){msg('Sincronizzazione incompleta: '+e.message+' Puoi riprovare senza creare duplicati.');}
   finally{busy=false;paint();}
  });
  disconnect.addEventListener('click',async()=>{
   if(!window.confirm('Scollegare Google Calendar? Gli allenamenti già inseriti resteranno su Google Calendar.'))return;
   busy=true;paint();
-  try{await call('disconnect','POST');await load();msg('Google Calendar scollegato. Gli allenamenti già inseriti rimangono su Calendar.');}
+  try{await call('disconnect','POST');clearAgenda();current=null;await load();msg('Google Calendar scollegato. Gli allenamenti già inseriti rimangono su Calendar.');}
   catch(e){msg(e.message);}finally{busy=false;paint();}
  });
- onAuthStateChanged(auth,()=>{current=null;void load();});
+ onAuthStateChanged(auth,user=>{if(!user||agendaUid!==user.uid)clearAgenda();current=null;void load();});
  // Se OAuth si apre in Chrome o una Custom Tab e l'utente torna all'app,
  // aggiornare lo stato senza richiedere chiusura/riavvio dell'APK.
  function reloadAfterOAuth(){
@@ -97,6 +148,18 @@ if(connect&&sync&&disconnect&&status){
   paint();
   if(Date.now()-loadedAt>1200)void load();
  }
+ window.addEventListener('runnerpulse:calendar-callback',event=>{
+  // Il risultato dell'APK è soltanto un suggerimento grafico: il collegamento
+  // effettivo viene controllato tramite /api/calendar/status con Firebase Auth.
+  const allowed=['connected','invalid_client','invalid_grant','callback_error','missing_refresh',
+   'token_missing','consent_denied','missing_code','expired_state','state_storage','invalid_state'];
+  const state=String(event.detail?.result||'');
+  if(!allowed.includes(state))return;
+  document.querySelector('body > nav button[data-page="plan"]')?.click();
+  if(state!=='connected')msg(callbackErrors[state]||callbackErrors.failed);
+  busy=false;current=null;paint();
+  void load();
+ });
  window.addEventListener('pageshow',reloadAfterOAuth);
  window.addEventListener('focus',reloadAfterOAuth);
  document.addEventListener('visibilitychange',reloadAfterOAuth);
