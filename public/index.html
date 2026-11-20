@@ -499,14 +499,14 @@
     const date=document.createElement('span');date.className='rp-day-date';date.textContent=dayNames[d.getDay()];const num=document.createElement('b');num.textContent=d.getDate();date.appendChild(num);
     const body=document.createElement('span');body.className='rp-day-main';
     const title=document.createElement('strong');title.textContent=e.title;
-    const meta=document.createElement('small');meta.textContent=eventTimeLabel(e)+' · '+info.label+' · '+e.calendar+(e.busy?'':' · Libero')+(e.calendarWritable===false?' · Sola lettura':'');
-    const icon=document.createElement('span');icon.className='rp-day-icon';renderCategoryIcon(icon,e.category,info);
+    const meta=document.createElement('small');meta.textContent=eventTimeLabel(e)+' · '+info.label+' · '+e.calendar+(e.busy?'':' · Libero')+(e.eventType==='birthday'?' · Compleanno annuale':e.calendarWritable===false?' · Sola lettura':'');
+    const icon=document.createElement('span');icon.className='rp-day-icon';if(e.eventType==='birthday')icon.textContent='🎂';else renderCategoryIcon(icon,e.category,info);
     body.append(title,meta);card.append(date,body,icon);
     // Gli impegni modificabili scorrono a destra scoprendo il cestino rosso a sinistra.
     // Il cestino richiede sempre un secondo tocco con conferma esplicita.
     const row=document.createElement('div');row.className='rp-swipe-row';
     const canDelete=e.calendarWritable===true&&Boolean(e.calendarId)&&Boolean(e.id);
-    row.setAttribute('aria-label',canDelete?e.title+'; scorri verso destra per mostrare il cestino rosso a sinistra':e.title+'; calendario in sola lettura');
+    row.setAttribute('aria-label',canDelete?e.title+'; scorri verso destra per mostrare il cestino rosso a sinistra':e.eventType==='birthday'?e.title+'; compleanno annuale, tocca per aprire il dettaglio':e.title+'; eliminazione non disponibile');
     let blockClick=false;
     card.addEventListener('click',event=>{if(blockClick){blockClick=false;event.preventDefault();return;}if(row.classList.contains('rp-swipe-revealed')){row.classList.remove('rp-swipe-revealed');event.preventDefault();return;}openAgendaDetail(e);});
     if(canDelete){
@@ -556,17 +556,24 @@
   const back=document.createElement('button');back.type='button';back.className='rp-detail-back';back.textContent='← Torna al calendario';back.addEventListener('click',()=>show('calendar'));detail.appendChild(back);
   const h=document.createElement('h2');h.className='rp-detail-title';
   if(e.category==='expense'){const symbol=document.createElement('span');symbol.className='rp-detail-money-icon';renderCategoryIcon(symbol,e.category,info);h.append(symbol,document.createTextNode(' '+(e.title||'Impegno')));}
-  else h.textContent=info.icon+' '+(e.title||'Impegno');detail.appendChild(h);
+  else h.textContent=(e.eventType==='birthday'?'🎂':info.icon)+' '+(e.title||'Impegno');detail.appendChild(h);
   const meta=document.createElement('p');meta.className='rp-detail-meta';meta.textContent=[e.startLocal?.slice(0,10),eventTimeLabel(e),info.label,e.calendar,e.busy?'Occupato':'Libero'].filter(Boolean).join(' · ');detail.appendChild(meta);
   const section=document.createElement('h3');section.textContent='Dettaglio impegno';detail.appendChild(section);
   const block=document.createElement('div');block.className='rp-step';
-  const badge=document.createElement('span');badge.className='rp-step-num';renderCategoryIcon(badge,e.category,info);
+  const badge=document.createElement('span');badge.className='rp-step-num';if(e.eventType==='birthday')badge.textContent='🎂';else renderCategoryIcon(badge,e.category,info);
   const body=document.createElement('div');
   const strong=document.createElement('strong');strong.textContent=info.label;
   const p=document.createElement('p');p.textContent=e.description?e.description:'Nessuna nota aggiunta per questo impegno.';
   body.append(strong,p);block.append(badge,body);detail.appendChild(block);
-  const note=document.createElement('p');note.className='rp-detail-note';note.textContent='Questo impegno viene considerato dal Coach quando incastra i nuovi allenamenti negli spazi liberi.';detail.appendChild(note);
-  if(e.calendarWritable===true&&e.calendarId&&e.id){
+  const note=document.createElement('p');note.className='rp-detail-note';note.textContent=e.eventType==='birthday'?'Questo è un compleanno annuale di Google Calendar. Per modificarlo o eliminarlo, aprilo in Google Calendar: il cestino della singola ricorrenza non è disponibile in Runner Pulse.':'Questo impegno viene considerato dal Coach quando incastra i nuovi allenamenti negli spazi liberi.';detail.appendChild(note);
+  if(e.eventType==='birthday'){
+   const open=document.createElement('a');open.className='rp-detail-calendar-link';
+   const date=e.startLocal?.slice(0,10)||'';
+   open.href=e.eventUrl||('https://calendar.google.com/calendar/u/0/r/day/'+date.replace(/-/g,'/'));
+   open.target='_blank';open.rel='noopener noreferrer';open.textContent='Apri in Google Calendar';
+   detail.appendChild(open);
+  }
+  if(e.calendarWritable===true&&e.calendarId&&e.id&&e.eventType!=='birthday'){
    const del=document.createElement('button');del.type='button';del.className='rp-detail-delete-event';del.textContent='🗑 Elimina impegno';
    del.addEventListener('click',async()=>{del.disabled=true;try{const ok=await window.runnerPulseDeleteCalendarCommitment(e);if(ok)show('calendar');}catch(error){alert(error.message||'Eliminazione non riuscita.');}finally{del.disabled=false;}});
    detail.appendChild(del);
