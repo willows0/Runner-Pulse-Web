@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/runner-pulse-icon-192.png?v=20261109b">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/login.css">
-  <link rel="stylesheet" href="/orange.css?v=honor-salute-20261119-v1">
+  <link rel="stylesheet" href="/orange.css?v=calendar-race-20261120-v1">
   <style>
     /* Intestazione definitiva: prevale anche su CSS memorizzati dal browser. */
     body > header.rp-global-banner { display:flex !important; position:relative !important; top:auto !important; width:100% !important; min-height:0 !important; height:auto !important; margin:0 !important; padding:19px 16px 24px !important; align-items:center !important; justify-content:center !important; background:linear-gradient(120deg,#0d1b32,#182b4a) !important; border:0 !important; border-bottom:6px solid #ff7900 !important; border-radius:0 0 45% 9% !important; box-shadow:none !important; color:#fff !important; }
@@ -158,7 +158,7 @@
   <p class="rp-commitment-note">Controlla i dettagli prima di aggiungere l’evento al tuo Google Calendar. I tuoi appuntamenti saranno considerati dal Coach.</p>
   <form id="rp-commitment-form" class="rp-commitment-form">
    <label>Titolo<input name="title" type="text" maxlength="120" placeholder="Es. Visita dal dentista" required></label>
-   <label>Tipo<select name="category"><option value="work">Lavoro</option><option value="sport">Sport</option><option value="other" selected>Altro impegno</option></select></label>
+   <label>Tipo<select name="category"><option value="work">Lavoro</option><option value="sport">Sport</option><option value="race">Gara</option><option value="other" selected>Altro impegno</option></select></label>
    <label>Data<input name="date" type="date" required></label>
    <label class="rp-commitment-allday"><input name="allDay" type="checkbox"> Tutto il giorno</label>
    <div class="rp-commitment-times"><label>Dalle<input name="startTime" type="time" required></label><label>Alle<input name="endTime" type="time" required></label></div>
@@ -253,8 +253,8 @@
     card.append(heading,detail,retry);gate.replaceChildren(card);document.body.append(gate);
   }
 </script>
-  <script type="module" src="/plan-manager.js?v=plan-no-proposal-20261119"></script>
-  <script type="module" src="/google-calendar.js?v=calendar-agenda-20261120-v2"></script>
+  <script type="module" src="/plan-manager.js?v=calendar-plan-delete-20261120-v1"></script>
+  <script type="module" src="/google-calendar.js?v=calendar-race-20261120-v1"></script>
   <script type="module" src="/coach-memory.js?v=coach-plan-20261119"></script>
   <script>window.RUNNER_PULSE_VAPID_KEY = "BImx7Smy2xK7i2J_o5bCvC2Q4pzx8I0nIYQQCy93mYCRmo2vl7fE08sc-phyPvEiHs_Q33PIkJfNJDjJamP2ojk"; /* Inserire la chiave Web Push pubblica Firebase */</script>
   <script type="module" src="/weekly-push.js"></script>
@@ -316,6 +316,7 @@
  function eventCategoryInfo(category){
   if(category==='work')return {label:'Lavoro',icon:'💼',className:'rp-event-work'};
   if(category==='sport')return {label:'Sport',icon:'🏅',className:'rp-event-sport'};
+  if(category==='race')return {label:'Gara',icon:'🏆',className:'rp-event-race'};
   return {label:'Altro impegno',icon:'📌',className:'rp-event-other'};
  }
  function eventTimeLabel(e){return e.allDay?'Tutto il giorno':e.startLocal.slice(11,16)+'–'+e.endLocal.slice(11,16);}
@@ -340,7 +341,7 @@
  function render(){sessions=getSessions();calendar.replaceChildren();overview.replaceChildren();
   const agenda=window.rpCalendarAgenda,events=Array.isArray(agenda?.events)?agenda.events.filter(e=>!e.runnerPulse):[];
   const legend=document.createElement('p');legend.className='rp-agenda-legend';
-  legend.textContent=agenda?'Arancione: allenamenti · Blu: lavoro · Verde: sport · Viola: altri impegni'+(agenda.limitedToPrimary?' (solo calendario principale)':''):'Collega Google Calendar nella scheda Obiettivo per mostrare gli impegni.';
+  legend.textContent=agenda?'Arancione: gare e allenamenti · Blu: lavoro · Verde: sport · Viola: altri impegni'+(agenda.limitedToPrimary?' (solo calendario principale)':''):'Collega Google Calendar nella scheda Obiettivo per mostrare gli impegni.';
   calendar.appendChild(legend);
   const addButton=document.createElement('button');addButton.type='button';addButton.className='rp-calendar-add-btn';addButton.textContent='+ Nuovo impegno';addButton.addEventListener('click',()=>{if(window.runnerPulseOpenCommitment)window.runnerPulseOpenCommitment();else alert('Collegamento Calendar non ancora pronto.');});calendar.appendChild(addButton);
   const sorted=sessions.map((s,i)=>({s,i})).sort((a,b)=>(a.s.date+a.s.time).localeCompare(b.s.date+b.s.time));

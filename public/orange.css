@@ -614,6 +614,11 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #plan .rp-agenda-event.rp-event-sport .rp-day-date,#plan .rp-agenda-event.rp-event-sport .rp-day-icon{color:#d7ffee!important;}
 #plan .rp-agenda-event.rp-event-other{background:#5a4372!important;border:1px solid #cfb0ec!important;}
 #plan .rp-agenda-event.rp-event-other .rp-day-date,#plan .rp-agenda-event.rp-event-other .rp-day-icon{color:#f3e6ff!important;}
+/* Gare da Google Calendar: arancione e coppa, anche contro gli stili storici. */
+#plan .rp-agenda-event.rp-event-race,
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-race{background:#d96808!important;border-color:#ffb45e!important;color:#fff!important;}
+#plan .rp-agenda-event.rp-event-race .rp-day-date,
+#plan .rp-agenda-event.rp-event-race .rp-day-icon{color:#fff4c9!important;}
 #plan .rp-agenda-conflict{display:block;color:#ffd89d!important;font-weight:800;margin-top:4px;}
 
 /* Inserimento impegno personale - mobile first, schermata conferma obbligatoria */

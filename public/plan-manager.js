@@ -176,17 +176,19 @@ function openCoach(){window.rpCoachEditingPlan=true;document.querySelector('nav 
 edit.addEventListener('click',openCoach);
 window.runnerPulseDeletePlan=async()=>{
  if(noAccount()||state.busy)return false;
- if(!window.confirm('Eliminare il piano e tutte le bozze salvate in questo account? Gli allenamenti resteranno disponibili.'))return false;
- state.busy=true;render();msg('Eliminazione del programma dal database…');
+ if(!window.confirm('Eliminare il piano e tutte le bozze? Verranno rimossi anche gli allenamenti del Piano sincronizzati su Google Calendar. Gare, impegni personali e attività registrate resteranno intatti.'))return false;
+ state.busy=true;render();msg('Eliminazione delle sedute del Piano da Google Calendar, poi del programma…');
  try{
   await draftWrites.catch(()=>{});
   // Il server cancella entrambe le voci (programma e bozza) in un'unica transazione.
-  await api('DELETE',{expectedRevision:state.revision});
+  const deleted=await api('DELETE',{expectedRevision:state.revision});
   const uid=state.uid;state.approved=[];state.draft=[];state.revision=0;state.draftRevision=0;state.draftPending=false;state.approvedLocalOnly=false;
   remove(approvedKey(uid));remove(draftKey(uid));remove(pendingApprovalKey(uid));remove(legacyKey);
-  publish();msg('Piano e bozze eliminati da Firestore. Gli allenamenti non sono stati eliminati.');
+  publish();
+  if(window.runnerPulseReloadCalendarStatus)void window.runnerPulseReloadCalendarStatus().catch(()=>{});
+  msg('Piano eliminato; '+(deleted.calendarDeleted??0)+' allenamenti del Piano rimossi da Google Calendar. Gare e appuntamenti personali conservati.');
   return true;
- }catch(err){msg('Eliminazione non riuscita: '+err.message);throw err;}
+ }catch(err){msg('Eliminazione non completata: '+err.message+' Il piano resta salvato. Riprova dopo aver controllato Google Calendar.');throw err;}
  finally{state.busy=false;render();}
 };
 erase.addEventListener('click',()=>{window.runnerPulseDeletePlan().catch(()=>{});});
