@@ -38,7 +38,13 @@ async function authUser(req){
 async function bodyJson(req){let size=0,chunks=[];for await(const chunk of req){size+=chunk.length;if(size>4000)throw Object.assign(Error('Richiesta troppo lunga'),{status:413});chunks.push(chunk);}return chunks.length?JSON.parse(Buffer.concat(chunks).toString('utf8')):{};}
 async function exchangeToken(fields){
  const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(fields),signal:AbortSignal.timeout(15000)});
- if(!response.ok)throw Object.assign(Error('Google OAuth ha rifiutato l’autorizzazione'),{status:502});
+ if(!response.ok){
+  const body=await response.json().catch(()=>({}));
+  const oauthCode=['invalid_client','invalid_grant'].includes(body?.error)?body.error:'exchange_failed';
+  // Non registrare mai client_secret, authorization code o risposta integrale.
+  console.warn('Google OAuth token exchange rejected:',response.status,oauthCode);
+  throw Object.assign(Error('Google OAuth ha rifiutato l’autorizzazione'),{status:502,oauthCode});
+ }
  return response.json();
 }
 async function accessToken(uid){
@@ -154,37 +160,54 @@ export async function handleGoogleCalendarRoute(req,res,pathname){
    if(req.method!=='GET')return reply(res,405,{success:false});
    const url=new URL(req.url,'https://runner-pulse-web.onrender.com');
    const state=url.searchParams.get('state')||'',code=url.searchParams.get('code')||'';
-   if(!/^[a-f0-9]{64}$/.test(state))return redirect(res,'/?calendar=failed');
-   const ref=STATES().doc(sha(state));
-   const uid=await getFirestore().runTransaction(async tx=>{
-    const snap=await tx.get(ref),data=snap.data();
-    if(!data||data.expiresAt<Date.now())return null;
-    tx.delete(ref);return data.uid;
-   });
-   if(!uid||!code||url.searchParams.has('error'))return redirect(res,'/?calendar=failed');
+   const back=(reason)=>redirect(res,'/?calendar='+encodeURIComponent(reason));
+   if(!/^[a-f0-9]{64}$/.test(state))return back('invalid_state');
+   let uid=null;
+   try{
+    const ref=STATES().doc(sha(state));
+    uid=await getFirestore().runTransaction(async tx=>{
+     const snap=await tx.get(ref),data=snap.data();
+     if(!data||data.expiresAt<Date.now())return null;
+     tx.delete(ref);return data.uid;
+    });
+   }catch(error){console.warn('Calendar OAuth state:',error.message);return back('state_storage');}
+   if(!uid)return back('expired_state');
+   const fail=async(reason)=>{
+    // Persistiamo solo un codice diagnostico, non code OAuth, token o credenziali.
+    try{await userDoc(uid).set({lastOAuthError:reason,lastOAuthErrorAt:Date.now()},{merge:true});}
+    catch(error){console.warn('Calendar OAuth diagnostic:',error.message);}
+    return back(reason);
+   };
+   if(url.searchParams.has('error'))return fail('consent_denied');
+   if(!code)return fail('missing_code');
    try{
     const tok=await exchangeToken({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,code,grant_type:'authorization_code',redirect_uri:REDIRECT_URI});
-    if(!tok.access_token)return redirect(res,'/?calendar=failed');
+    if(!tok.access_token)return fail('token_missing');
     const doc=userDoc(uid),prior=(await doc.get()).data()||{};
     const old=prior.token?decrypt(prior.token):{};
-    if(!tok.refresh_token&&!old.refresh_token)return redirect(res,'/?calendar=missing_refresh');
+    if(!tok.refresh_token&&!old.refresh_token)return fail('missing_refresh');
     const stored={...old,...tok,refresh_token:tok.refresh_token||old.refresh_token,expiresAt:Date.now()+((Number(tok.expires_in)||3600)*1000)};
-    await doc.set({token:encrypt(stored),connectedAt:Date.now(),tokenUpdatedAt:Date.now()},{merge:true});
-    return redirect(res,'/?calendar=connected');
-   }catch(error){console.warn('Calendar OAuth callback:',error.message);return redirect(res,'/?calendar=failed');}
+    await doc.set({token:encrypt(stored),connectedAt:Date.now(),tokenUpdatedAt:Date.now(),lastOAuthError:null,lastOAuthErrorAt:null},{merge:true});
+    return back('connected');
+   }catch(error){
+    // Token errato o client secret non corrispondente: si verifica solo al callback.
+    console.warn('Calendar OAuth callback:',error.message);
+    return fail(error.oauthCode==='invalid_client'?'invalid_client':error.oauthCode==='invalid_grant'?'invalid_grant':'callback_error');
+   }
   }
   const user=await authUser(req);
   if(!user)return reply(res,401,{success:false,message:'Accedi con Google per collegare il calendario.'});
   if(pathname==='/api/calendar/status'){
    if(req.method!=='GET')return reply(res,405,{success:false});
    const data=configured?(await userDoc(user.uid).get()).data()||{}:{};
-   return reply(res,200,{success:true,configured,connected:configured&&Boolean(data.token),lastSyncedRevision:data.lastSyncedRevision??null,lastSyncedAt:data.lastSyncedAt??null,count:Object.keys(data.syncedEvents||{}).length});
+   return reply(res,200,{success:true,configured,connected:configured&&Boolean(data.token),oauthError:!data.token&&Number(data.lastOAuthErrorAt)>Date.now()-30*60*1000?data.lastOAuthError:null,lastSyncedRevision:data.lastSyncedRevision??null,lastSyncedAt:data.lastSyncedAt??null,count:Object.keys(data.syncedEvents||{}).length});
   }
   if(!configured)return reply(res,503,{success:false,message:'Google Calendar non ancora configurato su Render. Aggiungi le credenziali OAuth e abilita Calendar API.'});
   if(pathname==='/api/calendar/connect'){
    if(req.method!=='POST')return reply(res,405,{success:false});
    const state=randomBytes(32).toString('hex');
    await STATES().doc(sha(state)).create({uid:user.uid,createdAt:Date.now(),expiresAt:Date.now()+10*60*1000});
+   await userDoc(user.uid).set({lastOAuthError:null,lastOAuthErrorAt:null},{merge:true});
    const url=new URL('https://accounts.google.com/o/oauth2/v2/auth');
    for(const [k,v] of Object.entries({client_id:CLIENT_ID,redirect_uri:REDIRECT_URI,response_type:'code',scope:SCOPE,access_type:'offline',prompt:'consent',state}))url.searchParams.set(k,v);
    return reply(res,200,{success:true,authorizationUrl:url.toString()});
