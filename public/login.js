@@ -766,13 +766,26 @@ document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
    xhr.onabort=()=>reject(Error('Caricamento interrotto.'));
    xhr.onload=()=>{
     let data;try{data=JSON.parse(xhr.responseText);}catch{reject(Error('Risposta non valida dal server (HTTP '+xhr.status+').'));return;}
-    if(xhr.status<200||xhr.status>=300||!data.success){reject(Error(data.message||'Importazione non riuscita (HTTP '+xhr.status+').'));return;}
+    if(xhr.status<200||xhr.status>=300||!data.success){
+      reject(Error(data.message||'Impossibile importare le attività. Verifica che il file contenga allenamenti validi.'));
+      return;
+    }
+    // Non trasformare una risposta 0/0 del server in un successo apparente.
+    if(!Number.isSafeInteger(data.imported)||!Number.isSafeInteger(data.duplicates)||data.imported+data.duplicates===0){
+      reject(Error('Il server non ha confermato alcuna attività importata o già presente. Riprova.'));
+      return;
+    }
     resolve(data);
    };
    xhr.send(file);
   });
   bar.value=100;label.textContent='Importazione completata';percent.textContent='100%';note.textContent='';
-  status.textContent=`${result.imported} importati · ${result.duplicates} già presenti`;
+  const failed=Number(result.failed)||0;
+  status.textContent=`${result.imported} importati · ${result.duplicates} già presenti${failed?' · '+failed+' non importati':''}`;
+  if(failed && result.errors?.length){
+    // Prima indicazione utile, non un dettaglio tecnico del database.
+    note.textContent='Alcuni file non sono stati importati: '+String(result.errors[0]).slice(0,220);
+  }
   window.rpActivatePage?.('activities');
   window.rpShowActivityTab?.('list');
   await loadGarminArchive();
