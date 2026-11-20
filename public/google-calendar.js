@@ -6,7 +6,29 @@ const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(
 const auth=getAuth(app),$=id=>document.getElementById(id);
 const connect=$('rp-calendar-connect'),sync=$('rp-calendar-sync'),disconnect=$('rp-calendar-disconnect'),status=$('rp-calendar-status');
 if(connect&&sync&&disconnect&&status){
- let current=null,busy=false;
+ let current=null,busy=false,loading=false,loadedAt=0;
+ const query=new URLSearchParams(window.location.search);
+ const result=query.get('calendar');
+ // Quando il callback ritorna dall'OAuth, conserviamo il risultato in memoria.
+ // Il precedente codice lo nascondeva al primo refresh dello stato Firebase.
+ if(result){
+  const clean=new URL(window.location.href);
+  clean.searchParams.delete('calendar');
+  window.history.replaceState({},'',clean.pathname+clean.search+clean.hash);
+ }
+ const callbackErrors={
+  invalid_state:'Il ritorno da Google non contiene un codice di verifica valido. Riprova dal pulsante Collega.',
+  expired_state:'L’autorizzazione è scaduta o è stata già utilizzata. Premi nuovamente Collega.',
+  state_storage:'Il server non ha potuto recuperare la richiesta di collegamento. Controlla Firestore e i log Render.',
+  consent_denied:'Il permesso Google Calendar non è stato concesso. Riprova e premi Continua.',
+  missing_code:'Google non ha restituito il codice di autorizzazione. Riprova in Chrome.',
+  missing_refresh:'Google non ha fornito il permesso persistente. Riprova il collegamento e concedi l’accesso.',
+  invalid_client:'Google ha rifiutato il client OAuth. Controlla Client ID e Client secret attivo su Render.',
+  invalid_grant:'Google ha rifiutato il codice OAuth. Controlla l’URI di reindirizzamento e riprova.',
+  callback_error:'Il server non ha completato il collegamento. Controlla i log di Render (Calendar OAuth callback).',
+  token_missing:'Google non ha restituito un token utilizzabile. Riprova.',
+  failed:'Collegamento non completato. Controlla i log di Render.'
+ };
  function msg(value){status.textContent=value;}
  function paint(){
   const signed=Boolean(auth.currentUser),linked=Boolean(current?.connected),ready=Boolean(current?.configured);
@@ -24,22 +46,27 @@ if(connect&&sync&&disconnect&&status){
   return payload;
  }
  async function load(){
+  if(loading)return;
   if(!auth.currentUser){current=null;msg('Accedi con Google per collegare Calendar.');paint();return;}
+  loading=true;
   try{
    current=await call('status');
-   if(!current.configured)msg('Collegamento non ancora configurato su Render: servono le credenziali OAuth di Google Calendar.');
-   else if(current.connected)msg('Google Calendar collegato. '+(current.lastSyncedAt?'Ultima sincronizzazione: '+new Date(current.lastSyncedAt).toLocaleString('it-IT')+'. ':'')+'Eventi collegati: '+current.count+'.');
-   else msg('Non collegato. Premi «Collega Google Calendar» per autorizzare l’accesso.');
+   if(!current.configured)msg('Collegamento non ancora configurato su Render: servono le credenziali OAuth.');
+   else if(current.connected){
+    msg('Google Calendar collegato. '+(current.lastSyncedAt?'Ultima sincronizzazione: '+new Date(current.lastSyncedAt).toLocaleString('it-IT')+'. ':'')+'Eventi collegati: '+current.count+'.');
+   }else{
+    const reason=current.oauthError||((result&&result!=='connected')?result:null);
+    if(reason)msg(callbackErrors[reason]||callbackErrors.failed);
+    else if(result==='connected')msg('Google ha ricevuto il consenso, ma questo account Runner Pulse non risulta collegato. Assicurati di usare lo stesso account Google, poi riprova.');
+    else msg('Non collegato. Premi «Collega Google Calendar» per autorizzare l’accesso.');
+   }
   }catch(e){msg(e.message);current=null;}
-  paint();
+  finally{loadedAt=Date.now();loading=false;paint();}
  }
  connect.addEventListener('click',async()=>{
   busy=true;paint();msg('Richiesta autorizzazione Google in corso…');
-  try{const data=await call('connect','POST');
-   // Google impedisce OAuth nei browser integrati di alcune app Android.
-   // Per il primo collegamento aprire Runner Pulse in Chrome se necessario.
-   window.location.assign(data.authorizationUrl);
-  }catch(e){msg(e.message);busy=false;paint();}
+  try{const data=await call('connect','POST');window.location.assign(data.authorizationUrl);}
+  catch(e){msg(e.message);busy=false;paint();}
  });
  sync.addEventListener('click',async()=>{
   if(!current?.connected)return;
@@ -62,13 +89,16 @@ if(connect&&sync&&disconnect&&status){
   catch(e){msg(e.message);}finally{busy=false;paint();}
  });
  onAuthStateChanged(auth,()=>{current=null;void load();});
- const query=new URLSearchParams(window.location.search),result=query.get('calendar');
- if(result){
-  const updated=new URL(window.location.href);updated.searchParams.delete('calendar');window.history.replaceState({},'',updated.pathname+updated.search+updated.hash);
-  window.addEventListener('load',()=>{
-   if(result!=='connected')msg(result==='missing_refresh'?'Google non ha fornito il permesso persistente. Riprova il collegamento.':'Collegamento non completato. Riprova.');
-   else void load();
-  });
+ // Se OAuth si apre in Chrome o una Custom Tab e l'utente torna all'app,
+ // aggiornare lo stato senza richiedere chiusura/riavvio dell'APK.
+ function reloadAfterOAuth(){
+  if(document.visibilityState==='hidden')return;
+  busy=false;
+  paint();
+  if(Date.now()-loadedAt>1200)void load();
  }
+ window.addEventListener('pageshow',reloadAfterOAuth);
+ window.addEventListener('focus',reloadAfterOAuth);
+ document.addEventListener('visibilitychange',reloadAfterOAuth);
  window.addEventListener('rp-plan-updated',()=>{if(!busy&&current?.connected){/* Le modifiche al piano richiedono Sync esplicito. */}});
 }
