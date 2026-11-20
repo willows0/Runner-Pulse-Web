@@ -154,6 +154,30 @@ if(connect&&sync&&disconnect&&status){
   }catch(error){feedback.textContent='Non salvato: '+error.message+' Puoi correggere e riprovare.';}
   finally{modalBusy=false;save.disabled=false;cancel.disabled=false;}
  });
+ // Elimina un evento selezionato dall'utente: mai sul solo gesto.
+ // La richiesta usa il calendario originale e il server ricontrolla i permessi.
+ let deletingEvent=false;
+ window.runnerPulseDeleteCalendarCommitment=async(event)=>{
+  if(deletingEvent)return false;
+  if(!current?.connected)throw Error('Collega prima Google Calendar.');
+  if(!event?.id||!event?.calendarId||event.calendarWritable!==true)
+   throw Error('Questo impegno non può essere eliminato da Runner Pulse.');
+  const when=event.allDay?'tutto il giorno':event.startLocal?.slice(11,16)||'';
+  if(!window.confirm(`Eliminare da Google Calendar “${event.title}” (${event.startLocal?.slice(0,10)||''}, ${when})?\n\nL’eliminazione riguarda questo evento${event.allDay?'':' o questa occorrenza'} e non il piano di allenamento.`))return false;
+  deletingEvent=true;
+  if(agendaStatus)agendaStatus.textContent='Eliminazione impegno da Google Calendar…';
+  try{
+   const result=await call('delete-event','POST',{eventId:event.id,calendarId:event.calendarId});
+   msg('Impegno eliminato da Google Calendar.');
+   try{await refreshAgenda({force:true});}catch(error){
+    if(agendaStatus)agendaStatus.textContent='Impegno eliminato, ma la lista non si è aggiornata: '+error.message;
+   }
+   return Boolean(result.deleted);
+  }catch(error){
+   if(agendaStatus)agendaStatus.textContent='Impegno non eliminato: '+error.message;
+   throw error;
+  }finally{deletingEvent=false;}
+ };
  // La generazione del piano forza sempre una lettura recente degli impegni.
  // Non si salva una bozza fingendo che Google Calendar sia vuoto.
  window.runnerPulseGetCalendarAgenda=refreshAgenda;

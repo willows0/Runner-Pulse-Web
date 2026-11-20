@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/runner-pulse-icon-192.png?v=20261109b">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/login.css">
-  <link rel="stylesheet" href="/orange.css?v=coach-white-voice-20261120">
+  <link rel="stylesheet" href="/orange.css?v=calendar-swiper-20261120">
   <style>
     /* Intestazione definitiva: prevale anche su CSS memorizzati dal browser. */
     body > header.rp-global-banner { display:flex !important; position:relative !important; top:auto !important; width:100% !important; min-height:0 !important; height:auto !important; margin:0 !important; padding:19px 16px 24px !important; align-items:center !important; justify-content:center !important; background:linear-gradient(120deg,#0d1b32,#182b4a) !important; border:0 !important; border-bottom:6px solid #ff7900 !important; border-radius:0 0 45% 9% !important; box-shadow:none !important; color:#fff !important; }
@@ -279,7 +279,7 @@
   }
 </script>
   <script type="module" src="/plan-manager.js?v=calendar-plan-delete-20261120-v1"></script>
-  <script type="module" src="/google-calendar.js?v=calendar-auto-20261120-v3"></script>
+  <script type="module" src="/google-calendar.js?v=calendar-swiper-20261120"></script>
   <script type="module" src="/coach-memory.js?v=coach-composer-20261120"></script>
   <script>window.RUNNER_PULSE_VAPID_KEY = "BImx7Smy2xK7i2J_o5bCvC2Q4pzx8I0nIYQQCy93mYCRmo2vl7fE08sc-phyPvEiHs_Q33PIkJfNJDjJamP2ojk"; /* Inserire la chiave Web Push pubblica Firebase */</script>
   <script type="module" src="/weekly-push.js"></script>
@@ -365,11 +365,39 @@
   const icon=document.createElement('span');icon.className='rp-day-icon';icon.textContent=/riposo/i.test(session.title||'')?'☾':'🏃';
   b.append(date,main,icon);b.addEventListener('click',()=>openDetail(session,index));return b;
  }
+ function attachSwipeDelete(card,row,onGesture){
+  let pressTimer=null,active=false,originX=0,originY=0,dx=0,pointer=null;
+  function stop(){if(pressTimer!==null)clearTimeout(pressTimer);pressTimer=null;active=false;dx=0;pointer=null;card.style.removeProperty('transform');row.classList.remove('rp-swipe-arming','rp-swipe-ready');}
+  card.style.touchAction='pan-y';
+  card.addEventListener('pointerdown',event=>{
+   if(event.button!==0||row.classList.contains('rp-swipe-revealed'))return;
+   stop();pointer=event.pointerId;originX=event.clientX;originY=event.clientY;
+   try{card.setPointerCapture(event.pointerId);}catch{}
+   pressTimer=setTimeout(()=>{pressTimer=null;active=true;row.classList.add('rp-swipe-arming');},360);
+  });
+  card.addEventListener('pointermove',event=>{
+   if(pointer!==event.pointerId)return;
+   const movedX=event.clientX-originX,movedY=event.clientY-originY;
+   if(!active){if(Math.abs(movedX)>13||Math.abs(movedY)>13)stop();return;}
+   if(Math.abs(movedY)>Math.abs(movedX)+14){stop();return;}
+   dx=Math.max(0,movedX);
+   if(dx>0)card.style.transform='translateX('+Math.min(dx/5,24)+'px)';
+   row.classList.toggle('rp-swipe-ready',dx>=62);
+  });
+  card.addEventListener('pointerup',event=>{
+   if(pointer!==event.pointerId)return;
+   const revealed=active&&dx>=62;
+   if(revealed){
+    document.querySelectorAll('.rp-swipe-row.rp-swipe-revealed').forEach(other=>other!==row&&other.classList.remove('rp-swipe-revealed'));
+    row.classList.add('rp-swipe-revealed');onGesture();
+   }
+   row.classList.remove('rp-swipe-ready');stop();
+  });
+  card.addEventListener('pointercancel',stop);
+  // La pressione prolungata da sola non elimina nulla: serve lo swipe.
+ }
  function render(){sessions=getSessions();calendar.replaceChildren();overview.replaceChildren();
   const agenda=window.rpCalendarAgenda,events=Array.isArray(agenda?.events)?agenda.events.filter(e=>!e.runnerPulse):[];
-  const legend=document.createElement('p');legend.className='rp-agenda-legend';
-  legend.textContent=agenda?'Arancione: gare e allenamenti · Blu: lavoro · Verde: sport · Giallo: scuola · Turchese: salute · Viola: altri impegni'+(agenda.limitedToPrimary?' (solo calendario principale)':''):'Collega Google Calendar nella scheda Obiettivo per mostrare gli impegni.';
-  calendar.appendChild(legend);
   const addButton=document.createElement('button');addButton.type='button';addButton.className='rp-calendar-add-btn';addButton.textContent='+ Nuovo impegno';addButton.addEventListener('click',()=>{if(window.runnerPulseOpenCommitment)window.runnerPulseOpenCommitment();else alert('Collegamento Calendar non ancora pronto.');});calendar.appendChild(addButton);
   const sorted=sessions.map((s,i)=>({s,i})).sort((a,b)=>(a.s.date+a.s.time).localeCompare(b.s.date+b.s.time));
   const entries=sorted.map(({s,i})=>({date:s.date,time:s.time,kind:'training',s,i}));
@@ -402,7 +430,25 @@
     const title=document.createElement('strong');title.textContent=e.title;
     const meta=document.createElement('small');meta.textContent=eventTimeLabel(e)+' · '+info.label+' · '+e.calendar+(e.busy?'':' · Libero');
     const icon=document.createElement('span');icon.className='rp-day-icon';icon.textContent=info.icon;
-    body.append(title,meta);card.append(date,body,icon);card.addEventListener('click',()=>openAgendaDetail(e));calendar.appendChild(card);
+    body.append(title,meta);card.append(date,body,icon);
+    // Gli impegni modificabili si possono tenere premuti e trascinare a destra.
+    // Il cestino richiede sempre un secondo tocco con conferma esplicita.
+    const row=document.createElement('div');row.className='rp-swipe-row';
+    row.setAttribute('aria-label',e.title+'; tieni premuto e trascina verso destra per eliminare');
+    const canDelete=e.calendarWritable===true&&Boolean(e.calendarId)&&Boolean(e.id);
+    let blockClick=false;
+    card.addEventListener('click',event=>{if(blockClick){event.preventDefault();return;}openAgendaDetail(e);});
+    if(canDelete){
+     const trash=document.createElement('button');trash.type='button';trash.className='rp-swipe-delete';trash.setAttribute('aria-label','Elimina '+e.title);
+     trash.textContent='🗑';trash.title='Elimina questo impegno';
+     trash.addEventListener('click',async()=>{trash.disabled=true;
+      try{await window.runnerPulseDeleteCalendarCommitment(e);}catch(error){alert(error.message||'Eliminazione non riuscita.');}
+      finally{trash.disabled=false;}
+     });
+     attachSwipeDelete(card,row,()=>{blockClick=true;setTimeout(()=>blockClick=false,500);});
+     row.appendChild(trash);
+    }
+    row.appendChild(card);calendar.appendChild(row);
    }
   }
   if(!entries.length){const p=document.createElement('p');p.textContent=agenda?'Nessun impegno o allenamento in questo periodo.':'Gli impegni di Google Calendar non sono ancora stati caricati.';calendar.appendChild(p);}
@@ -440,6 +486,11 @@
   const p=document.createElement('p');p.textContent=e.description?e.description:'Nessuna nota aggiunta per questo impegno.';
   body.append(strong,p);block.append(badge,body);detail.appendChild(block);
   const note=document.createElement('p');note.className='rp-detail-note';note.textContent='Questo impegno viene considerato dal Coach quando incastra i nuovi allenamenti negli spazi liberi.';detail.appendChild(note);
+  if(e.calendarWritable===true&&e.calendarId&&e.id){
+   const del=document.createElement('button');del.type='button';del.className='rp-detail-delete-event';del.textContent='🗑 Elimina impegno';
+   del.addEventListener('click',async()=>{del.disabled=true;try{const ok=await window.runnerPulseDeleteCalendarCommitment(e);if(ok)show('calendar');}catch(error){alert(error.message||'Eliminazione non riuscita.');}finally{del.disabled=false;}});
+   detail.appendChild(del);
+  }
   detail.scrollIntoView({behavior:'smooth',block:'start'});
  }
  window.addEventListener('rp-calendar-agenda-updated',()=>{if(detail.hidden)render();});
