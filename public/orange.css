@@ -648,3 +648,7 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #plan button.rp-agenda-event.rp-event-health{background:#17616a!important;border:1px solid #77d7d8!important;color:#fff!important;}
 #plan button.rp-agenda-event.rp-event-school .rp-day-icon,#plan button.rp-agenda-event.rp-event-health .rp-day-icon{color:#fff!important;}
 #rp-coach-screenshot{min-width:40px;flex-shrink:0}
+
+/* Coach: input file aperto esclusivamente dall’icona fotocamera.
+   Evita che la regola globale input{display:block;width:100%} copra la chat. */
+#coach #rp-ai-form input#rp-coach-screenshot-file, #coach input#rp-coach-screenshot-file[hidden] {display:none!important;position:absolute!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important;}
