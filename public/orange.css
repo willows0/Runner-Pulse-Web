@@ -621,7 +621,7 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #plan .rp-agenda-event.rp-event-race .rp-day-icon{color:#fff4c9!important;}
 #plan .rp-agenda-conflict{display:block;color:#ffd89d!important;font-weight:800;margin-top:4px;}
 
-/* Inserimento impegno personale - mobile first, schermata conferma obbligatoria */
+/* Inserimento impegno personale - mobile first, senza ulteriore conferma dopo Salva */
 .rp-calendar-add-btn{display:block;width:100%;margin:12px 0 18px;padding:14px;border:0;border-radius:16px;background:#f4770b;color:#fff;font:inherit;font-weight:800;cursor:pointer}
 .rp-commitment-modal[hidden]{display:none!important}
 .rp-commitment-modal{position:fixed;inset:0;z-index:30000;background:rgba(6,15,29,.78);display:flex;align-items:center;justify-content:center;padding:14px}
@@ -642,3 +642,9 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 .rp-commitment-times[hidden]{display:none!important}
 
 .rp-agenda-legend{margin:0 0 12px;color:#33485f;font-size:14px;line-height:1.4}
+
+/* Calendario: nuove categorie basate su Google Calendar */
+#plan button.rp-agenda-event.rp-event-school{background:#756018!important;border:1px solid #ebce68!important;color:#fff!important;}
+#plan button.rp-agenda-event.rp-event-health{background:#17616a!important;border:1px solid #77d7d8!important;color:#fff!important;}
+#plan button.rp-agenda-event.rp-event-school .rp-day-icon,#plan button.rp-agenda-event.rp-event-health .rp-day-icon{color:#fff!important;}
+#rp-coach-screenshot{min-width:40px;flex-shrink:0}

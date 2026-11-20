@@ -11,6 +11,8 @@ if(coach){
  const quick=coach.querySelector('#rp-coach-quick');
  const suggestions=coach.querySelector('#rp-coach-suggestions');
  const mic=coach.querySelector('#rp-coach-mic');
+ const screenshot=coach.querySelector('#rp-coach-screenshot');
+ const screenshotFile=coach.querySelector('#rp-coach-screenshot-file');
  // Cancella esclusivamente i messaggi Coach dell'utente autenticato.
  const resetCoach=document.createElement('button');
  resetCoach.type='button';
@@ -43,13 +45,13 @@ if(coach){
    const deletePlan=/(?:elimin|cancell|rimuov|azzer)/.test(simplified)&&/\b(piano|programma)\b/.test(simplified)&&!/\b(?:seduta|allenamento)\s+(?:di|del|per)\s+(?:lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)/.test(simplified);
    // Le richieste esplicite di aggiunta appuntamenti vanno al modulo Calendar,
    // non al generatore di piani. La dettatura usa questo stesso percorso.
-   const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,120}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista)\b/.test(simplified);
+   const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,160}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista|turno|scuola|medico)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista|turno|lezione)\b|\b(?:lavoro|turno|scuola|lezione|visita|dentista|riunione|medico|ospedale|colloquio)\b.{0,130}\b(?:domani|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|dalle|alle|ore)\b/.test(simplified);
    if(calendarIntent){
      if(!window.runnerPulseProposeCalendarCommitment)throw Error('Collegamento con il calendario non ancora disponibile.');
      const proposal=await window.runnerPulseProposeCalendarCommitment(message);
      bubble('user',message,{scroll:false});question.value='';question.blur();
-     bubble('assistant','Ho preparato il tuo impegno “'+(proposal.title||'Nuovo impegno')+'”. Controlla i campi nel modulo e premi “Conferma e salva” per aggiungerlo a Google Calendar. Non ho ancora salvato nulla.');
-     status.textContent='Conferma l’impegno nel modulo aperto.';
+     bubble('assistant',proposal.created?'Impegno “'+proposal.title+'” '+(proposal.alreadyExists?'già presente':'salvato automaticamente')+' su Google Calendar.': 'Mancano alcuni dettagli per “'+(proposal.title||'Nuovo impegno')+'”. Completa il modulo per salvarlo.');
+     status.textContent=proposal.created?'Impegno registrato nel calendario.':'Completa i dati nel modulo.';
    }else if(deletePlan){
      bubble('user',message,{scroll:false});question.value='';question.blur();
      const row=bubble('assistant','Vuoi eliminare il piano di allenamento salvato? Le attività registrate rimarranno intatte. La cancellazione richiede la tua conferma.');
@@ -73,6 +75,22 @@ if(coach){
  question.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
  quick.addEventListener('click',()=>{suggestions.hidden=!suggestions.hidden;});
  suggestions.querySelectorAll('[data-prompt]').forEach(b=>b.addEventListener('click',()=>{question.value=b.dataset.prompt;suggestions.hidden=true;question.focus();}));
+ screenshot?.addEventListener('click',()=>screenshotFile?.click());
+ screenshotFile?.addEventListener('change',async()=>{
+  const file=screenshotFile.files?.[0];screenshotFile.value='';if(!file)return;
+  screenshot.disabled=true;status.textContent='Leggo data e orari nello screenshot…';
+  try{
+   if(!window.runnerPulseImportCalendarScreenshot)throw Error('Google Calendar non pronto. Apri Piano prima di riprovare.');
+   const result=await window.runnerPulseImportCalendarScreenshot(file);
+   const created=result.created||[],skipped=result.skipped||[];
+   const lines=[`Screenshot: ${created.filter(x=>!x.alreadyExists).length} nuovi impegni, ${created.filter(x=>x.alreadyExists).length} già presenti, ${skipped.length} non inseriti.`];
+   for(const e of created.slice(0,12))lines.push(`${e.alreadyExists?'Già presente':'Aggiunto'}: ${e.title} · ${e.date} ${e.allDay?'tutto il giorno':e.startTime+'–'+e.endTime}`);
+   if(skipped.length)lines.push('Non riconosciuti: '+skipped.slice(0,4).join(' · '));
+   bubble('assistant',lines.join('\n'));
+   status.textContent=created.length?'Screenshot elaborato: controlla gli eventi sul calendario.':'Non ho riconosciuto appuntamenti completi; nessun evento è stato creato.';
+  }catch(err){status.textContent='Screenshot non importato: '+err.message;}
+  finally{screenshot.disabled=false;}
+ });
  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(SpeechRecognition){const recognizer=new SpeechRecognition();recognizer.lang='it-IT';recognizer.interimResults=false;recognizer.addEventListener('result',e=>{const t=e.results?.[0]?.[0]?.transcript;if(t)question.value=[question.value.trim(),t].filter(Boolean).join(' ');question.focus();});recognizer.addEventListener('error',()=>{status.textContent='Dettatura non disponibile. Puoi scrivere il messaggio.';});mic.addEventListener('click',()=>{try{recognizer.start();status.textContent='Ti ascolto…';}catch{status.textContent='Dettatura non disponibile.';}});}else{mic.addEventListener('click',()=>{status.textContent='La dettatura non è supportata da questo browser. Usa il microfono della tastiera.';question.focus();});}
 }

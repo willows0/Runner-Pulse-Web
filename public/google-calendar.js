@@ -6,6 +6,7 @@ const app=getApps().find(a=>a.options.projectId==='runnerpulse')||initializeApp(
 const auth=getAuth(app),$=id=>document.getElementById(id);
 const connect=$('rp-calendar-connect'),sync=$('rp-calendar-sync'),disconnect=$('rp-calendar-disconnect'),status=$('rp-calendar-status');
 const agendaBtn=$('rp-calendar-agenda-refresh'),reauthorize=$('rp-calendar-consent-all'),agendaStatus=$('rp-calendar-agenda-status');
+const completedBtn=$('rp-calendar-completed-sync');
  const newEventBtn=$('rp-calendar-new');
 if(connect&&sync&&disconnect&&status){
  let current=null,busy=false,loading=false,loadedAt=0;
@@ -38,6 +39,7 @@ if(connect&&sync&&disconnect&&status){
   connect.hidden=linked;sync.hidden=!linked;disconnect.hidden=!linked;
   connect.disabled=busy||!signed||!ready;sync.disabled=busy||!signed;disconnect.disabled=busy||!signed;
   if(agendaBtn){agendaBtn.hidden=!linked;agendaBtn.disabled=busy||!signed;}
+  if(completedBtn){completedBtn.hidden=!linked;completedBtn.disabled=busy||!signed;}
   if(newEventBtn){newEventBtn.hidden=!linked;newEventBtn.disabled=busy||!signed;}
   if(reauthorize){reauthorize.hidden=!linked||!agenda?.limitedToPrimary;reauthorize.disabled=busy||!signed;}
  }
@@ -112,11 +114,22 @@ if(connect&&sync&&disconnect&&status){
  window.runnerPulseOpenCommitment=showModal;
  window.runnerPulseProposeCalendarCommitment=async message=>{
   if(!current?.connected)throw Error('Collega prima Google Calendar nella scheda Piano.');
-  const data=await call('interpret','POST',{message});
+  const data=await call('interpret-and-create','POST',{message});
+  if(data.created){
+   await refreshAgenda({force:true}).catch(()=>{});
+   return {created:true,...data.event,alreadyExists:data.alreadyExists};
+  }
   if(!showModal(data.proposal))throw Error('Non è stato possibile aprire il modulo.');
-  if(!data.proposal.date||(!data.proposal.allDay&&(!data.proposal.startTime||!data.proposal.endTime)))
-   feedback.textContent='Il Coach non ha trovato tutti i dettagli. Completa la data e gli orari prima della conferma.';
-  return data.proposal;
+  feedback.textContent=data.message||'Completa i dati mancanti e premi Salva.';
+  return {created:false,...data.proposal};
+ };
+ window.runnerPulseImportCalendarScreenshot=async(file)=>{
+  if(!current?.connected)throw Error('Collega prima Google Calendar nella scheda Piano.');
+  if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>2_250_000)throw Error('Usa uno screenshot JPG, PNG o WebP di massimo 2,2 MB.');
+  const imageBase64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(Error('Impossibile leggere lo screenshot.'));reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');reader.readAsDataURL(file);});
+  const data=await call('screenshot','POST',{mimeType:file.type,imageBase64});
+  await refreshAgenda({force:true}).catch(()=>{});
+  return data;
  };
  newEventBtn?.addEventListener('click',()=>showModal());
  cancel?.addEventListener('click',closeModal);
@@ -130,7 +143,7 @@ if(connect&&sync&&disconnect&&status){
     startTime:fields.startTime.value,endTime:fields.endTime.value,description:fields.description.value.trim(),requestId};
   if(!payload.title||!payload.date||(!payload.allDay&&(!payload.startTime||!payload.endTime)))return feedback.textContent='Completa titolo, tipo, data e orari.';
   if(!payload.allDay&&payload.endTime<=payload.startTime)return feedback.textContent='L’orario di fine deve essere successivo all’inizio.';
-  if(!window.confirm(`Aggiungere su Google Calendar “${payload.title}” il ${payload.date}${payload.allDay?' (tutto il giorno)':` dalle ${payload.startTime} alle ${payload.endTime}`}?`))return;
+  // Il pulsante Salva è già il consenso esplicito: nessuna seconda finestra di conferma.
   modalBusy=true;save.disabled=true;cancel.disabled=true;feedback.textContent='Salvataggio dell’impegno su Google Calendar…';
   try{
    const data=await call('commitment','POST',payload);
@@ -180,6 +193,16 @@ if(connect&&sync&&disconnect&&status){
  connect.addEventListener('click',startConnection);
  reauthorize?.addEventListener('click',startConnection);
  agendaBtn?.addEventListener('click',()=>{void refreshAgenda({force:true}).catch(()=>{});});
+ completedBtn?.addEventListener('click',async()=>{
+  if(!current?.connected||busy)return;
+  busy=true;paint();msg('Aggiorno i resoconti degli allenamenti completati…');
+  try{
+   const data=await call('completed-sync','POST');
+   msg(`Allenamenti eseguiti: ${data.created} nuovi, ${data.updated} aggiornati, ${data.unchanged} già corretti, ${data.skipped} senza dati recenti, ${data.failed} non sincronizzati.`);
+   await refreshAgenda({force:true}).catch(()=>{});
+  }catch(e){msg('Resoconti non aggiornati: '+e.message);}
+  finally{busy=false;paint();}
+ });
  sync.addEventListener('click',async()=>{
   if(!current?.connected)return;
   const approved=Array.isArray(window.rpSavedApproved)?window.rpSavedApproved:[];
