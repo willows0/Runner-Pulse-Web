@@ -1,5 +1,6 @@
 // Chat Runner Pulse: cronologia personale Firestore, nessun messaggio fittizio.
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {isSessionBusy,sessionWindow} from './calendar-slot-planner.js';
 const auth=getAuth();
 const coach=document.getElementById('coach');
 if(coach){
@@ -76,8 +77,9 @@ if(coach){
    const deletePlan=/(?:elimin|cancell|rimuov|azzer)/.test(simplified)&&/\b(piano|programma)\b/.test(simplified)&&!/\b(?:seduta|allenamento)\s+(?:di|del|per)\s+(?:lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)/.test(simplified);
    // Le richieste esplicite di aggiunta appuntamenti vanno al modulo Calendar,
    // non al generatore di piani. La dettatura usa questo stesso percorso.
-   const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,160}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista|turno|scuola|medico|spesa|spese|pagamento|pagare|bolletta|cena|pranzo|ristorante)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista|turno|lezione)\b|\b(?:lavoro|turno|scuola|lezione|visita|dentista|riunione|medico|ospedale|colloquio|pagare|affitto|bolletta|cena|pranzo|ristorante|spesa)\b.{0,130}\b(?:domani|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|dalle|alle|ore)\b/.test(simplified);
-   if(calendarIntent || pendingCalendarText){
+   const explicitPlanMove=/(?:spost|anticip|posticip|cambia|modifica)/.test(simplified)&&/\b(?:corsa|corse|correre|lungo|ripetut[ae]|allenament[oi]|sedut[ae]|piano|programma|ritmo controllato)\b/.test(simplified);
+   const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,160}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista|turno|scuola|medico|spesa|spese|pagamento|pagare|bolletta|cena|pranzo|ristorante)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista|turno|lezione)\b|\b(?:lavoro|turno|scuola|lezione|visita|dentista|riunione|medico|ospedale|colloquio|pagare|affitto|bolletta|cena|pranzo|ristorante|spesa)\b.{0,130}\b(?:domani|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|dalle|alle|ore)\b/.test(simplified)&&!explicitPlanMove;
+   if((calendarIntent&&!explicitPlanMove) || pendingCalendarText){
      if(!window.runnerPulseProposeCalendarCommitment)throw Error('Collegamento con il calendario non ancora disponibile.');
      if(pendingCalendarText&&/^(annulla|lascia perdere|non importa|cancella richiesta)[.!\s]*$/i.test(message)){
       pendingCalendarText='';bubble('user',message,{scroll:false});bubble('assistant','Va bene, non aggiungo alcun appuntamento.');question.value='';status.textContent='';
@@ -103,15 +105,84 @@ if(coach){
      button.addEventListener('click',async()=>{button.disabled=true;try{if(!window.runnerPulseDeletePlan)throw Error('Funzione Piano non disponibile.');const ok=await window.runnerPulseDeletePlan();if(ok){button.textContent='Piano eliminato ✓';window.rpCoachEditingPlan=false;status.textContent='Piano cancellato dal tuo account.';}else button.disabled=false;}catch(err){button.disabled=false;status.textContent=err.message;}});
      status.textContent='Il piano non è stato ancora eliminato.';
    }else{
-   const planIntent=Boolean(window.rpCoachEditingPlan)||(/\b(piano|programma|sedut[ae]|allenament[oi])\b/.test(simplified)&&/modific|spost|anticip|posticip|riduc|aument|cambi|sostituisc|aggiung|tog|elimin|riposo|data|orari|giorn|recuper/.test(simplified));
+   const planIntent=explicitPlanMove||Boolean(window.rpCoachEditingPlan)||(/\b(piano|programma|sedut[ae]|allenament[oi]|corsa|lungo|ripetut[ae])\b/.test(simplified)&&/modific|spost|anticip|posticip|riduc|aument|cambi|sostituisc|aggiung|tog|elimin|riposo|data|orari|giorn|recuper/.test(simplified));
    const data=await api({action:planIntent?'plan-edit':'chat',message});
    bubble('user',message,{scroll:false});question.value='';question.blur();
    if(planIntent){
-     const row=bubble('assistant',data.summary+'\n\nQuesta è una proposta. Il piano NON cambia finché non premi “Approva modifica”.');
-     const button=document.createElement('button');button.type='button';button.textContent='Approva modifica del piano';button.className='rp-plan-chat-approve';
-     row.querySelector('.rp-chat-bubble')?.appendChild(button);
-     button.addEventListener('click',async()=>{button.disabled=true;status.textContent='Salvataggio piano…';try{if(data.draft){if(!window.runnerPulseSaveDraft)throw Error('Apri Piano e riprova.');await window.runnerPulseSaveDraft(data.sessions,data.revision);button.textContent='Bozza modificata ✓';status.textContent='Bozza aggiornata. Puoi approvarla dalla scheda Piano.';}else{if(!window.runnerPulseSavePlan)throw Error('Apri Piano e riprova.');await window.runnerPulseSavePlan(data.sessions,data.revision);button.textContent='Modifica salvata ✓';status.textContent='Piano aggiornato nel tuo account Google.';}window.rpCoachEditingPlan=false;}catch(err){button.disabled=false;status.textContent='Modifica non salvata: '+err.message;}});
-     status.textContent='Verifica la proposta e premi Approva modifica se sei soddisfatto.';
+     if(data.needsClarification){
+       bubble('assistant',data.summary||'Indicami quale allenamento vuoi spostare, con data di partenza e nuova data o ora.');
+       status.textContent='Specifica la seduta e il nuovo giorno/orario.';
+     }else{
+       const changed=Array.isArray(data.changedIndices)?data.changedIndices:[];
+       const moved=changed.filter(i=>data.originalSessions?.[i]&&(data.originalSessions[i].date!==data.sessions?.[i]?.date||data.originalSessions[i].time!==data.sessions?.[i]?.time));
+       const changedLines=moved.map(i=>`${data.originalSessions[i].title}: ${data.originalSessions[i].date} ${data.originalSessions[i].time} → ${data.sessions[i].date} ${data.sessions[i].time}`);
+       const row=bubble('assistant',data.summary+(changedLines.length?'\n\n'+changedLines.join('\n'):'')+'\n\nIl piano non cambia finché non approvi.');
+       const button=document.createElement('button');button.type='button';button.textContent='Approva modifica del piano';button.className='rp-plan-chat-approve';
+       row.querySelector('.rp-chat-bubble')?.appendChild(button);
+       button.addEventListener('click',async()=>{
+         button.disabled=true;status.textContent='Verifico gli impegni e salvo il Piano…';let saved=false;
+         try{
+           if(!Array.isArray(data.sessions)||!data.sessions.length)throw Error('La proposta non contiene sedute valide.');
+           const rows=data.sessions;
+           // Una seduta non può sovrapporsi ad altre sessioni del programma.
+           for(const i of changed){
+             const s=rows[i];if(!s)throw Error('Seduta non trovata: aggiorna il Piano.');
+             const a=sessionWindow(s);
+             for(let j=0;j<rows.length;j++){
+               if(j===i)continue;
+               const b=sessionWindow(rows[j]);
+               if(a.start<b.end&&a.end>b.start)throw Error('La seduta “'+s.title+'” si sovrappone a “'+rows[j].title+'”. Scegli un altro orario.');
+             }
+           }
+           if(moved.length&&typeof window.runnerPulseCalendarConnection==='function'){
+             const linked=await window.runnerPulseCalendarConnection();
+             if(linked){
+               if(typeof window.runnerPulseGetCalendarAgenda!=='function')throw Error('Verifica Google Calendar non disponibile.');
+               const agenda=await window.runnerPulseGetCalendarAgenda({force:true});
+               if(!agenda||!Array.isArray(agenda.events))throw Error('Non sono riuscito a verificare gli impegni Google. Riprova.');
+               for(const i of moved){
+                 const s=rows[i];
+                 if(s.date<agenda.from||s.date>=agenda.to)throw Error('Il '+s.date+' è fuori dal periodo di Google Calendar verificato. Riprova con una data nei prossimi 42 giorni.');
+                 if(isSessionBusy(s,agenda.events,15))throw Error('Hai un impegno Google Calendar che si sovrappone alla seduta del '+s.date+' alle '+s.time+'. Scegli un altro orario.');
+               }
+             }
+           }
+           if(data.draft){
+             if(!window.runnerPulseSaveDraft)throw Error('Apri Piano e riprova.');
+             await window.runnerPulseSaveDraft(rows,data.revision);saved=true;
+             button.textContent='Bozza aggiornata ✓';
+             status.textContent='Bozza salvata. Apri Piano e approvala per sincronizzare Google Calendar.';
+             bubble('assistant','Bozza aggiornata. Per rendere definitivo lo spostamento premi Approva e salva nella scheda Piano.');
+           }else{
+             if(!window.runnerPulseSavePlan)throw Error('Apri Piano e riprova.');
+             await window.runnerPulseSavePlan(rows,data.revision);saved=true;
+             if(typeof window.runnerPulseCalendarConnection==='function'&&await window.runnerPulseCalendarConnection()){
+               if(!window.runnerPulseSyncPlanAfterEdit)throw Error('Funzione sincronizzazione Google Calendar non disponibile.');
+               await window.runnerPulseSyncPlanAfterEdit({ensureCreated:true});
+               button.textContent='Piano e Calendar aggiornati ✓';
+               status.textContent='Allenamento spostato nel Piano e su Google Calendar.';
+               bubble('assistant','Fatto: ho spostato la seduta nel Piano e aggiornato Google Calendar.');
+             }else{
+               button.textContent='Piano modificato ✓';
+               status.textContent='Piano aggiornato. Google Calendar non è collegato.';
+               bubble('assistant','Seduta spostata e Piano salvato. Google Calendar non è collegato.');
+             }
+           }
+           window.rpCoachEditingPlan=false;
+         }catch(err){
+           if(saved){
+             button.textContent='Piano salvato ✓';
+             status.textContent='Il Piano è stato modificato, ma Google Calendar non è aggiornato: '+err.message+' Apri Piano → Google Calendar e premi “Sincronizza piano”.';
+             bubble('assistant','Il Piano è stato salvato, ma Google Calendar non si è aggiornato: '+err.message+' Apri Piano → Google Calendar e premi “Sincronizza piano”.');
+           }else{
+             button.disabled=false;
+             status.textContent='Modifica non salvata: '+err.message;
+             bubble('assistant','Non ho spostato l’allenamento: '+err.message);
+           }
+         }
+       });
+       status.textContent='Controlla data e orario, poi premi Approva modifica.';
+     }
    } else {bubble('assistant',data.answer);status.textContent='';}
    }
  }catch(err){status.textContent=err.message;}finally{busy=false;resizeMessageBox();}});

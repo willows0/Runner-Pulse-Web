@@ -231,8 +231,8 @@ if(connect&&sync&&disconnect&&status){
  });
  // Quando si elimina una singola seduta già sincronizzata, aggiornare anche
  // Calendar. Un piano mai sincronizzato resta invece non sincronizzato.
- window.runnerPulseSyncPlanAfterEdit=async()=>{
-  if(!current?.connected||!current.count)return {skipped:true};
+ window.runnerPulseSyncPlanAfterEdit=async({ensureCreated=false}={})=>{
+  if(!current?.connected||(!current.count&&!ensureCreated))return {skipped:true};
   if(busy)throw Error('Google Calendar sta completando un’altra operazione.');
   busy=true;paint();msg('Aggiorno gli allenamenti programmati su Google Calendar…');
   try{

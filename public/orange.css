@@ -942,3 +942,7 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 /* Compleanni Google: link alla gestione della serie, non al cestino della singola data. */
 #plan .rp-detail-calendar-link{display:inline-block;margin:15px 0 12px;padding:13px 17px;border-radius:14px;background:#f4770b;color:#fff!important;text-decoration:none;font-weight:800;}
 #plan .rp-detail-calendar-link:focus-visible{outline:3px solid #17314f;outline-offset:3px;}
+
+/* Conferma ben visibile delle modifiche proposte dal Coach */
+#coach .rp-plan-chat-approve,#coach .rp-plan-chat-delete{display:block;max-width:100%;margin-top:12px;border:0;border-radius:15px;padding:11px 15px;font-size:14px;font-weight:750;background:#f4770b;color:#fff;white-space:normal;text-align:center;cursor:pointer}
+#coach .rp-plan-chat-approve:disabled,#coach .rp-plan-chat-delete:disabled{opacity:.65;cursor:default}
