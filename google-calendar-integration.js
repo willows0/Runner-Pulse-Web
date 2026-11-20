@@ -106,6 +106,22 @@ async function calendarSources(access){
  if(calendars.length>15)throw Object.assign(Error('Troppi calendari selezionati. Riduci i calendari visualizzati in Google Calendar.'),{status:409});
  return {calendars,limitedToPrimary:false};
 }
+// Le categorie sono presentazione: non devono bloccare la lettura degli appuntamenti.
+// Se Google non contiene una categoria Runner Pulse, si usa una stima dal titolo;
+// l'evento originale e i permessi non vengono mai modificati.
+function normalizeCategory(value){
+ const category=String(value||'').trim().toLowerCase();
+ return ['work','sport','other'].includes(category)?category:'other';
+}
+function inferCategory(value){
+ const text=String(value||'').toLocaleLowerCase('it-IT').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ if(/(?:lavor|uffic|riunion|meeting|call|client|turn[oi]|azienda|colloqu|conferenz|business|servizio)/.test(text))return 'work';
+ if(/(?:allenament|palestr|sport|corsa|running|run\b|nuoto|bicicl|ciclism|yoga|pilates|tennis|calcett|calcio|partita|trekking|padel|maratona|fitness)/.test(text))return 'sport';
+ return 'other';
+}
+function categoryLabel(category){
+ return category==='work'?'Lavoro':category==='sport'?'Sport':'Altro impegno';
+}
 async function calendarEvents(access,calendar,range){
  let cursor=null,pages=0;const events=[];
  do{
