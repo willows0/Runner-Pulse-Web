@@ -129,6 +129,34 @@ function inferCategory(value){
 function categoryLabel(category){
  return category==='race'?'Gara':category==='work'?'Lavoro':category==='sport'?'Sport':category==='school'?'Scuola':category==='health'?'Salute':category==='expense'?'Spese':category==='food'?'Cibo':'Altro impegno';
 }
+// Google può restituire HTTP 400 per eventi particolari o richieste non valide.
+// Non mostrare soltanto il numero: conserviamo un motivo leggibile e non
+// inviamo al browser la risposta integrale (potrebbe contenere dati privati).
+async function calendarDeleteError(response){
+ const status=Number(response.status)||502;
+ if(status!==400)return apiError(status);
+ let reason='';
+ let googleMessage='';
+ try{
+  const body=await response.json();
+  reason=String(body?.error?.errors?.[0]?.reason||body?.error?.status||'').slice(0,60);
+  googleMessage=String(body?.error?.message||'').slice(0,180);
+ }catch{}
+ const code=reason.toLowerCase();
+ let message='Google Calendar ha rifiutato l’eliminazione di questo evento (HTTP 400).';
+ if(/forbidden|permission|access/.test(code)||/permission|forbidden|access denied/i.test(googleMessage))
+  message='Google Calendar non consente di modificare questo evento. Controlla i permessi sul calendario originale.';
+ else if(/notfound|deleted/.test(code))
+  message='Google Calendar segnala che questo evento non è più disponibile. Aggiorna il calendario.';
+ else if(/invalid.+(value|id|event)|invalid value|invalid argument/i.test(googleMessage))
+  message='Google Calendar segnala che l’evento non è valido per questa operazione. Aggiorna gli impegni; se ricapita, elimina questo evento dall’app Google Calendar.';
+ else if(/invalid|badrequest|failedprecondition/.test(code)||status===400)
+  message='Questo evento non può essere eliminato con la richiesta attuale di Runner Pulse. Aprilo in Google Calendar per controllarlo.';
+ // In console soltanto il codice, senza ID, titolo o altri dettagli dell’evento.
+ console.warn('Google Calendar deletion rejected:',status,reason||'unknown');
+ return Object.assign(new Error(message),{status:502,googleStatus:status,googleReason:reason||'unknown'});
+}
+
 async function calendarEvents(access,calendar,range,ownerHash=null){
  let cursor=null,pages=0;const events=[];
  do{
@@ -153,7 +181,8 @@ async function calendarEvents(access,calendar,range,ownerHash=null){
    const explicit=normalizeCategory(item.extendedProperties?.private?.category);
    const category=detected==='race'?'race':explicit==='other'?detected:explicit;
    events.push({
-    id:String(item.id||'').slice(0,180),
+    // Non troncare gli identificativi Google: le occorrenze ricorrenti possono avere ID lunghi.
+    id:String(item.id||'').slice(0,1024),
     title,startLocal,endLocal,allDay,busy,runnerPulse,description,category,categoryLabel:categoryLabel(category),
     calendar:calendar.name,calendarId:calendar.id,
     // La voce di una corsa completata può essere eliminata dal calendario senza
@@ -172,9 +201,9 @@ async function calendarEvents(access,calendar,range,ownerHash=null){
 // L'ID non viene usato per scegliere un calendario arbitrario: il server
 // ricontrolla accessRole e il tipo di evento presso Google prima di DELETE.
 async function deleteCalendarCommitment(uid,{eventId,calendarId}={}){
- if(typeof eventId!=='string'||!eventId||eventId.length>180||/[\x00-\x1f]/.test(eventId))
+ if(typeof eventId!=='string'||!eventId||eventId.length>1024||/[\x00-\x1f]/.test(eventId))
   throw Object.assign(Error('Impegno non valido. Ricarica il calendario.'),{status:400});
- if(typeof calendarId!=='string'||!calendarId||calendarId.length>320||/[\x00-\x1f]/.test(calendarId))
+ if(typeof calendarId!=='string'||!calendarId||calendarId.length>1024||/[\x00-\x1f]/.test(calendarId))
   throw Object.assign(Error('Calendario non valido. Ricarica il calendario.'),{status:400});
  const access=await accessToken(uid);
  const {calendars}=await calendarSources(access);
@@ -184,8 +213,10 @@ async function deleteCalendarCommitment(uid,{eventId,calendarId}={}){
  const url='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calendar.id)+'/events/'+encodeURIComponent(eventId);
  const existing=await fetch(url,{headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});
  if(existing.status===404)throw Object.assign(Error('Impegno già eliminato. Aggiorna il calendario.'),{status:404});
- if(!existing.ok)throw apiError(existing.status);
+ if(!existing.ok)throw await calendarDeleteError(existing);
  const event=await existing.json();
+ // Google mantiene leggibili anche le eccezioni già cancellate.
+ if(event.status==='cancelled')return {deleted:true,alreadyDeleted:true,recurringOccurrence:Boolean(event.recurringEventId),calendarOnly:event.extendedProperties?.private?.runnerPulse==='completed-workout'};
  const marker=event.extendedProperties?.private?.runnerPulse;
  if(marker==='training-plan')
   throw Object.assign(Error('Questa seduta va eliminata dal Piano di allenamento.'),{status:409});
@@ -200,9 +231,24 @@ async function deleteCalendarCommitment(uid,{eventId,calendarId}={}){
   await suppressedRef.set({deletedAt:Date.now(),eventId,activityHash:props.activityHash});
  }
  let result;
- try{result=await fetch(url,{method:'DELETE',headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});}
- catch(error){if(suppressedRef)await suppressedRef.delete().catch(()=>{});throw error;}
- if(!result.ok&&result.status!==404){if(suppressedRef)await suppressedRef.delete().catch(()=>{});throw apiError(result.status);}
+ try{
+  result=await fetch(url,{method:'DELETE',headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});
+  // Le singole occorrenze degli impegni ripetuti possono rifiutare DELETE.
+  // In quel caso cancelliamo SOLO l'occorrenza selezionata, mai la serie.
+  if(result.status===400&&event.recurringEventId){
+   const cancelled=await fetch(url,{
+    method:'PATCH',
+    headers:{Authorization:'Bearer '+access,'Content-Type':'application/json'},
+    body:JSON.stringify({status:'cancelled'}),
+    signal:AbortSignal.timeout(15000)
+   });
+   result=cancelled;
+  }
+ }catch(error){if(suppressedRef)await suppressedRef.delete().catch(()=>{});throw error;}
+ if(!result.ok&&result.status!==404&&result.status!==410){
+  if(suppressedRef)await suppressedRef.delete().catch(()=>{});
+  throw await calendarDeleteError(result);
+ }
  return {deleted:true,recurringOccurrence:Boolean(event.recurringEventId),calendarOnly:marker==='completed-workout'};
 }
 async function readAgenda(uid,{start=romeToday(),days=42,access=null}={}){
