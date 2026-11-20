@@ -119,9 +119,9 @@ if(connect&&sync&&disconnect&&status){
    await refreshAgenda({force:true}).catch(()=>{});
    return {created:true,...data.event,alreadyExists:data.alreadyExists};
   }
-  if(!showModal(data.proposal))throw Error('Non è stato possibile aprire il modulo.');
-  feedback.textContent=data.message||'Completa i dati mancanti e premi Salva.';
-  return {created:false,...data.proposal};
+  // Non aprire la schermata Nuovo impegno durante una conversazione col Coach.
+  // Dati incompleti: sarà il Coach a chiedere la singola informazione mancante.
+  return {created:false,...data.proposal,missing:data.missing||[],message:data.message||'Dimmi i dati mancanti per completare l’appuntamento.'};
  };
  window.runnerPulseImportCalendarScreenshot=async(file)=>{
   if(!current?.connected)throw Error('Collega prima Google Calendar nella scheda Piano.');

@@ -51,6 +51,7 @@ if(coach){
  history.parentNode.insertBefore(resetCoach,history);
 
  let version=0, busy=false;
+ let pendingCalendarText=''; // appuntamento incompleto: completamento nella chat senza aprire modali
  resizeMessageBox();
  function scrollToLatest(){requestAnimationFrame(()=>{history.scrollTop=history.scrollHeight;});}
  function showAnswerStart(row){requestAnimationFrame(()=>{history.scrollTop=Math.max(0,row.offsetTop-history.offsetTop-10);});}
@@ -75,13 +76,25 @@ if(coach){
    const deletePlan=/(?:elimin|cancell|rimuov|azzer)/.test(simplified)&&/\b(piano|programma)\b/.test(simplified)&&!/\b(?:seduta|allenamento)\s+(?:di|del|per)\s+(?:lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)/.test(simplified);
    // Le richieste esplicite di aggiunta appuntamenti vanno al modulo Calendar,
    // non al generatore di piani. La dettatura usa questo stesso percorso.
-   const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,160}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista|turno|scuola|medico)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista|turno|lezione)\b|\b(?:lavoro|turno|scuola|lezione|visita|dentista|riunione|medico|ospedale|colloquio)\b.{0,130}\b(?:domani|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|dalle|alle|ore)\b/.test(simplified);
-   if(calendarIntent){
+   const calendarIntent=/(?:aggiung|segn|inserisc|mett|crea|fiss|prenot|ricord).{0,160}\b(?:calendar|calendario|impegno|appuntamento|visita|riunione|dentista|turno|scuola|medico|spesa|spese|pagamento|pagare|bolletta|cena|pranzo|ristorante)\b|\bcalendario\b.{0,100}(?:aggiung|segn|inserisc|metti|crea)|\b(?:ho|avro|avr[oò])(?:\s+(?:un|una|il|la|l'))?\s+(?:visita|appuntamento|riunione|dentista|turno|lezione)\b|\b(?:lavoro|turno|scuola|lezione|visita|dentista|riunione|medico|ospedale|colloquio|pagare|affitto|bolletta|cena|pranzo|ristorante|spesa)\b.{0,130}\b(?:domani|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|dalle|alle|ore)\b/.test(simplified);
+   if(calendarIntent || pendingCalendarText){
      if(!window.runnerPulseProposeCalendarCommitment)throw Error('Collegamento con il calendario non ancora disponibile.');
-     const proposal=await window.runnerPulseProposeCalendarCommitment(message);
-     bubble('user',message,{scroll:false});question.value='';question.blur();
-     bubble('assistant',proposal.created?'Impegno “'+proposal.title+'” '+(proposal.alreadyExists?'già presente':'salvato automaticamente')+' su Google Calendar.': 'Mancano alcuni dettagli per “'+(proposal.title||'Nuovo impegno')+'”. Completa il modulo per salvarlo.');
-     status.textContent=proposal.created?'Impegno registrato nel calendario.':'Completa i dati nel modulo.';
+     if(pendingCalendarText&&/^(annulla|lascia perdere|non importa|cancella richiesta)[.!\s]*$/i.test(message)){
+      pendingCalendarText='';bubble('user',message,{scroll:false});bubble('assistant','Va bene, non aggiungo alcun appuntamento.');question.value='';status.textContent='';
+     }else{
+      const fullText=pendingCalendarText?pendingCalendarText+'\nDettaglio aggiunto successivamente: '+message:message;
+      const proposal=await window.runnerPulseProposeCalendarCommitment(fullText);
+      bubble('user',message,{scroll:false});question.value='';question.blur();
+      if(proposal.created){
+       pendingCalendarText='';
+       bubble('assistant','Impegno “'+proposal.title+'” '+(proposal.alreadyExists?'già presente':'salvato automaticamente')+' su Google Calendar.');
+       status.textContent='Impegno registrato nel calendario.';
+      }else{
+       pendingCalendarText=fullText;
+       bubble('assistant',(proposal.message||'Mi manca un dettaglio per salvarlo.')+' Scrivimelo qui, senza aprire altre schermate. Oppure scrivi «annulla».');
+       status.textContent='In attesa dei dettagli per l’appuntamento.';
+      }
+     }
    }else if(deletePlan){
      bubble('user',message,{scroll:false});question.value='';question.blur();
      const row=bubble('assistant','Vuoi eliminare il piano di allenamento salvato? Le attività registrate rimarranno intatte. La cancellazione richiede la tua conferma.');

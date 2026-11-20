@@ -919,3 +919,22 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 #plan .rp-plan-panel .rp-swipe-row.rp-swipe-ready > button.rp-planned-event{
  box-shadow:0 0 0 3px #ffae65!important;
 }
+
+
+/* Spese: solo le banconote sono verdi; la scheda resta blu notte neutro. */
+#plan .rp-agenda-event.rp-event-expense,
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-expense,
+#plan button.rp-day-card.rp-agenda-event.rp-event-expense {
+ background:#203C5C!important;background-image:none!important;border:1px solid #66819B!important;color:#fff!important;
+}
+#plan .rp-agenda-event.rp-event-expense .rp-day-date {color:#DDE8F3!important;}
+#plan .rp-agenda-event.rp-event-expense .rp-day-icon {color:#2DCB70!important;}
+#plan .rp-agenda-event.rp-event-expense .rp-money-icon,
+#plan .rp-detail-money-icon .rp-money-icon {display:inline-block;vertical-align:middle;flex:none;width:38px;height:32px;max-width:100%;}
+#plan .rp-agenda-event.rp-event-food,
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-food,
+#plan button.rp-day-card.rp-agenda-event.rp-event-food {
+ background:#81442E!important;background-image:none!important;border:1px solid #FFB38C!important;color:#fff!important;
+}
+#plan .rp-agenda-event.rp-event-food .rp-day-date,
+#plan .rp-agenda-event.rp-event-food .rp-day-icon {color:#FFE6B7!important;}

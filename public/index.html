@@ -161,7 +161,7 @@
   <p class="rp-commitment-note">Controlla i dettagli prima di aggiungere l’evento al tuo Google Calendar. I tuoi appuntamenti saranno considerati dal Coach.</p>
   <form id="rp-commitment-form" class="rp-commitment-form">
    <label>Titolo<input name="title" type="text" maxlength="120" placeholder="Es. Visita dal dentista" required></label>
-   <label>Tipo<select name="category"><option value="work">Lavoro</option><option value="sport">Sport</option><option value="race">Gara</option><option value="school">Scuola</option><option value="health">Salute</option><option value="other" selected>Altro impegno</option></select></label>
+   <label>Tipo<select name="category"><option value="work">Lavoro</option><option value="sport">Sport</option><option value="race">Gara</option><option value="school">Scuola</option><option value="health">Salute</option><option value="expense">Spese 💶</option><option value="food">Cibo 🍝</option><option value="other" selected>Altro impegno</option></select></label>
    <label>Data<input name="date" type="date" required></label>
    <label class="rp-commitment-allday"><input name="allDay" type="checkbox"> Tutto il giorno</label>
    <div class="rp-commitment-times"><label>Dalle<input name="startTime" type="time" required></label><label>Alle<input name="endTime" type="time" required></label></div>
@@ -344,7 +344,24 @@
   if(category==='race')return {label:'Gara',icon:'🏆',className:'rp-event-race'};
   if(category==='school')return {label:'Scuola',icon:'🏫',className:'rp-event-school'};
   if(category==='health')return {label:'Salute',icon:'🩺',className:'rp-event-health'};
+  if(category==='expense')return {label:'Spese',icon:'💶',className:'rp-event-expense'};
+  if(category==='food')return {label:'Cibo',icon:'🍝',className:'rp-event-food'};
   return {label:'Altro impegno',icon:'📌',className:'rp-event-other'};
+ }
+ // Banconote verdi: il colore riguarda solo il simbolo, non lo sfondo della scheda.
+ function renderCategoryIcon(target,category,info){
+  if(category!=='expense'){target.textContent=info.icon;return;}
+  const ns='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('viewBox','0 0 36 30');svg.setAttribute('width','38');svg.setAttribute('height','32');
+  svg.setAttribute('aria-label','Soldi verdi');svg.setAttribute('role','img');svg.classList.add('rp-money-icon');
+  const back=document.createElementNS(ns,'rect');
+  for(const [key,value] of Object.entries({x:'7',y:'3',width:'25',height:'18',rx:'3',fill:'#C1F5CE',stroke:'#187944','stroke-width':'2'}))back.setAttribute(key,value);
+  const front=document.createElementNS(ns,'rect');
+  for(const [key,value] of Object.entries({x:'3',y:'9',width:'28',height:'18',rx:'3',fill:'#DFFDE7',stroke:'#16894B','stroke-width':'2'}))front.setAttribute(key,value);
+  const euro=document.createElementNS(ns,'text');
+  for(const [key,value] of Object.entries({x:'17',y:'23','text-anchor':'middle','font-size':'17','font-family':'Arial, sans-serif','font-weight':'900',fill:'#09803E'}))euro.setAttribute(key,value);
+  euro.textContent='€';svg.append(back,front,euro);target.replaceChildren(svg);
  }
  function eventTimeLabel(e){return e.allDay?'Tutto il giorno':e.startLocal.slice(11,16)+'–'+e.endLocal.slice(11,16);}
  function getSessions(){
@@ -483,7 +500,7 @@
     const body=document.createElement('span');body.className='rp-day-main';
     const title=document.createElement('strong');title.textContent=e.title;
     const meta=document.createElement('small');meta.textContent=eventTimeLabel(e)+' · '+info.label+' · '+e.calendar+(e.busy?'':' · Libero')+(e.calendarWritable===false?' · Sola lettura':'');
-    const icon=document.createElement('span');icon.className='rp-day-icon';icon.textContent=info.icon;
+    const icon=document.createElement('span');icon.className='rp-day-icon';renderCategoryIcon(icon,e.category,info);
     body.append(title,meta);card.append(date,body,icon);
     // Gli impegni modificabili scorrono a destra scoprendo il cestino rosso a sinistra.
     // Il cestino richiede sempre un secondo tocco con conferma esplicita.
@@ -537,11 +554,13 @@
  function openAgendaDetail(e){calendar.hidden=true;overview.hidden=true;settings.hidden=true;tabs.hidden=true;heading.hidden=true;detail.hidden=false;detail.replaceChildren();
   const info=eventCategoryInfo(e.category);
   const back=document.createElement('button');back.type='button';back.className='rp-detail-back';back.textContent='← Torna al calendario';back.addEventListener('click',()=>show('calendar'));detail.appendChild(back);
-  const h=document.createElement('h2');h.className='rp-detail-title';h.textContent=info.icon+' '+(e.title||'Impegno');detail.appendChild(h);
+  const h=document.createElement('h2');h.className='rp-detail-title';
+  if(e.category==='expense'){const symbol=document.createElement('span');symbol.className='rp-detail-money-icon';renderCategoryIcon(symbol,e.category,info);h.append(symbol,document.createTextNode(' '+(e.title||'Impegno')));}
+  else h.textContent=info.icon+' '+(e.title||'Impegno');detail.appendChild(h);
   const meta=document.createElement('p');meta.className='rp-detail-meta';meta.textContent=[e.startLocal?.slice(0,10),eventTimeLabel(e),info.label,e.calendar,e.busy?'Occupato':'Libero'].filter(Boolean).join(' · ');detail.appendChild(meta);
   const section=document.createElement('h3');section.textContent='Dettaglio impegno';detail.appendChild(section);
   const block=document.createElement('div');block.className='rp-step';
-  const badge=document.createElement('span');badge.className='rp-step-num';badge.textContent=info.icon;
+  const badge=document.createElement('span');badge.className='rp-step-num';renderCategoryIcon(badge,e.category,info);
   const body=document.createElement('div');
   const strong=document.createElement('strong');strong.textContent=info.label;
   const p=document.createElement('p');p.textContent=e.description?e.description:'Nessuna nota aggiunta per questo impegno.';
