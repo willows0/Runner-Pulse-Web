@@ -841,17 +841,44 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 #coach button[aria-label="Cancella tutte le conversazioni salvate con il Coach"]{align-self:flex-end!important;display:block!important;margin:6px 14px 2px auto!important;padding:5px 9px!important;min-height:26px!important;border:1px solid #e0e6ed!important;border-radius:10px!important;background:#f9fafb!important;color:#66768a!important;font-size:11px!important;box-shadow:none!important;}
 @media (max-width:390px){#coach .rp-coach-chat{padding:14px 12px 155px!important;}#coach .rp-chat-assistant .rp-chat-bubble p{font-size:15.5px!important;}}
 
-/* CALENDARIO: niente legenda; pressione lunga e trascinamento a destra per mostrare il cestino. */
-#plan .rp-plan-panel .rp-swipe-row{position:relative;width:100%;margin:0 0 9px;isolation:isolate;min-height:70px;}
-#plan .rp-plan-panel .rp-swipe-row > button.rp-agenda-event{position:relative;display:flex;width:100%!important;margin:0!important;min-width:0!important;box-sizing:border-box;z-index:1;transition:width .18s ease,transform .14s ease,box-shadow .14s ease;}
-#plan .rp-plan-panel .rp-swipe-row.rp-swipe-arming > button.rp-agenda-event{box-shadow:0 0 0 3px #ffae65!important;}
-#plan .rp-plan-panel .rp-swipe-row.rp-swipe-ready > button.rp-agenda-event{box-shadow:0 0 0 3px #ff7900!important;}
-#plan .rp-plan-panel .rp-swipe-row.rp-swipe-revealed > button.rp-agenda-event{width:calc(100% - 76px)!important;}
-#plan .rp-plan-panel .rp-swipe-delete{position:absolute;right:0;top:0;bottom:0;width:68px;display:grid;place-items:center;border:0;border-radius:18px;background:#cf253a!important;color:#fff!important;font-size:28px;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease;z-index:2;box-shadow:none!important;}
-#plan .rp-plan-panel .rp-swipe-row.rp-swipe-revealed .rp-swipe-delete{opacity:1;visibility:visible;pointer-events:auto;}
+/* CALENDARIO: scorrendo a DESTRA l'impegno, svela il cestino ROSSO a SINISTRA. */
+#plan .rp-plan-panel .rp-swipe-row{
+ position:relative;width:100%;margin:0 0 9px;isolation:isolate;
+ min-height:70px;overflow:hidden;border-radius:20px;
+ background:#ce263a!important;
+}
+#plan .rp-plan-panel .rp-swipe-row > button.rp-agenda-event{
+ position:relative;display:flex;width:100%!important;margin:0!important;
+ min-width:0!important;box-sizing:border-box;z-index:1;
+ transform:translate3d(0,0,0);transition:transform .2s ease,box-shadow .14s ease;
+}
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-arming > button.rp-agenda-event{
+ box-shadow:0 0 0 3px #ffae65!important;
+}
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-ready > button.rp-agenda-event{
+ box-shadow:0 0 0 3px #ff7900!important;
+}
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-revealed > button.rp-agenda-event{
+ transform:translate3d(94px,0,0)!important;
+}
+#plan .rp-plan-panel .rp-swipe-delete{
+ position:absolute;left:0;right:auto;top:0;bottom:0;
+ width:94px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+ background:#ce263a!important;color:#fff!important;border:0;border-radius:18px 0 0 18px;
+ font-size:30px;opacity:0;visibility:hidden;pointer-events:none;
+ transition:opacity .12s ease;z-index:0;box-shadow:none!important;
+}
+#plan .rp-plan-panel .rp-swipe-delete small{color:#fff!important;font-weight:800;font-size:13px;letter-spacing:.1px;}
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-revealed .rp-swipe-delete,
+#plan .rp-plan-panel .rp-swipe-row.rp-swipe-dragging .rp-swipe-delete{
+ opacity:1!important;visibility:visible!important;pointer-events:auto;
+}
 #plan .rp-plan-panel .rp-swipe-delete:disabled{opacity:.55!important;}
 #plan .rp-detail-delete-event{display:block;margin:18px 0 12px;padding:12px 18px;border-radius:14px;border:0;background:#b8263b;color:white;font-weight:800;}
-@media(prefers-reduced-motion:reduce){#plan .rp-plan-panel .rp-swipe-row > button.rp-agenda-event,#plan .rp-plan-panel .rp-swipe-delete{transition:none;}}
+@media(prefers-reduced-motion:reduce){
+ #plan .rp-plan-panel .rp-swipe-row > button.rp-agenda-event,
+ #plan .rp-plan-panel .rp-swipe-delete{transition:none;}
+}
 
 /* Riparazione gesture su Android: la pressione prolungata mostra il cestino
    anche quando il sistema interrompe il trascinamento orizzontale. */
