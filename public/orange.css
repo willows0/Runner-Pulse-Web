@@ -599,6 +599,16 @@ body > nav[aria-label="Navigazione"] > button span,#rp-detail-bottom-nav > butto
 #plan .rp-agenda-event:active{transform:scale(.99);filter:brightness(.98);}
 #plan .rp-agenda-event .rp-day-main strong,#plan .rp-agenda-event .rp-day-main small{color:#fff!important;}
 #plan .rp-agenda-event.rp-event-work{background:#2f4d70!important;border:1px solid #8ab7ea!important;}
+/* Prevalenza sui vecchi stili globali di button.rp-day-card (anche inline). */
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-work{background:#2f4d70!important;border-color:#8ab7ea!important;}
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-sport{background:#265244!important;border-color:#7fd0ac!important;}
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-other{background:#5a4372!important;border-color:#cfb0ec!important;}
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-work .rp-day-date,
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-work .rp-day-icon{color:#d5eaff!important;}
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-sport .rp-day-date,
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-sport .rp-day-icon{color:#d7ffee!important;}
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-other .rp-day-date,
+#plan .rp-plan-panel button.rp-day-card.rp-agenda-event.rp-event-other .rp-day-icon{color:#f3e6ff!important;}
 #plan .rp-agenda-event.rp-event-work .rp-day-date,#plan .rp-agenda-event.rp-event-work .rp-day-icon{color:#d5eaff!important;}
 #plan .rp-agenda-event.rp-event-sport{background:#265244!important;border:1px solid #7fd0ac!important;}
 #plan .rp-agenda-event.rp-event-sport .rp-day-date,#plan .rp-agenda-event.rp-event-sport .rp-day-icon{color:#d7ffee!important;}
