@@ -8,7 +8,7 @@ import {randomBytes,createHash,createCipheriv,createDecipheriv,timingSafeEqual} 
 import { inflateRawSync } from 'node:zlib';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { handleCoachAI, generateWeeklyCoachReport } from './coach-api.js';
 import {handleActivityCoach,activityCoachReport} from './activity-coach.js';
@@ -16,7 +16,7 @@ import {syncCompletedActivityToCalendar} from './google-calendar-integration.js'
 import {isHonorPackage,healthCoachId} from './activity-data.js';
 import {normalizePlan,planRef,revisionOf} from './training-plan.js';
 import {handleGoogleCalendarRoute,removeSyncedPlanEvents} from './google-calendar-integration.js';
-import {applyHttpSecurityHeaders,isTrustedBrowserMutation} from './security-guards.js';
+import {applyHttpSecurityHeaders,isTrustedBrowserMutation,rateLimitMobileAuthStart,acquireActivityImportSlot} from './security-guards.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -36,9 +36,13 @@ async function mobileAuthRoute(req,res,pathname){
   if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
   const body=await readJsonBody(req,10000);
   if(pathname==='/api/mobile-auth/start'){
+   const limit=rateLimitMobileAuthStart(req.socket?.remoteAddress);
+   if(!limit.allowed){res.setHeader('Retry-After',String(limit.retryAfterSeconds));return json(res,429,{success:false,message:'Troppe richieste di accesso. Riprova tra poco.'});}
    const {state,challenge}=body;
    if(!mobilePattern.test(state||'')||!mobilePattern.test(challenge||''))return json(res,400,{success:false,message:'Parametri non validi'});
-   await mobileAuthCollection().doc(mobileHash(state)).create({challenge,expiresAt:Date.now()+MOBILE_AUTH_TTL,createdAt:Date.now(),status:'pending'});
+   const now=Date.now();
+   // expireTime può essere configurato come TTL Firestore SENZA cancellare dati degli utenti.
+   await mobileAuthCollection().doc(mobileHash(state)).create({challenge,expiresAt:now+MOBILE_AUTH_TTL,expireTime:Timestamp.fromMillis(now+MOBILE_AUTH_TTL),createdAt:now,status:'pending'});
    return json(res,200,{success:true});
   }
   if(pathname==='/api/mobile-auth/approve'){
@@ -972,14 +976,14 @@ async function weeklyPushRoute(req,res,pathname){
  }
  if(pathname==='/api/push/unsubscribe' || pathname==='/api/push/status'){
   if(pathname==='/api/push/unsubscribe' && req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
-  if(pathname==='/api/push/status' && req.method!=='GET')return json(res,405,{success:false,message:'Metodo non consentito'});
+  if(pathname==='/api/push/status' && req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
   const match=/^Bearer (\S+)$/i.exec(req.headers.authorization||'');
   if(!match)return json(res,401,{success:false,message:'Accesso richiesto'});
   let user;try{user=await getAuth().verifyIdToken(match[1],true);}catch{return json(res,401,{success:false,message:'Sessione non valida'});}
   if(!verifiedGoogleIdentity(user))return json(res,403,{success:false,message:'Account Google non verificato'});
   try{
    const crypto=await import('node:crypto');
-   const token=pathname==='/api/push/status' ? new URL(req.url,'http://localhost').searchParams.get('token') : (await readJsonBody(req,4096)).token;
+   const token=(await readJsonBody(req,4096)).token;
    if(typeof token!=='string'||token.length<50||token.length>3000)return json(res,400,{success:false,message:'Token non valido'});
    const id=crypto.createHash('sha256').update(token).digest('hex');
    const ref=getFirestore().collection('runnerPulsePush').doc(user.uid).collection('devices').doc(id);
@@ -1490,11 +1494,15 @@ async function handleIncomingRequest(req,res){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
     const importingUser=await garminGoogleUser(req);
     if(!importingUser)return json(res,401,{success:false,message:'Accedi con un account Google verificato per importare le tue attività'});
+    const releaseImport=acquireActivityImportSlot(importingUser.uid);
+    if(!releaseImport){res.setHeader('Retry-After','20');return json(res,429,{success:false,message:'Un’importazione è già in corso. Riprova dopo che è terminata.'});}
     try{
       const filename=decodeURIComponent(String(req.headers['x-rp-filename']||''));
       if(!/\.(fit|zip|tcx)$/i.test(filename))return json(res,400,{success:false,message:'Carica un file FIT, ZIP o TCX'});
-      const max=85*1024*1024;let size=0;const chunks=[];
-      for await(const chunk of req){size+=chunk.length;if(size>max)throw Object.assign(new Error('File troppo grande (limite 85 MB). Dividi lo ZIP in archivi più piccoli.'),{status:413});chunks.push(chunk);}
+      const max=40*1024*1024;let size=0;const chunks=[];
+      const declared=Number(req.headers['content-length']);
+      if(Number.isFinite(declared)&&declared>max)throw Object.assign(new Error('File troppo grande (limite 40 MB). Dividi lo ZIP in più archivi.'),{status:413});
+      for await(const chunk of req){size+=chunk.length;if(size>max)throw Object.assign(new Error('File troppo grande (limite 40 MB). Dividi lo ZIP in archivi più piccoli.'),{status:413});chunks.push(chunk);}
       const buffer=Buffer.concat(chunks);
       if(!buffer.length)return json(res,400,{success:false,message:'Il file selezionato è vuoto.'});
       const parsed=/\.tcx$/i.test(filename)?parseTcx(buffer).map((activity,i)=>({name:filename+(i?' #'+(i+1):''),activity})):parseGarminArchive(buffer,filename);
@@ -1540,7 +1548,8 @@ async function handleIncomingRequest(req,res){
           :'Nessuna attività valida trovata nel file.';
       }
       return json(res,successful?200:422,result);
-    }catch(error){console.error('Importazione FIT:',error.message);return json(res,error.status||400,{success:false,message:error.message});}
+    }catch(error){console.error('Importazione FIT:',error.code||error.name||'errore');return json(res,error.status||400,{success:false,message:typeof error.message==='string'?error.message.slice(0,160):'File non valido'});}
+    finally{releaseImport();}
   }
   if(pathname==='/api/garmin/delete-activity'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
@@ -1703,6 +1712,19 @@ httpServer.requestTimeout=180000;
 httpServer.keepAliveTimeout=5000;
 httpServer.maxRequestsPerSocket=100;
 httpServer.listen(port,'0.0.0.0',()=>console.log('Runner Pulse Web on '+port));
+
+// Pulizia limitata dei soli stati temporanei Android scaduti, anche se
+// la policy TTL di Firestore non è ancora stata abilitata.
+async function cleanupExpiredMobileAuth(){
+ try{
+  const expired=await mobileAuthCollection().where('expiresAt','<',Date.now()-60_000).limit(100).get();
+  if(expired.empty)return;
+  const batch=getFirestore().batch();for(const doc of expired.docs)batch.delete(doc.ref);
+  await batch.commit();
+ }catch(error){console.warn('Pulizia richieste login Android:',error.code||'non disponibile');}
+}
+setTimeout(()=>{void cleanupExpiredMobileAuth();},60_000).unref();
+setInterval(()=>{void cleanupExpiredMobileAuth();},60*60*1000).unref();
 
 // All’avvio tenta di recuperare notifiche gia consegnate ma non importate.
 setTimeout(()=>{void recoverGarminWebhookInbox();},15000).unref();

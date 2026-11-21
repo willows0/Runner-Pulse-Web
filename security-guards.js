@@ -109,3 +109,43 @@ export function isTrustedBrowserMutation(req){
   return origin===selfHost||(origin===devHost && /^(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(host))||(override.startsWith('https://')&&origin===override);
  }catch{return false;}
 }
+
+
+// Limite anti-abuso per l'avvio del login Android PRIMA del primo accesso Firebase.
+// Si usa l'indirizzo della connessione al proxy (non X-Forwarded-For, modificabile
+// dal client). Il limite globale impedisce aggiramenti creando molti stati diversi.
+// È un primo limite per istanza Render, non una protezione DDoS distribuita.
+const mobileAuthWindowMs=60_000;
+const mobileAuthClients=new Map();
+let mobileAuthGlobal={start:0,count:0};
+export function rateLimitMobileAuthStart(remoteAddress,now=Date.now()){
+ if(!Number.isFinite(now))throw new TypeError('Timestamp non valido');
+ const address=String(remoteAddress||'unknown').slice(0,128);
+ const globalExpired=now-mobileAuthGlobal.start>=mobileAuthWindowMs||now<mobileAuthGlobal.start;
+ if(globalExpired)mobileAuthGlobal={start:now,count:0};
+ let entry=mobileAuthClients.get(address);
+ if(!entry||now-entry.start>=mobileAuthWindowMs||now<entry.start){
+  entry={start:now,count:0};
+  // Non trattenere indefinitamente gli indirizzi nel processo.
+  for(const [key,old] of mobileAuthClients){if(now-old.start>=mobileAuthWindowMs)mobileAuthClients.delete(key);}
+  if(mobileAuthClients.size>=1000)mobileAuthClients.delete(mobileAuthClients.keys().next().value);
+  mobileAuthClients.set(address,entry);
+ }
+ if(mobileAuthGlobal.count>=60||entry.count>=15){
+  const wait=Math.max(1,Math.ceil(Math.max(0,Math.min(mobileAuthWindowMs-(now-mobileAuthGlobal.start),mobileAuthWindowMs-(now-entry.start)))/1000));
+  return {allowed:false,retryAfterSeconds:wait};
+ }
+ mobileAuthGlobal.count++;entry.count++;
+ return {allowed:true,retryAfterSeconds:0};
+}
+
+// L'estrazione FIT/TCX è costosa e usa molta memoria: una importazione alla volta
+// su una singola istanza Render. Il rilascio è garantito anche in caso di errore.
+const activeImports=new Set();
+export function acquireActivityImportSlot(uid){
+ if(typeof uid!=='string'||!uid)throw new TypeError('UID Firebase obbligatorio');
+ if(activeImports.size>=1||activeImports.has(uid))return null;
+ activeImports.add(uid);
+ let released=false;
+ return ()=>{if(!released){released=true;activeImports.delete(uid);}};
+}

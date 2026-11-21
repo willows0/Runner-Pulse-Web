@@ -4,27 +4,37 @@ import {createHash} from 'node:crypto';
 import {parseTcx} from './garmin-tcx-import.js';
 const FIT_EPOCH=631065600;
 const num=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
-function unzip(buffer){
+// Limiti delle dimensioni REALI, non soltanto dei byte compressi.
+// Un budget condiviso limita anche ZIP che contengono altri ZIP.
+const ZIP_ENTRY_LIMIT=300;
+const ZIP_MAX_ENTRY_BYTES=24*1024*1024;
+const ZIP_MAX_TOTAL_BYTES=96*1024*1024;
+const ZIP_MAX_RATIO=250;
+function unzip(buffer,budget={entries:0,expanded:0}){
  if(buffer.length<22)throw Error('ZIP non valido');
  let e=-1;for(let i=buffer.length-22;i>=Math.max(0,buffer.length-65557);i--){if(buffer.readUInt32LE(i)===0x06054b50){e=i;break;}}
  if(e<0)throw Error('Directory ZIP mancante');
  const count=buffer.readUInt16LE(e+10),start=buffer.readUInt32LE(e+16);
- if(count>15000)throw Error('Archivio con troppi file');
- let p=start,total=0;const out=[];
+ if(count>ZIP_ENTRY_LIMIT||budget.entries+count>ZIP_ENTRY_LIMIT)throw Error('Archivio con troppi file (limite 300)');
+ budget.entries+=count;
+ let p=start;const out=[];
  for(let i=0;i<count;i++){
   if(p+46>buffer.length||buffer.readUInt32LE(p)!==0x02014b50)throw Error('Indice ZIP non valido');
   const flags=buffer.readUInt16LE(p+8),method=buffer.readUInt16LE(p+10),compressed=buffer.readUInt32LE(p+20),uncompressed=buffer.readUInt32LE(p+24),nl=buffer.readUInt16LE(p+28),ex=buffer.readUInt16LE(p+30),comment=buffer.readUInt16LE(p+32),offset=buffer.readUInt32LE(p+42);
-  const name=buffer.subarray(p+46,p+46+nl).toString('utf8');p+=46+nl+ex+comment;
+  const end=p+46+nl+ex+comment;
+  if(end>buffer.length)throw Error('Indice ZIP incompleto');
+  const name=buffer.subarray(p+46,p+46+nl).toString('utf8');p=end;
   if(!/\.(fit|tcx|zip)$/i.test(name)||name.endsWith('/'))continue;
   if(flags&1)throw Error('ZIP cifrato non supportato');
-  if(uncompressed>32*1024*1024||compressed>48*1024*1024||total+uncompressed>512*1024*1024)throw Error('Archivio FIT troppo grande');
+  if(uncompressed>ZIP_MAX_ENTRY_BYTES||budget.expanded+uncompressed>ZIP_MAX_TOTAL_BYTES)throw Error('Archivio troppo grande: dividi lo ZIP');
+  if(compressed>40*1024*1024||(uncompressed>0&&(!compressed||uncompressed/compressed>ZIP_MAX_RATIO)))throw Error('Compressione ZIP anomala');
   if(offset+30>buffer.length||buffer.readUInt32LE(offset)!==0x04034b50)throw Error('File ZIP danneggiato');
   const dataStart=offset+30+buffer.readUInt16LE(offset+26)+buffer.readUInt16LE(offset+28);
   if(dataStart+compressed>buffer.length)throw Error('Contenuto ZIP incompleto');
   const raw=buffer.subarray(dataStart,dataStart+compressed);
-  const data=method===0?raw:method===8?inflateRawSync(raw,{maxOutputLength:32*1024*1024}):null;
+  const data=method===0?raw:method===8?inflateRawSync(raw,{maxOutputLength:ZIP_MAX_ENTRY_BYTES}):null;
   if(!data||data.length!==uncompressed)throw Error('Compressione ZIP non supportata o file danneggiato');
-  total+=uncompressed;out.push({name,data});
+  budget.expanded+=uncompressed;out.push({name,data});
  }
  return out;
 }
@@ -83,9 +93,10 @@ function parseFit(buffer){
  return {id:activityId,summary,detail:{activityId,samples,laps:lapData},fileId:fileId?.[3]??null};
 }
 export function parseGarminArchive(buffer,filename){
- const files=/\.fit$/i.test(filename)?[{name:filename,data:buffer}]:/\.zip$/i.test(filename)?unzip(buffer):null;
+ const budget={entries:0,expanded:0};
+ const files=/\.fit$/i.test(filename)?[{name:filename,data:buffer}]:/\.zip$/i.test(filename)?unzip(buffer,budget):null;
  if(!files)throw Error('Seleziona un file .FIT o .ZIP');
- const expanded=[];for(const f of files){if(/\.zip$/i.test(f.name)){try{for(const child of unzip(f.data))expanded.push({name:f.name+'/'+child.name,data:child.data});}catch(error){expanded.push({name:f.name,error:error.message});}}else expanded.push(f);}
+ const expanded=[];for(const f of files){if(/\.zip$/i.test(f.name)){try{for(const child of unzip(f.data,budget))expanded.push({name:f.name+'/'+child.name,data:child.data});}catch(error){expanded.push({name:f.name,error:error.message});}}else expanded.push(f);}
  return expanded.flatMap(f=>{
   if(f.error)return [{name:f.name,error:f.error}];
   try{
