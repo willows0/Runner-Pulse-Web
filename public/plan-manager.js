@@ -169,6 +169,42 @@ async function saveApproved(rows,expectedRevision=null){
  }catch(err){msg('Il programma NON è stato confermato online: '+err.message+' La proposta resta sul telefono.');throw err;}
  finally{state.busy=false;render();}
 }
+// Schedina Piano: un tocco sulla data modifica una sola seduta.
+// Persistenza: bozza su Firestore draft, Piano approvato su Firestore approved
+// e sincronizzazione Google Calendar già esistente, se collegato.
+window.runnerPulseChangePlannedSessionDate=async(session,index,newDate)=>{
+ if(noAccount()||state.busy||state.draftPending)throw Error('Accedi con Google e attendi la fine del salvataggio del Piano.');
+ const d=new Date(String(newDate)+'T12:00:00Z');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(newDate))||!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==newDate)
+  throw Error('Seleziona una data valida.');
+ const isDraft=state.draft.length>0;
+ const rows=isDraft?state.draft:state.approved;
+ if(!Array.isArray(rows)||index<0||index>=rows.length)throw Error('Seduta non trovata. Aggiorna il Piano.');
+ const current=rows[index];
+ if(current.date!==session.date||current.time!==session.time||current.title!==session.title||current.minutes!==session.minutes)
+  throw Error('La seduta è cambiata nel frattempo. Riapri il calendario.');
+ if(newDate===current.date)return {updated:false,unchanged:true};
+ const start=Date.parse(newDate+'T'+current.time+':00Z'),end=start+Number(current.minutes)*60000;
+ for(const [i,other] of rows.entries()){
+  if(i===index)continue;
+  const a=Date.parse(other.date+'T'+other.time+':00Z'),b=a+Number(other.minutes)*60000;
+  if(start<b&&end>a)throw Error('Il nuovo giorno è già occupato da un altro allenamento del Piano: '+other.title+'.');
+ }
+ if(typeof window.runnerPulseCheckPlanDateAvailable==='function'){
+  await window.runnerPulseCheckPlanDateAvailable({newDate,time:current.time,minutes:current.minutes});
+ }else throw Error('Il controllo degli impegni Google Calendar non è pronto. Riprova dopo aver aggiornato la pagina.');
+ const updated=rows.map((row,i)=>i===index?{...row,date:newDate}:row);
+ if(isDraft){
+  await persistDraft(updated);
+  return {updated:true,draft:true,synced:false};
+ }
+ await saveApproved(updated);
+ if(typeof window.runnerPulseSyncPlanAfterEdit==='function'){
+  try{const sync=await window.runnerPulseSyncPlanAfterEdit();return {updated:true,draft:false,synced:!sync?.skipped};}
+  catch(error){throw Error('Data salvata nel Piano, ma non ancora sincronizzata con Google Calendar: '+error.message);}
+ }
+ return {updated:true,draft:false,synced:false};
+};
 window.runnerPulseSavePlan=saveApproved;
 window.runnerPulseSaveDraft=persistDraft;
 window.runnerPulseReloadPlan=load;

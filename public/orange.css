@@ -963,3 +963,13 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 #plan .rp-detail-edit-cancel{background:#dfe8f0;color:#17314f;}
 #plan .rp-detail-edit-save{background:#f4770b;color:white;}
 #plan .rp-detail-edit-feedback{font-size:14px;color:#3e5569;margin:0;}
+
+/* Toccare il giorno nella scheda apre la modifica data; il resto della scheda apre i dettagli. */
+#plan .rp-day-date-editable{cursor:pointer!important;touch-action:manipulation;position:relative;text-decoration:underline dotted;text-underline-offset:4px;text-decoration-thickness:1px;}
+#plan .rp-day-date-editable:focus-visible{outline:3px solid #f4770b;outline-offset:5px;border-radius:7px;}
+#plan .rp-detail-change-date{display:block;margin:14px 0;padding:12px 18px;border:0;border-radius:14px;background:#f4770b!important;color:#fff!important;font-weight:800;font:inherit;cursor:pointer;}
+#plan .rp-detail-date-form{display:flex;flex-direction:column;gap:12px;padding:18px;margin:12px 0 20px;background:#eef4fa;border:1px solid #c3d1de;border-radius:18px;}
+#plan .rp-detail-date-form[hidden]{display:none!important;}
+#plan .rp-detail-date-form label{display:flex;flex-direction:column;gap:8px;font-weight:800;color:#17314f;}
+#plan .rp-detail-date-form input[type=date]{display:block;width:100%;box-sizing:border-box;background:#fff!important;color:#17314f!important;border:1px solid #a4b9cc;border-radius:12px;padding:13px;font:inherit;font-size:17px;}
+#plan .rp-detail-date-info{color:#415c70;font-size:14px;line-height:1.5;margin:0;}

@@ -203,6 +203,34 @@ if(connect&&sync&&disconnect&&status){
   });
   return result;
  };
+ // Cambia SOLO il giorno di un impegno Google Calendar modificabile.
+ // L’ora e la durata vengono conservate dal server a partire dall’evento reale.
+ window.runnerPulseChangeCalendarEventDate=async(event,newDate)=>{
+  if(!current?.connected)throw Error('Collega Google Calendar prima di modificare la data.');
+  if(!event?.id||!event?.calendarId||event.calendarDateWritable!==true)
+   throw Error('Questo evento non consente di modificare la data da Runner Pulse.');
+  const result=await call('change-date','POST',{
+   eventId:event.id,calendarId:event.calendarId,newDate,
+   originalStart:event.startLocal,originalEnd:event.endLocal
+  });
+  if(result.updated){
+   msg('Data dell’impegno modificata in Google Calendar.');
+   await refreshAgenda({force:true}).catch(error=>{
+    if(agendaStatus)agendaStatus.textContent='Data salvata, ma la lista non si è aggiornata: '+error.message;
+   });
+  }
+  return result;
+ };
+ // Il Piano usa lo stesso controllo degli appuntamenti, prima di salvare una seduta.
+ window.runnerPulseCheckPlanDateAvailable=async({newDate,time,minutes})=>{
+  if(!current?.connected)throw Error('Collega Google Calendar per verificare gli impegni prima di spostare il Piano.');
+  const data=await call('agenda?start='+encodeURIComponent(newDate)+'&days=3');
+  const from=Date.parse(newDate+'T'+time+':00Z'),to=from+Number(minutes)*60000;
+  if(!Number.isFinite(from)||!Number.isFinite(to))throw Error('Orario dell’allenamento non valido.');
+  const conflict=(data.events||[]).find(event=>event.busy&&from<Date.parse(event.endLocal+':00Z')&&to>Date.parse(event.startLocal+':00Z'));
+  if(conflict)throw Error('Nuova data occupata da “'+conflict.title+'”. Scegli un altro giorno.');
+  return true;
+ };
  // Elimina un evento selezionato dall'utente: mai sul solo gesto.
  // La richiesta usa il calendario originale e il server ricontrolla i permessi.
  let deletingEvent=false;
