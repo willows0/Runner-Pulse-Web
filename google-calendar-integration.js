@@ -9,6 +9,7 @@ import {validateCommitment,safeProposal,durationFromText} from './calendar-commi
 import {completedWorkoutSummary} from './completed-workout-calendar-summary.js';
 import {selectCalendarMove,overlappingEvent} from './coach-calendar-move.js';
 import {validateCalendarEdit} from './calendar-edit-validation.js';
+import {validateDateChange,shiftedCalendarEvent} from './calendar-date-change.js';
 
 const CLIENT_ID=process.env.GOOGLE_CALENDAR_CLIENT_ID||'';
 const CLIENT_SECRET=process.env.GOOGLE_CALENDAR_CLIENT_SECRET||'';
@@ -200,6 +201,7 @@ async function calendarEvents(access,calendar,range,ownerHash=null){
     calendarWritable:calendar.writable===true&&!isBirthday&&marker!=='training-plan'&&(marker!=='completed-workout'||item.extendedProperties?.private?.ownerHash===ownerHash),
     // Lo spostamento Calendar ha controlli separati; non rende eliminabili le sedute del Piano.
     calendarMoveWritable:calendar.writable===true&&!isBirthday&&marker!=='completed-workout',
+    calendarDateWritable:calendar.writable===true&&item.eventType!=='birthday'&&(!item.eventType||item.eventType==='default')&&item.visibility!=='private'&&marker!=='training-plan'&&marker!=='completed-workout',
     // Modifica locale sicura: no eventi Google speciali, privati o gestiti automaticamente dal Piano.
     calendarEditWritable:calendar.writable===true&&item.eventType!=='birthday'&&item.eventType!=='workingLocation'&&item.eventType!=='focusTime'&&item.eventType!=='outOfOffice'&&item.eventType!=='fromGmail'&&item.visibility!=='private'&&marker!=='training-plan'&&marker!=='completed-workout',
     eventKind:marker==='completed-workout'?'completed-workout':marker==='training-plan'?'training-plan':'commitment',
@@ -302,6 +304,37 @@ async function updateCalendarDetails(uid,input){
  if(updated.status===404||updated.status===410)throw Object.assign(Error('Impegno non più presente. Aggiorna il calendario.'),{status:409});
  if(!updated.ok)throw Object.assign(Error(updated.status===403?'Google Calendar non permette di modificare questo evento.':'Google Calendar non ha salvato la modifica (HTTP '+updated.status+').'),{status:updated.status===403?403:502});
  return {updated:true,category,description};
+}
+// Cambio della sola data di un impegno Google esistente, senza alterare titolo,
+// descrizione, ora e durata. Gli eventi del Piano si spostano dal gestore Piano.
+async function changeCalendarEventDate(uid,input){
+ const request=validateDateChange(input);
+ const access=await accessToken(uid);
+ const {calendars}=await calendarSources(access);
+ const calendar=calendars.find(c=>c.id===request.calendarId);
+ if(!calendar||calendar.writable!==true)throw Object.assign(Error('Questo calendario è in sola lettura.'),{status:403});
+ const url='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calendar.id)+'/events/'+encodeURIComponent(request.eventId);
+ const response=await fetch(url,{headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});
+ if(response.status===404||response.status===410)throw Object.assign(Error('L’impegno non è più presente. Aggiorna il calendario.'),{status:409});
+ if(!response.ok)throw apiError(response.status);
+ const original=await response.json();
+ const marker=original.extendedProperties?.private?.runnerPulse;
+ if(original.status==='cancelled'||(original.eventType&&original.eventType!=='default')||original.visibility==='private'||marker==='training-plan'||marker==='completed-workout')
+  throw Object.assign(Error('Questa data è gestita da Google o dal Piano e non può essere spostata qui.'),{status:409});
+ const changed=shiftedCalendarEvent(original,request.newDate,romeWall);
+ if(changed.originalStart!==request.originalStart||changed.originalEnd!==request.originalEnd)
+  throw Object.assign(Error('L’impegno è cambiato. Aggiorna il calendario e riprova.'),{status:409});
+ if(changed.newStart===changed.originalStart&&changed.newEnd===changed.originalEnd)
+  return {updated:false,unchanged:true,newDate:request.newDate};
+ const span=Math.min(56,Math.max(2,Math.ceil((Date.parse(changed.newEnd.slice(0,10)+'T12:00:00Z')-Date.parse(request.newDate+'T12:00:00Z'))/86400000)+2));
+ const agenda=await readAgenda(uid,{start:request.newDate,days:span,access});
+ const conflict=overlappingEvent(agenda.events,{id:request.eventId,calendarId:request.calendarId,newStart:changed.newStart,newEnd:changed.newEnd});
+ if(conflict)throw Object.assign(Error('La nuova data si sovrappone a un altro impegno: '+conflict.title+'. Scegli un altro giorno.'),{status:409});
+ const result=await fetch(url,{method:'PATCH',headers:{Authorization:'Bearer '+access,'Content-Type':'application/json',...(original.etag?{'If-Match':original.etag}:{})},body:JSON.stringify(changed.patch),signal:AbortSignal.timeout(15000)});
+ if(result.status===412)throw Object.assign(Error('L’impegno è stato modificato nel frattempo. Aggiorna il calendario e riprova.'),{status:409});
+ if(result.status===403||result.status===400)throw Object.assign(Error('Google Calendar non permette di spostare questo evento. Aprilo in Google Calendar per verificarlo.'),{status:409});
+ if(!result.ok)throw apiError(result.status);
+ return {updated:true,newDate:request.newDate};
 }
 // Elimina soltanto la singola occorrenza richiesta da un calendario modificabile.
 // L'ID non viene usato per scegliere un calendario arbitrario: il server
@@ -791,6 +824,12 @@ export async function handleGoogleCalendarRoute(req,res,pathname){
    if(req.method!=='POST')return reply(res,405,{success:false});
    const input=await bodyJson(req);
    const result=await applyCalendarMove(user.uid,input.ticket);
+   return reply(res,200,{success:true,...result});
+  }
+  if(pathname==='/api/calendar/change-date'){
+   if(req.method!=='POST')return reply(res,405,{success:false});
+   const input=await bodyJson(req,7000);
+   const result=await changeCalendarEventDate(user.uid,input);
    return reply(res,200,{success:true,...result});
   }
   if(pathname==='/api/calendar/update-event'){
