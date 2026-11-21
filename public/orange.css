@@ -973,3 +973,11 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 #plan .rp-detail-date-form label{display:flex;flex-direction:column;gap:8px;font-weight:800;color:#17314f;}
 #plan .rp-detail-date-form input[type=date]{display:block;width:100%;box-sizing:border-box;background:#fff!important;color:#17314f!important;border:1px solid #a4b9cc;border-radius:12px;padding:13px;font:inherit;font-size:17px;}
 #plan .rp-detail-date-info{color:#415c70;font-size:14px;line-height:1.5;margin:0;}
+
+/* Dettaglio Calendar: tutti i campi modificabili da un unico pulsante */
+#plan .rp-detail-edit-form input[type="text"],#plan .rp-detail-edit-form input[type="date"],#plan .rp-detail-edit-form input[type="time"]{width:100%;box-sizing:border-box;font:inherit;font-size:16px;border-radius:12px;border:1px solid #9daec3;background:#fff;color:#172d45;padding:11px 12px;min-width:0;}
+#plan .rp-detail-edit-times{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+#plan .rp-detail-edit-times[hidden]{display:none!important;}
+#plan .rp-detail-edit-allday{display:flex!important;align-items:center!important;flex-direction:row!important;gap:10px!important;}
+#plan .rp-detail-edit-allday input{width:22px;height:22px;accent-color:#f4770b;}
+#plan .rp-detail-edit-form button:disabled{opacity:.5;cursor:wait;}

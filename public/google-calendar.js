@@ -203,6 +203,21 @@ if(connect&&sync&&disconnect&&status){
   });
   return result;
  };
+ // Salvataggio completo dal dettaglio, senza aprire Nuovo impegno.
+ window.runnerPulseEditCalendarCommitment=async(event,changes)=>{
+  if(!current?.connected)throw Error('Collega Google Calendar prima di modificare un impegno.');
+  if(!event?.id||!event?.calendarId||event.calendarEditWritable!==true)
+   throw Error('Questo evento non è modificabile da Runner Pulse.');
+  const result=await call('edit-full','POST',{
+   eventId:event.id,calendarId:event.calendarId,
+   originalStart:event.startLocal,originalEnd:event.endLocal,
+   ...changes
+  });
+  await refreshAgenda({force:true}).catch(error=>{
+   if(agendaStatus)agendaStatus.textContent='Evento salvato, ma la lista non si è aggiornata: '+error.message;
+  });
+  return result;
+ };
  // Cambia SOLO il giorno di un impegno Google Calendar modificabile.
  // L’ora e la durata vengono conservate dal server a partire dall’evento reale.
  window.runnerPulseChangeCalendarEventDate=async(event,newDate)=>{
