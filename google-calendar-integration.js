@@ -9,6 +9,7 @@ import {validateCommitment,safeProposal,durationFromText} from './calendar-commi
 import {completedWorkoutSummary} from './completed-workout-calendar-summary.js';
 import {selectCalendarMove,overlappingEvent} from './coach-calendar-move.js';
 import {validateCalendarEdit} from './calendar-edit-validation.js';
+import {validateCalendarFullEdit,buildCalendarFullEditPatch} from './calendar-full-edit.js';
 import {validateDateChange,shiftedCalendarEvent} from './calendar-date-change.js';
 
 const CLIENT_ID=process.env.GOOGLE_CALENDAR_CLIENT_ID||'';
@@ -304,6 +305,35 @@ async function updateCalendarDetails(uid,input){
  if(updated.status===404||updated.status===410)throw Object.assign(Error('Impegno non più presente. Aggiorna il calendario.'),{status:409});
  if(!updated.ok)throw Object.assign(Error(updated.status===403?'Google Calendar non permette di modificare questo evento.':'Google Calendar non ha salvato la modifica (HTTP '+updated.status+').'),{status:updated.status===403?403:502});
  return {updated:true,category,description};
+}
+// Il dettaglio aggiorna titolo, categoria, descrizione, data e orari con UNA PATCH.
+// Rileggiamo su Google Calendar per verificare permessi, tipo e concorrenza.
+async function editFullCalendarCommitment(uid,input){
+ const request=validateCalendarFullEdit(input);
+ const access=await accessToken(uid);
+ const {calendars}=await calendarSources(access);
+ const calendar=calendars.find(c=>c.id===request.calendarId);
+ if(!calendar||!calendar.writable)throw Object.assign(Error('Non puoi modificare eventi di questo calendario.'),{status:403});
+ const url='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calendar.id)+'/events/'+encodeURIComponent(request.eventId);
+ const read=await fetch(url,{headers:{Authorization:'Bearer '+access},signal:AbortSignal.timeout(15000)});
+ if(read.status===404||read.status===410)throw Object.assign(Error('Evento non più disponibile. Aggiorna il calendario.'),{status:409});
+ if(!read.ok)throw apiError(read.status);
+ const original=await read.json();
+ const marker=original.extendedProperties?.private?.runnerPulse;
+ if(original.status==='cancelled'||(original.eventType&&original.eventType!=='default')||original.visibility==='private'||marker==='training-plan'||marker==='completed-workout')
+  throw Object.assign(Error('Questo evento è gestito da Google o dal Piano e non è modificabile da questa schermata.'),{status:409});
+ const computed=buildCalendarFullEditPatch(original,request,romeWall);
+ if(computed.changeTime){
+  const span=Math.min(56,Math.max(2,Math.ceil((Date.parse(computed.newEnd.slice(0,10)+'T12:00:00Z')-Date.parse(request.date+'T12:00:00Z'))/86400000)+2));
+  const agenda=await readAgenda(uid,{start:request.date,days:span,access});
+  const conflict=overlappingEvent(agenda.events,{id:request.eventId,calendarId:request.calendarId,newStart:computed.newStart,newEnd:computed.newEnd});
+  if(conflict)throw Object.assign(Error('Il nuovo orario si sovrappone a “'+conflict.title+'”. Scegli un’altra data o ora.'),{status:409});
+ }
+ const result=await fetch(url,{method:'PATCH',headers:{Authorization:'Bearer '+access,'Content-Type':'application/json',...(original.etag?{'If-Match':original.etag}:{})},body:JSON.stringify(computed.patch),signal:AbortSignal.timeout(15000)});
+ if(result.status===412)throw Object.assign(Error('L’evento è cambiato nel frattempo. Aggiorna il calendario e riprova.'),{status:409});
+ if(result.status===403||result.status===400)throw Object.assign(Error('Google Calendar non permette di modificare questo evento. Verifica i permessi o aprilo in Google Calendar.'),{status:409});
+ if(!result.ok)throw apiError(result.status);
+ return {updated:true,date:request.date};
 }
 // Cambio della sola data di un impegno Google esistente, senza alterare titolo,
 // descrizione, ora e durata. Gli eventi del Piano si spostano dal gestore Piano.
@@ -830,6 +860,12 @@ export async function handleGoogleCalendarRoute(req,res,pathname){
    if(req.method!=='POST')return reply(res,405,{success:false});
    const input=await bodyJson(req,7000);
    const result=await changeCalendarEventDate(user.uid,input);
+   return reply(res,200,{success:true,...result});
+  }
+  if(pathname==='/api/calendar/edit-full'){
+   if(req.method!=='POST')return reply(res,405,{success:false});
+   const input=await bodyJson(req,9000);
+   const result=await editFullCalendarCommitment(user.uid,input);
    return reply(res,200,{success:true,...result});
   }
   if(pathname==='/api/calendar/update-event'){
