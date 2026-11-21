@@ -30,7 +30,7 @@ async function nativePushState(){
  if(!nativeBridge())return false;
  const user=await authenticatedUser();
  const token=await awaitNativeToken(false);
- const response=await fetch('/api/push/status?token='+encodeURIComponent(token),{headers:{Authorization:'Bearer '+await user.getIdToken()},cache:'no-store'});
+ const response=await fetch('/api/push/status',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await user.getIdToken()},body:JSON.stringify({token}),cache:'no-store'});
  const data=await response.json();
  if(!response.ok)throw new Error(data.message||'Verifica notifiche Android non riuscita.');
  updateButton(data.enabled===true);
@@ -85,7 +85,7 @@ async function refreshPushState(){
   if(!reg){if(seq===refreshSequence){updateButton(false);say('Notifiche non configurate su questo browser.');}return false;}
   const token=await currentToken(reg);
   if(!token){if(seq===refreshSequence){updateButton(false);say('Token notifiche non disponibile.');}return false;}
-  const response=await fetch('/api/push/status?token='+encodeURIComponent(token),{headers:{Authorization:'Bearer '+await user.getIdToken()},cache:'no-store'});
+  const response=await fetch('/api/push/status',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await user.getIdToken()},body:JSON.stringify({token}),cache:'no-store'});
   if(!response.ok)throw new Error('Verifica notifiche non riuscita ('+response.status+').');
   const data=await response.json();
   if(seq===refreshSequence){updateButton(data.enabled===true);say(data.enabled===true?'Notifiche attivate':'Notifiche Coach non attive su questo dispositivo.');}
