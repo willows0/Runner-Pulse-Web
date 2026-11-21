@@ -14,7 +14,23 @@ const OWNER_EMAIL = 'utrefiletti@gmail.com';
 const isOwner = () => auth.currentUser?.email?.toLowerCase() === OWNER_EMAIL;
 const existingApp = getApps().find(app => app.options.projectId === firebaseConfig.projectId);
 const auth = getAuth(existingApp || initializeApp(firebaseConfig));
-const provider = new GoogleAuthProvider();
+// Chiediamo di scegliere l'account SOLO dopo un logout esplicito dal Profilo.
+// Il flag non contiene token o informazioni personali.
+const RP_CHOOSE_ACCOUNT_AFTER_LOGOUT = 'runnerPulseChooseAccountAfterLogout';
+function rpNeedsAccountChoice(){
+  try{return localStorage.getItem(RP_CHOOSE_ACCOUNT_AFTER_LOGOUT)==='1';}catch(_){return false;}
+}
+function rpSetAccountChoiceAfterLogout(enabled){
+  try{
+    if(enabled)localStorage.setItem(RP_CHOOSE_ACCOUNT_AFTER_LOGOUT,'1');
+    else localStorage.removeItem(RP_CHOOSE_ACCOUNT_AFTER_LOGOUT);
+  }catch(_){/* Autenticazione disponibile anche senza localStorage. */}
+}
+function rpGoogleProvider(){
+  const googleProvider=new GoogleAuthProvider();
+  if(rpNeedsAccountChoice())googleProvider.setCustomParameters({prompt:'select_account'});
+  return googleProvider;
+}
 // Foto Google e saluto della Home: mantenuti anche con gli aggiornamenti ai grafici.
 const rpAvatar=document.getElementById('rp-google-avatar');
 const rpFallback=document.getElementById('rp-google-avatar-fallback');
@@ -52,10 +68,9 @@ const rpLogout=document.getElementById('rp-profile-logout');
 rpLogout?.addEventListener('click',async()=>{
   if(!confirm('Vuoi uscire dal tuo account Google? I dati salvati resteranno nel tuo account.'))return;
   rpLogout.disabled=true;
-  try{await signOut(auth);}catch(e){const status=document.getElementById('rp-logout-status');if(status)status.textContent='Errore: '+(e.message||e);}
+  try{await signOut(auth);rpSetAccountChoiceAfterLogout(true);}catch(e){const status=document.getElementById('rp-logout-status');if(status)status.textContent='Errore: '+(e.message||e);}
   finally{rpLogout.disabled=false;}
 });
-provider.setCustomParameters({ prompt: 'select_account' });
 const googleVerifiedUser = u => Boolean(u && (u.emailVerified || u.providerData?.some(p => p.providerId === 'google.com' && p.email?.toLowerCase() === u.email?.toLowerCase())));
 const allowedUser = () => {
   const u = auth.currentUser;
@@ -88,7 +103,9 @@ const isAndroidShell = /RunnerPulseAndroidWebView\/1/.test(navigator.userAgent);
 const mobileRandom = () => {const bytes=new Uint8Array(32);crypto.getRandomValues(bytes);return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');};
 const mobileSha256 = async value => {const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');};
 async function beginAndroidLogin(){
- const state=mobileRandom(),verifier=mobileRandom(),challenge=await mobileSha256(verifier);
+ // Il prefisso segnala al browser Android che il logout era intenzionale.
+ // Il resto dello state mantiene 256 bit di casualità; il server non cambia.
+ const state=(rpNeedsAccountChoice()?'choose_':'')+mobileRandom(),verifier=mobileRandom(),challenge=await mobileSha256(verifier);
  const response=await fetch('/api/mobile-auth/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state,challenge})});
  if(!response.ok)throw new Error('Impossibile avviare l’accesso Google. Riprova.');
  sessionStorage.setItem('runnerPulseMobileLogin',JSON.stringify({state,verifier}));
@@ -108,6 +125,7 @@ window.runnerPulseCompleteNativeLogin=async (state,code)=>{
 loginButton.addEventListener('click', async () => {
   loginButton.disabled = true;
   errorEl.textContent = '';
+  const provider=rpGoogleProvider();
   try { if(isAndroidShell){await beginAndroidLogin();return;} await signInWithPopup(auth, provider); }
   catch (e) {
     if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
@@ -123,6 +141,7 @@ onAuthStateChanged(auth, async user => {
   rpRefreshWelcome(allowed?user:null);
   if(allowed)void rpLoadWelcomeProfile(user);
   if(allowed){
+    rpSetAccountChoiceAfterLogout(false);
     document.getElementById('importGarmin')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('homeImport')?.toggleAttribute('disabled',!isOwner());
     document.getElementById('rp-garmin-test')?.toggleAttribute('disabled',!isOwner());
