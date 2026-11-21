@@ -741,6 +741,20 @@ window.addEventListener('runnerpulse:activity-coach',async event=>{
  }catch(e){if(pane===document.getElementById('rp-detail-coach'))result.textContent='Valutazione non disponibile: '+(e.message||String(e));}
 });
 
+// Selettore personalizzato: niente casella bianca con il pulsante di sistema "Scegli file".
+// La selezione resta affidata al selettore nativo del telefono tramite un pulsante accessibile.
+const rpFitFileInput=document.getElementById('rp-fit-file');
+const rpFitSelectedName=document.getElementById('rp-fit-selected-name');
+document.getElementById('rp-fit-choose')?.addEventListener('click',()=>rpFitFileInput?.click());
+rpFitFileInput?.addEventListener('change',()=>{
+ const file=rpFitFileInput.files?.[0];
+ if(rpFitSelectedName)rpFitSelectedName.textContent=file?.name||'Nessun file selezionato';
+ const status=document.getElementById('rp-fit-status');
+ if(status)status.textContent='';
+ const progress=document.getElementById('rp-fit-progress-wrap');
+ if(progress)progress.hidden=true;
+});
+
 // Importazione FIT/ZIP autenticata per ogni utente Google verificato; nessun dato salvato in localStorage prima del successo server.
 document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
  const input=document.getElementById('rp-fit-file'),button=document.getElementById('rp-fit-upload'),status=document.getElementById('rp-fit-status');
@@ -748,7 +762,7 @@ document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
  const file=input?.files?.[0];
  if(!file){status.textContent='Seleziona prima un file FIT, ZIP o TCX.';return;}
  if(!allowedUser()){status.textContent='Accedi con Google per importare i tuoi allenamenti.';return;}
- if(file.size>85*1024*1024){status.textContent='Il file supera 85 MB: dividi lo ZIP in archivi più piccoli.';return;}
+ if(file.size>40*1024*1024){status.textContent='Il file supera 40 MB: dividi lo ZIP in archivi più piccoli.';return;}
  button.disabled=true;wrap.hidden=false;bar.value=0;percent.textContent='0%';label.textContent='Caricamento file';note.textContent='Non chiudere la pagina.';status.textContent='';
  try{
   const token=await auth.currentUser.getIdToken();
@@ -781,14 +795,49 @@ document.getElementById('rp-fit-upload')?.addEventListener('click',async()=>{
   });
   bar.value=100;label.textContent='Importazione completata';percent.textContent='100%';note.textContent='';
   const failed=Number(result.failed)||0;
-  status.textContent=`${result.imported} importati · ${result.duplicates} già presenti${failed?' · '+failed+' non importati':''}`;
+  const imported=Number(result.imported)||0;
+  const duplicates=Number(result.duplicates)||0;
+  status.textContent=`${imported} importati · ${duplicates} già presenti${failed?' · '+failed+' non importati':''}`;
   if(failed && result.errors?.length){
     // Prima indicazione utile, non un dettaglio tecnico del database.
     note.textContent='Alcuni file non sono stati importati: '+String(result.errors[0]).slice(0,220);
   }
-  window.rpActivatePage?.('activities');
-  window.rpShowActivityTab?.('list');
-  await loadGarminArchive();
+  input.value='';
+  if(rpFitSelectedName)rpFitSelectedName.textContent='Nessun file selezionato';
+  if(imported===0 && duplicates>0){
+    // I duplicati sono una risposta positiva ma non creano una nuova attività.
+    // Non nascondere l'esito tornando automaticamente alla lista.
+    label.textContent='Attività già presente';
+    status.textContent=duplicates===1
+      ?'Allenamento già presente. Nessun duplicato creato.'
+      :`${duplicates} allenamenti già presenti. Nessun duplicato creato.`;
+    if(failed)status.textContent+=` ${failed} non importati.`;
+    return;
+  }
+  if(imported>0){
+    // Dopo un'importazione nuova mostriamo la lista, ma con un messaggio visibile:
+    // il messaggio nel pannello Importa sarebbe nascosto dal cambio scheda.
+    const list=document.getElementById('activityList');
+    if(list?.parentElement){
+      let feedback=document.getElementById('rp-import-list-feedback');
+      if(!feedback){
+        feedback=document.createElement('p');
+        feedback.id='rp-import-list-feedback';
+        feedback.setAttribute('role','status');
+        feedback.setAttribute('aria-live','polite');
+        feedback.style.cssText='margin:12px 0;padding:12px 16px;border-radius:12px;background:#18314e;color:#fff;font-weight:700;';
+        list.parentElement.insertBefore(feedback,list);
+      }
+      feedback.textContent=imported===1
+        ?`1 allenamento importato correttamente.${duplicates?' '+duplicates+' già presenti.':''}`
+        :`${imported} allenamenti importati correttamente.${duplicates?' '+duplicates+' già presenti.':''}`;
+      if(failed)feedback.textContent+=` ${failed} non importati.`;
+      feedback.hidden=false;
+    }
+    window.rpActivatePage?.('activities');
+    window.rpShowActivityTab?.('list');
+    await loadGarminArchive();
+  }
  }catch(error){bar.value=0;label.textContent='Importazione non riuscita';percent.textContent='';note.textContent='Controlla l’errore qui sotto.';status.textContent='Errore: '+(error.message||String(error));}
  finally{button.disabled=false;}
 });

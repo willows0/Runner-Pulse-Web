@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/runner-pulse-icon-192.png?v=20261109b">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/login.css">
-  <link rel="stylesheet" href="/orange.css?v=coach-duration-20261120-v1">
+  <link rel="stylesheet" href="/orange.css?v=fit-chooser-20261121-v1">
   <style>
     /* Intestazione definitiva: prevale anche su CSS memorizzati dal browser. */
     body > header.rp-global-banner { display:flex !important; position:relative !important; top:auto !important; width:100% !important; min-height:0 !important; height:auto !important; margin:0 !important; padding:19px 16px 24px !important; align-items:center !important; justify-content:center !important; background:linear-gradient(120deg,#0d1b32,#182b4a) !important; border:0 !important; border-bottom:6px solid #ff7900 !important; border-radius:0 0 45% 9% !important; box-shadow:none !important; color:#fff !important; }
@@ -111,7 +111,11 @@
       <section id="rp-import-panel" class="card rp-activity-panel" hidden>
         <strong>Importa attività (FIT / ZIP / TCX)</strong>
         <p>Seleziona un file FIT, TCX oppure un archivio ZIP con attività FIT. Gli allenamenti saranno salvati nel tuo profilo.</p>
-        <input id="rp-fit-file" type="file" accept=".fit,.zip,.tcx" aria-label="Archivio FIT, ZIP o TCX" />
+        <div class="rp-fit-file-picker">
+          <input id="rp-fit-file" class="rp-fit-file-input" type="file" accept=".fit,.zip,.tcx" tabindex="-1" aria-label="Seleziona file FIT, ZIP o TCX" />
+          <button id="rp-fit-choose" class="rp-fit-choose" type="button" aria-controls="rp-fit-file"><span aria-hidden="true">📁</span> Seleziona file</button>
+          <p id="rp-fit-selected-name" class="rp-fit-selected-name" role="status" aria-live="polite">Nessun file selezionato</p>
+        </div>
         <button id="rp-fit-upload" type="button" class="rp-manual-open">Carica</button>
         <div id="rp-fit-progress-wrap" hidden role="group" aria-label="Avanzamento importazione" style="margin:16px 0">
           <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;color:#fff;font-weight:700"><span id="rp-fit-progress-label">Caricamento file…</span><span id="rp-fit-progress-percent">0%</span></div>
@@ -265,7 +269,7 @@
   })();
   </script>
   <script type="module">
-  try { await import('/login.js?v=multi-device-coach-20261119'); }
+  try { await import('/login.js?v=fit-chooser-feedback-20261121-v1'); }
   catch(error) {
     console.error('Runner Pulse: errore avvio Google Login',error);
     document.body.classList.remove('rp-authenticated');

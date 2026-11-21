@@ -981,3 +981,22 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 #plan .rp-detail-edit-allday{display:flex!important;align-items:center!important;flex-direction:row!important;gap:10px!important;}
 #plan .rp-detail-edit-allday input{width:22px;height:22px;accent-color:#f4770b;}
 #plan .rp-detail-edit-form button:disabled{opacity:.5;cursor:wait;}
+
+
+/* Importa attività: pulsante coerente con Runner Pulse, senza il selettore file bianco. */
+#rp-import-panel .rp-fit-file-picker{margin-top:14px;margin-bottom:12px;}
+#rp-import-panel .rp-fit-file-input{display:none!important;}
+#rp-import-panel .rp-fit-choose{
+ display:flex!important;align-items:center;justify-content:center;gap:10px;
+ width:100%;min-height:64px;padding:15px 16px;
+ color:#fff!important;background:#122941!important;
+ border:2px solid #7892b1!important;border-radius:16px!important;
+ font-size:18px;font-weight:800;line-height:1.3;cursor:pointer;
+ box-shadow:none!important;
+}
+#rp-import-panel .rp-fit-choose:focus-visible{outline:3px solid #ff8b21!important;outline-offset:3px;}
+#rp-import-panel .rp-fit-choose:active{background:#284c70!important;}
+#rp-import-panel .rp-fit-selected-name{
+ margin:12px 3px 0!important;color:#d5e4f4!important;
+ font-size:14px;overflow-wrap:anywhere;line-height:1.4;
+}
