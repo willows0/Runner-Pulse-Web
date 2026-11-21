@@ -1,3 +1,4 @@
+import {rateLimitAuthenticatedAction} from './security-guards.js';
 import {normalizePlan,planRef,revisionOf} from './training-plan.js';
 import {tryDirectPlanMove} from './coach-plan-move.js';
 import { getTrainingMemory } from './coach-training-memory.js';
@@ -166,6 +167,9 @@ export async function handleCoachAI(req,res,authorized) {
   catch {return json(res,403,{success:false,message:'Sessione non valida.'});}
   let input;
   try {input=await readBody(req);} catch(e) {return json(res,400,{success:false,message:e.message});}
+  const action=typeof input?.action==='string'?input.action:'chat';
+  const allowance=rateLimitAuthenticatedAction(uid,action);
+  if(!allowance.allowed){res.setHeader('Retry-After',String(allowance.retryAfterSeconds));return json(res,429,{success:false,message:'Troppe richieste al Coach. Riprova tra poco.'});}
   const db=getFirestore();
   const collection=db.collection('runnerPulseCoach').doc(uid).collection('messages');
   // Profilo personale isolato per UID Firebase, distinto dai messaggi Coach.

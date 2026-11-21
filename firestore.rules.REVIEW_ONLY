@@ -1,0 +1,27 @@
+// ESEMPIO DA REVISIONARE: NON pubblicare senza controllare le regole Firebase attuali
+// e le eventuali scritture dirette dell’app Android.
+// Il server Firebase Admin bypassa le Security Rules: le API server devono verificare UID.
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function isOwner(uid) {
+   return request.auth != null && request.auth.uid == uid;
+  }
+  // L'unica scrittura diretta dal browser identificata nel progetto Web è
+  // users/{uid}/trainingPlans/current; tutte le altre collezioni vanno gestite
+  // solo dalle API del server. Verificare le autorizzazioni native Android.
+  match /users/{uid}/trainingPlans/{planId} {
+   allow get: if isOwner(uid) && planId in ['current','draft'];
+   allow list: if false;
+   allow create,update: if isOwner(uid)
+    && planId == 'current'
+    && request.resource.data.keys().hasOnly(['sessions','ownerUid','updatedAt'])
+    && request.resource.data.ownerUid == uid
+    && request.resource.data.sessions is list
+    && request.resource.data.sessions.size() <= 80
+    && request.resource.data.updatedAt is string;
+   allow delete: if false;
+  }
+  match /{document=**} { allow read,write: if false; }
+ }
+}

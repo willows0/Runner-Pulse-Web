@@ -1,3 +1,4 @@
+import {rateLimitAuthenticatedAction} from './security-guards.js';
 // Valutazione per singola attivita: dati reali Firestore, cache per UID+ID.
 import {getFirestore} from 'firebase-admin/firestore';
 import {getAuth} from 'firebase-admin/auth';
@@ -53,6 +54,8 @@ export async function handleActivityCoach(req,res,authorized,readJsonBody,json){
  try{
   const token=/^Bearer (\S+)$/i.exec(req.headers.authorization||'')?.[1];
   const user=await getAuth().verifyIdToken(token,true);
+  const allowance=rateLimitAuthenticatedAction(user.uid,'coach-activity');
+  if(!allowance.allowed){res.setHeader('Retry-After',String(allowance.retryAfterSeconds));return json(res,429,{success:false,message:'Troppe analisi richieste. Riprova tra poco.'});}
   const input=await readJsonBody(req);
   const result=await activityCoachReport(user.uid,input.activityId);
   return json(res,200,{success:true,...result});

@@ -16,6 +16,7 @@ import {syncCompletedActivityToCalendar} from './google-calendar-integration.js'
 import {isHonorPackage,healthCoachId} from './activity-data.js';
 import {normalizePlan,planRef,revisionOf} from './training-plan.js';
 import {handleGoogleCalendarRoute,removeSyncedPlanEvents} from './google-calendar-integration.js';
+import {applyHttpSecurityHeaders,isTrustedBrowserMutation} from './security-guards.js';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -1095,7 +1096,9 @@ async function weeklyPushRoute(req,res,pathname){
 
 }
 
-http.createServer(async(req,res)=>{
+async function handleIncomingRequest(req,res){
+  applyHttpSecurityHeaders(req,res);
+  if(!isTrustedBrowserMutation(req))return json(res,403,{success:false,message:'Origine della richiesta non autorizzata.'});
   if(req.url?.split('?')[0]==='/api/health-connect/delete-activity'){
     if(req.method!=='POST')return json(res,405,{success:false,message:'Metodo non consentito'});
     const user=await garminGoogleUser(req);
@@ -1682,7 +1685,24 @@ http.createServer(async(req,res)=>{
   const name=files[pathname] || imageName;if(!name){res.writeHead(404);res.end('Not found');return;}
   try{const data=await readFile(path.join(base,'public',name));res.writeHead(200,{'Content-Type':types[path.extname(name)],'X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});res.end(req.method==='HEAD'?undefined:data);}
   catch(error){console.error('Errore file statico:',pathname,error.code);res.writeHead(error.code==='ENOENT'?404:500);res.end(error.code==='ENOENT'?'Not found':'Server error');}
-}).listen(port,'0.0.0.0',()=>console.log('Runner Pulse Web on '+port));
+}
+// Errori asincroni non gestiti nelle route non devono causare il crash del
+// processo. Al browser non vengono rivelati stack trace, URL o token.
+const httpServer=http.createServer({maxHeaderSize:16384},(req,res)=>{
+ Promise.resolve().then(()=>handleIncomingRequest(req,res)).catch(error=>{
+  console.error('Richiesta non gestita:',error?.code||error?.name||'Error');
+  if(res.destroyed)return;
+  if(res.headersSent){res.destroy();return;}
+  try{json(res,500,{success:false,message:'Errore temporaneo del servizio.'});}
+  catch{res.destroy();}
+ });
+});
+// Limita connessioni inattive senza interrompere upload validi su rete mobile.
+httpServer.headersTimeout=15000;
+httpServer.requestTimeout=180000;
+httpServer.keepAliveTimeout=5000;
+httpServer.maxRequestsPerSocket=100;
+httpServer.listen(port,'0.0.0.0',()=>console.log('Runner Pulse Web on '+port));
 
 // All’avvio tenta di recuperare notifiche gia consegnate ma non importate.
 setTimeout(()=>{void recoverGarminWebhookInbox();},15000).unref();

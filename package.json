@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24.22.1 <25"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",
