@@ -1,0 +1,21 @@
+name: Genera package-lock per verifica
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Genera lockfile senza eseguire script esterni
+        run: npm install --package-lock-only --ignore-scripts --no-fund --audit=false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-lock-verificato
+          path: package-lock.json
+          retention-days: 7

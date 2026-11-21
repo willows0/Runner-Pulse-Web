@@ -15,7 +15,8 @@ jobs:
         with:
           node-version-file: .node-version
       - name: Installa dipendenze senza script post-install
-        run: npm install --ignore-scripts --no-fund
+        run: |
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts --no-fund; else npm install --ignore-scripts --no-fund; echo '::warning::Manca package-lock.json; generarlo dal workflow dedicato e aggiungerlo al repository.'; fi
       - name: Controllo vulnerabilità gravi
         run: npm audit --omit=dev --audit-level=high
       - name: Test regressione
