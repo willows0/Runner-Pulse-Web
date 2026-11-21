@@ -566,6 +566,32 @@
   const p=document.createElement('p');p.textContent=e.description?e.description:'Nessuna nota aggiunta per questo impegno.';
   body.append(strong,p);block.append(badge,body);detail.appendChild(block);
   const note=document.createElement('p');note.className='rp-detail-note';note.textContent=e.eventType==='birthday'?'Questo è un compleanno annuale di Google Calendar. Per modificarlo o eliminarlo, aprilo in Google Calendar: il cestino della singola ricorrenza non è disponibile in Runner Pulse.':'Questo impegno viene considerato dal Coach quando incastra i nuovi allenamenti negli spazi liberi.';detail.appendChild(note);
+  // L'utente modifica qui tipo e descrizione, senza aprire "Nuovo impegno".
+  if(e.calendarEditWritable===true&&e.calendarId&&e.id){
+   const editButton=document.createElement('button');editButton.type='button';editButton.className='rp-detail-edit-event';editButton.textContent='✎ Modifica tipo e descrizione';detail.appendChild(editButton);
+   const editForm=document.createElement('form');editForm.className='rp-detail-edit-form';editForm.hidden=true;
+   const typeLabel=document.createElement('label');typeLabel.textContent='Tipo di impegno';
+   const typeSelect=document.createElement('select');typeSelect.name='category';typeSelect.required=true;
+   [['work','💼 Lavoro'],['sport','🏅 Sport'],['race','🏆 Gara'],['school','🏫 Scuola'],['health','🩺 Salute'],['expense','💶 Spese'],['food','🍝 Cibo'],['other','📌 Altro impegno']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;typeSelect.append(option);});
+   typeSelect.value=e.category||'other';typeLabel.append(typeSelect);
+   const descriptionLabel=document.createElement('label');descriptionLabel.textContent='Descrizione';
+   const descriptionField=document.createElement('textarea');descriptionField.name='description';descriptionField.rows=5;descriptionField.maxLength=4000;descriptionField.placeholder='Scrivi i dettagli dell’impegno';descriptionField.value=e.description||'';descriptionLabel.append(descriptionField);
+   const feedback=document.createElement('p');feedback.className='rp-detail-edit-feedback';feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');
+   const actions=document.createElement('div');actions.className='rp-detail-edit-actions';
+   const cancel=document.createElement('button');cancel.type='button';cancel.className='rp-detail-edit-cancel';cancel.textContent='Annulla';
+   const save=document.createElement('button');save.type='submit';save.className='rp-detail-edit-save';save.textContent='Salva modifiche';
+   actions.append(cancel,save);editForm.append(typeLabel,descriptionLabel,feedback,actions);detail.appendChild(editForm);
+   editButton.addEventListener('click',()=>{editForm.hidden=!editForm.hidden;editButton.setAttribute('aria-expanded',String(!editForm.hidden));if(!editForm.hidden)typeSelect.focus();});
+   cancel.addEventListener('click',()=>{editForm.hidden=true;editButton.setAttribute('aria-expanded','false');feedback.textContent='';});
+   editForm.addEventListener('submit',async event=>{
+    event.preventDefault();if(!window.runnerPulseUpdateCalendarCommitment){feedback.textContent='Il collegamento con Calendar non è pronto. Aggiorna la pagina.';return;}
+    const category=typeSelect.value,description=descriptionField.value;
+    save.disabled=true;cancel.disabled=true;feedback.textContent='Salvataggio su Google Calendar…';
+    try{await window.runnerPulseUpdateCalendarCommitment(e,{category,description});show('calendar');}
+    catch(error){feedback.textContent='Modifica non salvata: '+(error.message||'Riprova.');}
+    finally{save.disabled=false;cancel.disabled=false;}
+   });
+  }
   if(e.eventType==='birthday'){
    const open=document.createElement('a');open.className='rp-detail-calendar-link';
    const date=e.startLocal?.slice(0,10)||'';

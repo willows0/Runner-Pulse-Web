@@ -950,3 +950,16 @@ body:has(#coach.active) > main{max-width:none!important;width:100%!important;pad
 /* Nelle attività sportive basta l’orario iniziale e la durata. */
 .rp-commitment-times .rp-commitment-end-preview{grid-column:1/-1;margin:0;color:#dbeeff;font-size:13px;font-weight:600;}
 .rp-commitment-times .rp-commitment-end-label[hidden],.rp-commitment-times .rp-commitment-duration-label[hidden]{display:none!important;}
+
+/* Dettaglio Calendario: modifica diretta della categoria e descrizione */
+#plan .rp-detail-edit-event{display:block;margin:15px 0 10px;padding:12px 18px;border-radius:14px;border:0;background:#f4770b;color:#fff;font-weight:800;font:inherit;cursor:pointer;}
+#plan .rp-detail-edit-form{display:flex;flex-direction:column;gap:14px;margin:12px 0 20px;padding:18px;border:1px solid #bdcbd7;background:#edf4fb;border-radius:18px;}
+#plan .rp-detail-edit-form[hidden]{display:none!important;}
+#plan .rp-detail-edit-form label{display:flex;flex-direction:column;gap:7px;font-weight:750;color:#17314f;}
+#plan .rp-detail-edit-form select,#plan .rp-detail-edit-form textarea{width:100%;box-sizing:border-box;font:inherit;font-size:16px;border-radius:12px;border:1px solid #9daec3;background:white;color:#172d45;padding:11px 12px;}
+#plan .rp-detail-edit-form textarea{resize:vertical;min-height:120px;}
+#plan .rp-detail-edit-actions{display:flex;flex-wrap:wrap;gap:10px;}
+#plan .rp-detail-edit-actions button{border:0;border-radius:12px;padding:12px 14px;font-weight:800;cursor:pointer;}
+#plan .rp-detail-edit-cancel{background:#dfe8f0;color:#17314f;}
+#plan .rp-detail-edit-save{background:#f4770b;color:white;}
+#plan .rp-detail-edit-feedback{font-size:14px;color:#3e5569;margin:0;}

@@ -191,6 +191,18 @@ if(connect&&sync&&disconnect&&status){
   }catch(error){feedback.textContent='Non salvato: '+error.message+' Puoi correggere e riprovare.';}
   finally{modalBusy=false;save.disabled=false;cancel.disabled=false;}
  });
+ // Modifica tipo e descrizione in Google Calendar, non il giorno o il programma.
+ window.runnerPulseUpdateCalendarCommitment=async(event,{category,description})=>{
+  if(!current?.connected)throw Error('Collega Google Calendar prima di modificare un impegno.');
+  if(!event?.id||!event?.calendarId||event.calendarEditWritable!==true)
+   throw Error('Questo evento non è modificabile da Runner Pulse.');
+  const result=await call('update-event','POST',{eventId:event.id,calendarId:event.calendarId,category,description});
+  // Rilettura dal calendario originale: nessun dato fittizio sul client.
+  await refreshAgenda({force:true}).catch(error=>{
+   if(agendaStatus)agendaStatus.textContent='Modifica salvata su Google Calendar, ma il calendario non si aggiorna: '+error.message;
+  });
+  return result;
+ };
  // Elimina un evento selezionato dall'utente: mai sul solo gesto.
  // La richiesta usa il calendario originale e il server ricontrolla i permessi.
  let deletingEvent=false;
