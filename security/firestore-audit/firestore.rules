@@ -1,0 +1,37 @@
+// RUNNER PULSE WEB - PROPOSTA DA VERIFICARE, NON ATTIVA IN PRODUZIONE.
+// Pubblicare SOLO dopo aver confrontato le regole attuali di Firebase Console.
+// Firebase Admin SDK sul server IGNORA queste regole: le API restano da verificare.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Il browser Web legge e salva soltanto users/{uid}/trainingPlans/current.
+    function validApprovedPlan(uid) {
+      return request.resource.data.keys().hasOnly(['sessions', 'ownerUid', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['sessions', 'ownerUid', 'updatedAt'])
+        && request.resource.data.ownerUid == uid
+        && request.resource.data.sessions is list
+        && request.resource.data.sessions.size() <= 80
+        && request.resource.data.updatedAt is string
+        && request.resource.data.updatedAt.size() >= 20
+        && request.resource.data.updatedAt.size() <= 40;
+    }
+
+    match /users/{uid}/trainingPlans/{planId} {
+      allow get: if planId == 'current' && isOwner(uid);
+      allow list: if false;
+      allow create, update: if planId == 'current'
+        && isOwner(uid) && validApprovedPlan(uid);
+      allow delete: if false;
+    }
+
+    // Accesso client negato a tutte le altre collezioni, incluse quelle
+    // contenenti allenamenti, dati salute, token, notifiche e OAuth.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
